@@ -48,14 +48,14 @@ export const CODE_INJECTION_POLICY: ThreatPattern[] = [
   {
     name: 'require_dynamic',
     severity: ThreatLevel.DANGER,
-    patterns: [/require\s*\(\s*['"`][^'"`]*['"`]\s*\)/gi],
+    patterns: [/require\s*\(/gi],
     description: 'Dynamic module loading from user input',
     mitigation: 'Validate module names against whitelist'
   },
   {
     name: 'import_dynamic',
     severity: ThreatLevel.DANGER,
-    patterns: [/import\s*\(\s*['"`][^'"`]*['"`]\s*\)/gi],
+    patterns: [/import\s*\(/gi],
     description: 'Dynamic ES6 imports from user input',
     mitigation: 'Validate module names against whitelist'
   }
