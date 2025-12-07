@@ -115,10 +115,12 @@ export class GeminiLiveService extends EventEmitter {
         if (!this.isConnected || !this.session) return;
 
         // Fix: Payload structure
-        this.session.sendRealtimeInput([{
-            mimeType: "audio/pcm;rate=16000",
-            data: base64Audio
-        }]);
+        this.session.sendRealtimeInput({
+            audio: {
+                mimeType: "audio/pcm;rate=16000",
+                data: base64Audio
+            }
+        });
     }
 
     /**
@@ -128,9 +130,11 @@ export class GeminiLiveService extends EventEmitter {
         if (!this.isConnected || !this.session) return;
 
         // Fix: Payload structure
-        this.session.sendRealtimeInput([{
-            mimeType: "image/jpeg",
-            data: base64Image
-        }]);
+        this.session.sendRealtimeInput({
+            media: {
+                mimeType: "image/jpeg",
+                data: base64Image
+            }
+        });
     }
 }
