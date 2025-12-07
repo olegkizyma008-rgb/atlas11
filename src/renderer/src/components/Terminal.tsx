@@ -16,32 +16,32 @@ export const Terminal = ({ logs }: { logs: Log[] }) => {
     }, [logs])
 
     return (
-        <div className="w-full relative rounded-xl border border-white/10 bg-black/90 shadow-2xl overflow-hidden backdrop-blur-xl group">
+        <div className="w-full relative rounded-lg border border-white/10 bg-black/90 shadow-xl overflow-hidden backdrop-blur-xl">
             {/* Scanline Effect */}
             <div className="absolute inset-0 bg-gradient-to-b from-transparent via-white/5 to-transparent h-[4px] w-full z-20 animate-scan pointer-events-none opacity-20"></div>
             <div className="absolute inset-0 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%),linear-gradient(90deg,rgba(255,0,0,0.06),rgba(0,255,0,0.02),rgba(0,0,255,0.06))] z-10 pointer-events-none bg-[length:100%_2px,3px_100%]"></div>
 
             {/* Header */}
-            <div className="flex items-center justify-between px-4 py-2 border-b border-white/10 bg-white/5">
-                <div className="flex items-center gap-3">
-                    <TerminalSquare size={14} className="text-slate-400" />
-                    <span className="text-xs font-mono text-slate-400 font-bold tracking-widest uppercase">Synapse Stream V.2.1</span>
+            <div className="flex items-center justify-between px-3 py-1.5 border-b border-white/10 bg-white/5">
+                <div className="flex items-center gap-2">
+                    <TerminalSquare size={12} className="text-slate-400" />
+                    <span className="text-[10px] font-mono text-slate-400 font-bold tracking-widest uppercase">Synapse Stream</span>
                 </div>
-                <div className="flex items-center gap-1.5">
-                    <Circle size={8} className="fill-red-500 text-transparent opacity-50" />
-                    <Circle size={8} className="fill-yellow-500 text-transparent opacity-50" />
-                    <Circle size={8} className="fill-emerald-500 text-transparent opacity-50" />
+                <div className="flex items-center gap-1">
+                    <Circle size={6} className="fill-red-500 text-transparent opacity-50" />
+                    <Circle size={6} className="fill-yellow-500 text-transparent opacity-50" />
+                    <Circle size={6} className="fill-emerald-500 text-transparent opacity-50" />
                 </div>
             </div>
 
             {/* Content */}
-            <div className="h-96 overflow-auto p-4 font-mono text-xs space-y-2 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <div className="h-64 overflow-auto p-3 font-mono text-[11px] space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                 {logs.length === 0 && (
-                    <div className="text-slate-600 italic text-center py-20">Waiting for signal...</div>
+                    <div className="text-slate-600 italic text-center py-16">Waiting for signal...</div>
                 )}
                 {logs.map((log) => (
-                    <div key={log.id} className="flex gap-4 group/line hover:bg-white/5 p-1 rounded transition-colors -mx-1 px-2 border-l-2 border-transparent hover:border-indigo-500/50">
-                        <span className="text-slate-600 shrink-0 select-none">
+                    <div key={log.id} className="flex gap-3 hover:bg-white/5 px-1.5 py-0.5 rounded transition-colors border-l-2 border-transparent hover:border-indigo-500/50">
+                        <span className="text-slate-600 shrink-0 select-none text-[10px]">
                             {new Date(log.timestamp).toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' })}
                         </span>
                         <div className="flex-1 break-all">
@@ -53,7 +53,7 @@ export const Terminal = ({ logs }: { logs: Log[] }) => {
                             }>
                                 {log.source} &gt;
                             </span>
-                            <span className="text-slate-300 group-hover/line:text-white transition-colors">
+                            <span className="text-slate-300">
                                 {log.message.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
                                     part.match(/^https?:\/\//) ? (
                                         <a

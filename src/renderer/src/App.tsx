@@ -1,9 +1,7 @@
 import { useState } from 'react'
-import { Layout, View } from './components/Layout'
-import { DashboardView } from './views/DashboardView'
-import { LogsView } from './views/LogsView'
-import { AgentsView } from './views/AgentsView'
-import { SettingsView } from './views/SettingsView'
+import { Layout } from './components/Layout'
+import { AgentCard } from './components/AgentCard'
+import { Terminal } from './components/Terminal'
 import { trpc } from './main'
 
 interface Log {
@@ -15,7 +13,6 @@ interface Log {
 
 function App(): JSX.Element {
     const [logs, setLogs] = useState<Log[]>([])
-    const [currentView, setCurrentView] = useState<View>('dashboard')
 
     // Real-time connection to KONTUR Synapse
     trpc.synapse.useSubscription(undefined, {
@@ -30,26 +27,28 @@ function App(): JSX.Element {
         }
     })
 
-    const renderView = () => {
-        switch (currentView) {
-            case 'dashboard':
-                return <DashboardView logs={logs} />
-            case 'logs':
-                return <LogsView logs={logs} />
-            case 'agents':
-                return <AgentsView />
-            case 'settings':
-                return <SettingsView />
-            default:
-                return <DashboardView logs={logs} />
-        }
-    }
-
     return (
-        <Layout activeView={currentView} onNavigate={setCurrentView}>
-            {renderView()}
+        <Layout>
+            <div className="space-y-6">
+                {/* Agent Status Section */}
+                <div className="space-y-3">
+                    <h2 className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Agent Status</h2>
+                    <div className="space-y-2">
+                        <AgentCard name="ATLAS" status="working" activity="Connected to Synapse." />
+                        <AgentCard name="TETYANA" status="idle" activity="Standing by." />
+                        <AgentCard name="GRISHA" status="working" activity="Monitoring stream." />
+                    </div>
+                </div>
+
+                {/* Terminal Section */}
+                <div className="space-y-3">
+                    <h2 className="text-xs uppercase tracking-widest text-slate-500 font-semibold">System Logs</h2>
+                    <Terminal logs={logs} />
+                </div>
+            </div>
         </Layout>
     )
 }
 
 export default App
+

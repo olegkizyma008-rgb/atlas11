@@ -1,85 +1,34 @@
 import React from 'react'
-import { Monitor, Cpu, Terminal as TerminalIcon, Settings } from 'lucide-react'
 
-export type View = 'dashboard' | 'logs' | 'agents' | 'settings'
-
-interface LayoutProps {
-    children: React.ReactNode
-    activeView: View
-    onNavigate: (view: View) => void
-}
-
-export const Layout = ({ children, activeView, onNavigate }: LayoutProps) => {
+export const Layout = ({ children }: { children: React.ReactNode }) => {
     return (
-        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden relative">
-            <div className="absolute inset-0 bg-noise opacity-30 pointer-events-none z-50"></div>
-            {/* Background Gradients */}
+        <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 relative overflow-hidden">
+            {/* Subtle Background */}
+            <div className="absolute inset-0 bg-noise opacity-20 pointer-events-none"></div>
             <div className="fixed inset-0 pointer-events-none">
-                <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-indigo-500/10 rounded-full blur-[120px]" />
-                <div className="absolute bottom-[-10%] right-[-10%] w-[40%] h-[40%] bg-blue-600/10 rounded-full blur-[120px]" />
+                <div className="absolute top-0 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-indigo-500/5 rounded-full blur-[150px]" />
             </div>
 
-            <div className="relative z-10 flex h-screen">
-                {/* Sidebar */}
-                <aside className="w-20 lg:w-64 border-r border-white/5 bg-slate-900/30 backdrop-blur-2xl flex flex-col items-center lg:items-stretch py-6 gap-8 relative z-20 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.5)]">
-                    <div className="flex items-center justify-center lg:justify-start lg:px-6 gap-3 group">
-                        <div className="relative">
-                            <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-blue-600 shadow-[0_0_20px_rgba(99,102,241,0.5)] flex items-center justify-center">
-                                <Cpu className="w-5 h-5 text-white" />
-                            </div>
-                            <div className="absolute inset-0 bg-indigo-500/50 blur-lg rounded-full opacity-0 group-hover:opacity-100 transition-opacity duration-700" />
+            {/* Main Content */}
+            <div className="relative z-10 min-h-screen flex flex-col">
+                {/* Simple Header */}
+                <header className="border-b border-white/5 bg-slate-900/20 backdrop-blur-sm">
+                    <div className="max-w-4xl mx-auto px-6 py-4 flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-blue-600 flex items-center justify-center shadow-lg shadow-indigo-500/20">
+                            <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z" />
+                            </svg>
                         </div>
-                        <div className="hidden lg:block">
-                            <h1 className="font-bold tracking-widest text-lg font-mono text-transparent bg-clip-text bg-gradient-to-r from-white to-slate-400">ATLAS</h1>
-                            <p className="text-[10px] text-slate-500 font-mono tracking-[0.2em]">KONTUR OS v2.0</p>
-                        </div>
-                    </div>
-
-                    <nav className="flex-1 flex flex-col gap-2 px-3">
-                        <NavItem
-                            icon={<Monitor />}
-                            label="Dashboard"
-                            active={activeView === 'dashboard'}
-                            onClick={() => onNavigate('dashboard')}
-                        />
-                        <NavItem
-                            icon={<TerminalIcon />}
-                            label="System Logs"
-                            active={activeView === 'logs'}
-                            onClick={() => onNavigate('logs')}
-                        />
-                        <NavItem
-                            icon={<Cpu />}
-                            label="Agent Status"
-                            active={activeView === 'agents'}
-                            onClick={() => onNavigate('agents')}
-                        />
-                        <div className="flex-1" />
-                        <NavItem
-                            icon={<Settings />}
-                            label="Settings"
-                            active={activeView === 'settings'}
-                            onClick={() => onNavigate('settings')}
-                        />
-                    </nav>
-
-                    <div className="px-6 hidden lg:block">
-                        <div className="p-4 rounded-xl bg-gradient-to-br from-white/5 to-transparent border border-white/5">
-                            <div className="text-xs text-slate-400 font-mono mb-2">SYSTEM STATUS</div>
-                            <div className="flex items-center gap-2 text-emerald-400 text-xs font-mono">
-                                <span className="relative flex h-2 w-2">
-                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                                </span>
-                                ONLINE
-                            </div>
+                        <div>
+                            <h1 className="font-bold text-lg tracking-wide">ATLAS</h1>
+                            <p className="text-[10px] text-slate-500 font-mono tracking-wider">KONTUR OS v2.0</p>
                         </div>
                     </div>
-                </aside>
+                </header>
 
-                {/* Main Content */}
-                <main className="flex-1 overflow-auto p-4 lg:p-8 scroll-smooth scrollbar-thin scrollbar-thumb-slate-800 scrollbar-track-transparent">
-                    <div className="max-w-7xl mx-auto space-y-8">
+                {/* Centered Content */}
+                <main className="flex-1 px-6 py-8">
+                    <div className="max-w-4xl mx-auto">
                         {children}
                     </div>
                 </main>
@@ -88,16 +37,3 @@ export const Layout = ({ children, activeView, onNavigate }: LayoutProps) => {
     )
 }
 
-function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick: () => void }) {
-    return (
-        <button
-            onClick={onClick}
-            className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${active ? 'bg-white/10 text-white shadow-lg shadow-indigo-500/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
-        >
-            {active && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-r-full" />}
-            <div className="relative z-10">{React.cloneElement(icon as React.ReactElement, { size: 20 })}</div>
-            <span className="hidden lg:block font-medium tracking-wide relative z-10">{label}</span>
-            {active && <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 to-transparent opacity-50" />}
-        </button>
-    )
-}
