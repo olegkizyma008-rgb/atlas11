@@ -1175,7 +1175,7 @@ function createWindow() {
   });
   (async () => {
     try {
-      const { GeminiLiveService } = await Promise.resolve().then(() => require("./GeminiLiveService-21720237.js"));
+      const { GeminiLiveService } = await Promise.resolve().then(() => require("./GeminiLiveService-1fe1bb25.js"));
       const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
       if (apiKey) {
         const geminiLive = new GeminiLiveService(apiKey);
@@ -1188,7 +1188,7 @@ function createWindow() {
           geminiLive.sendVideoFrame(image);
           return true;
         });
-        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-e241726f.js"));
+        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-a81ba3fe.js"));
         const grishaObserver = new GrishaObserver();
         grishaObserver.setGeminiLive(geminiLive);
         grishaObserver.on("observation", (result) => {
