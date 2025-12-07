@@ -255,7 +255,21 @@ function createWindow(): void {
                     return true;
                 });
 
+                // --- Initialize GrishaObserver for automatic task observation ---
+                const { GrishaObserver } = await import('../kontur/vision/GrishaObserver');
+                const grishaObserver = new GrishaObserver();
+                grishaObserver.setGeminiLive(geminiLive);
+
+                // Forward Grisha's observations to UI
+                grishaObserver.on('observation', (result: any) => {
+                    synapse.emit('GRISHA', result.type.toUpperCase(), result.message);
+                });
+
+                // Expose observer for dispatcher to control
+                (global as any).grishaObserver = grishaObserver;
+
                 console.log('[MAIN] 👁️ Grisha Vision Service Bridge Active');
+                console.log('[MAIN] 🔍 Grisha Observer Initialized');
             } else {
                 console.warn('[MAIN] ⚠️ No API Key for Gemini Live Vision (GEMINI_LIVE_API_KEY/GOOGLE_API_KEY)');
             }

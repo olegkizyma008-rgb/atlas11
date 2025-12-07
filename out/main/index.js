@@ -593,7 +593,8 @@ class Core extends events.EventEmitter {
     console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
     if (userResponse) {
       const chatPacket = createPacket(
-        "kontur://core/system",
+        "kontur://cortex/ai/main",
+        // Source as ATLAS for proper UI identification
         "kontur://organ/ui/shell",
         PacketIntent.EVENT,
         { msg: userResponse, type: "chat" }
@@ -1014,10 +1015,15 @@ async function initializeKONTUR() {
     const uiBridge = {
       send: (packet) => {
         let source = "SYSTEM";
-        if (packet.route.from.includes("cortex"))
+        if (packet.route.from.includes("cortex")) {
           source = "ATLAS";
-        if (packet.route.from.includes("ag"))
+        } else if (packet.payload?.type === "chat" || packet.instruction?.intent === "AI_PLAN") {
+          source = "ATLAS";
+        } else if (packet.route.from.includes("mcp") || packet.payload?.type === "task_result") {
+          source = "TETYANA";
+        } else if (packet.route.from.includes("ag") || packet.payload?.type === "security") {
           source = "GRISHA";
+        }
         let payload = packet.payload;
         if (payload && payload.msg)
           payload = payload.msg;

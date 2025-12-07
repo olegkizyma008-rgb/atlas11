@@ -317,6 +317,20 @@ export class Core extends EventEmitter {
 
     console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
 
+    // --- Start Grisha Observation ---
+    const grishaObserver = (global as any).grishaObserver;
+    if (grishaObserver && steps.length > 0) {
+      grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
+
+      // Schedule observation stop after all steps complete
+      const totalTime = steps.length * 1000 + 2000; // 1s per step + 2s buffer
+      setTimeout(() => {
+        if (grishaObserver.isActive) {
+          grishaObserver.stopObservation();
+        }
+      }, totalTime);
+    }
+
     // 1. Speak/Show response to User immediately (from ATLAS)
     if (userResponse) {
       const chatPacket = createPacket(
