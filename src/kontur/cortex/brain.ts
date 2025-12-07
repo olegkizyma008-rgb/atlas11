@@ -94,12 +94,12 @@ export class CortexBrain extends EventEmitter {
       );
 
       // 2. OS Automation MCP (Local)
-      // We run it as a standard node process - interacting via stdio
+      // Use local ts-node executable to ensure it runs correctly
       const osBridge = new McpBridge(
         'os',
         '1.0.0',
-        'node',
-        ['--loader', 'ts-node/esm', 'src/kontur/mcp/servers/os.ts'] // Ensure ts-node handles the TS file directly
+        './node_modules/.bin/ts-node',
+        ['src/kontur/mcp/servers/os.ts']
       );
 
       // Connect all bridges
