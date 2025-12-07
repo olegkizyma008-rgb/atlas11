@@ -601,7 +601,7 @@ class Core extends events.EventEmitter {
         );
         stepPacket.instruction.op_code = step.action || "EXECUTE";
         this.ingest(stepPacket);
-      }, idx * 250);
+      }, idx * 1e3);
     });
   }
   /**
