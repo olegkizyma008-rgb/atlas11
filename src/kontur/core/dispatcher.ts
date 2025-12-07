@@ -330,6 +330,7 @@ export class Core extends EventEmitter {
 
 
     steps.forEach((step, idx) => {
+      // Use 1000ms delay between steps to ensure apps have time to open and gain focus
       setTimeout(() => {
         const stepPacket = createPacket(
           'kontur://core/system',
@@ -350,7 +351,7 @@ export class Core extends EventEmitter {
 
         stepPacket.instruction.op_code = step.action || 'EXECUTE';
         this.ingest(stepPacket);
-      }, idx * 250);
+      }, idx * 1000);
     });
   }
 
