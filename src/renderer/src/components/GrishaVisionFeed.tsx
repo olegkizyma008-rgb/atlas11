@@ -77,7 +77,8 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
                 const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]
 
                 // Send frame to Grisha Brain
-                window.electron.ipcRenderer.invoke('vision:stream_frame', { image: base64 })
+                const electron = (window as any).electron
+                electron.ipcRenderer.invoke('vision:stream_frame', { image: base64 })
             }, 1000) // 1 FPS for initial testing (increase for smoother flow)
         }
 

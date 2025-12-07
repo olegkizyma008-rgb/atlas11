@@ -149,36 +149,38 @@ function createWindow(): void {
     });
 
     // --- GRISHA: Gemini Live Vision Integration ---
-    try {
-        const { GeminiLiveService } = await import('../kontur/vision/GeminiLiveService');
-        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    (async () => {
+        try {
+            const { GeminiLiveService } = await import('../kontur/vision/GeminiLiveService');
+            // Use GEMINI_LIVE_API_KEY as requested
+            const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
 
-        if (apiKey) {
-            const geminiLive = new GeminiLiveService(apiKey);
+            if (apiKey) {
+                const geminiLive = new GeminiLiveService(apiKey);
 
-            // Connect automatically (or on demand)
-            geminiLive.connect().catch(e => console.error("Gemini Connect Fail", e));
+                // Connect automatically
+                geminiLive.connect().catch(e => console.error("Gemini Connect Fail", e));
 
-            // Forward Grisha's voice/text to UI
-            geminiLive.on('text', (text) => {
-                synapse.emit('GRISHA', 'INFO', text);
-            });
+                // Forward Grisha's voice/text to UI
+                geminiLive.on('text', (text) => {
+                    synapse.emit('GRISHA', 'INFO', text);
+                });
 
-            // IPC: Receive Video Stream from Client
-            ipcMain.removeHandler('vision:stream_frame');
-            ipcMain.handle('vision:stream_frame', (_, { image }) => {
-                // image is base64
-                geminiLive.sendVideoFrame(image);
-                return true;
-            });
+                // IPC: Receive Video Stream from Client
+                ipcMain.removeHandler('vision:stream_frame');
+                ipcMain.handle('vision:stream_frame', (_, { image }) => {
+                    geminiLive.sendVideoFrame(image);
+                    return true;
+                });
 
-            console.log('[MAIN] 👁️ Grisha Vision Service Bridge Active');
-        } else {
-            console.warn('[MAIN] ⚠️ No API Key for Gemini Live Vision');
+                console.log('[MAIN] 👁️ Grisha Vision Service Bridge Active');
+            } else {
+                console.warn('[MAIN] ⚠️ No API Key for Gemini Live Vision (GEMINI_LIVE_API_KEY/GOOGLE_API_KEY)');
+            }
+        } catch (e) {
+            console.error('[MAIN] Failed to start Vision Service:', e);
         }
-    } catch (e) {
-        console.error('[MAIN] Failed to start Vision Service:', e);
-    }
+    })();
     // ----------------------------------------------
 
     // Initialize tRPC
