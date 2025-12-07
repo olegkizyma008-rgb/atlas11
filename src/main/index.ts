@@ -57,6 +57,42 @@ async function initializeKONTUR() {
         konturCore.register('kontur://organ/ui/shell', uiBridge);
     }
 
+    {
+        // System Organ - Handle OS operations
+        const { SystemCapsule } = await import('../kontur/system/SystemCapsule');
+        const systemCapsule = new SystemCapsule();
+
+        const systemHandler = {
+            send: async (packet: any) => {
+                console.log('[SYSTEM ORGAN] Received packet:', packet.instruction.op_code);
+
+                const { intent, op_code } = packet.instruction;
+                const { task, app } = packet.payload;
+
+                let result: any = { success: false, output: '' };
+
+                if (op_code === 'OPEN_APP' || (task && task.startsWith('open '))) {
+                    const appName = app || task.replace('open ', '').trim();
+                    result = await systemCapsule.openApp(appName);
+                } else if (op_code === 'EXEC' || intent === 'CMD') {
+                    result = await systemCapsule.runCommand(task);
+                }
+
+                // Send response back
+                if (packet.route.reply_to) {
+                    const response = createPacket(
+                        'kontur://organ/system',
+                        packet.route.reply_to,
+                        PacketIntent.RESPONSE,
+                        { msg: result.success ? `Done: ${result.output || result.message}` : `Error: ${result.message || result.output}` }
+                    );
+                    konturCore.ingest(response);
+                }
+            }
+        };
+        konturCore.register('kontur://organ/system', systemHandler);
+    }
+
     if (process.env.AG === 'true') {
         const agScript = join(__dirname, '../kontur/ag/ag-worker.py');
         konturCore.loadPlugin('kontur://organ/ag/sim', { cmd: pythonCmd, args: [agScript] });

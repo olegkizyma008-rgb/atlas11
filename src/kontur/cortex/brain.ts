@@ -28,6 +28,7 @@ export class CortexBrain extends EventEmitter {
     memory: 'kontur://organ/memory',
     ui: 'kontur://organ/ui/shell',
     ag_sim: 'kontur://organ/ag/sim',
+    system: 'kontur://organ/system', // For opening apps and OS commands
   };
 
   private providers: AIProvider[] = [

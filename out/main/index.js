@@ -617,7 +617,7 @@ const ATLAS = {
 ## Твоя роль:
 - Ти стратегічний планувальник та координатор виконання задач
 - Відповідаєш на питання чітко, аргументовано та по суті
-- Можеш відкривати програми, робити розрахунки, працювати з файлами
+- Можеш відкривати програми (Calculator, Browser тощо) та виконувати системні команди (через System Organ)
 - Делегуєш складні задачі ТЕТЯНІ (виконавець) та контролюєшся ГРИШЕЮ (безпека)
 
 ## Стиль спілкування:
@@ -696,7 +696,9 @@ class CortexBrain extends events.EventEmitter {
     calculator: "kontur://organ/worker",
     memory: "kontur://organ/memory",
     ui: "kontur://organ/ui/shell",
-    ag_sim: "kontur://organ/ag/sim"
+    ag_sim: "kontur://organ/ag/sim",
+    system: "kontur://organ/system"
+    // For opening apps and OS commands
   };
   providers = [
     { name: "gemini", available: !!process.env.GOOGLE_API_KEY },
@@ -1025,6 +1027,34 @@ async function initializeKONTUR() {
       }
     };
     konturCore.register("kontur://organ/ui/shell", uiBridge);
+  }
+  {
+    const { SystemCapsule } = await Promise.resolve().then(() => require("./SystemCapsule-f00dd0e8.js"));
+    const systemCapsule = new SystemCapsule();
+    const systemHandler = {
+      send: async (packet) => {
+        console.log("[SYSTEM ORGAN] Received packet:", packet.instruction.op_code);
+        const { intent, op_code } = packet.instruction;
+        const { task, app: app2 } = packet.payload;
+        let result = { success: false, output: "" };
+        if (op_code === "OPEN_APP" || task && task.startsWith("open ")) {
+          const appName = app2 || task.replace("open ", "").trim();
+          result = await systemCapsule.openApp(appName);
+        } else if (op_code === "EXEC" || intent === "CMD") {
+          result = await systemCapsule.runCommand(task);
+        }
+        if (packet.route.reply_to) {
+          const response = createPacket(
+            "kontur://organ/system",
+            packet.route.reply_to,
+            PacketIntent.RESPONSE,
+            { msg: result.success ? `Done: ${result.output || result.message}` : `Error: ${result.message || result.output}` }
+          );
+          konturCore.ingest(response);
+        }
+      }
+    };
+    konturCore.register("kontur://organ/system", systemHandler);
   }
   if (process.env.AG === "true") {
     const agScript = path.join(__dirname, "../kontur/ag/ag-worker.py");
