@@ -32,57 +32,96 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
         tools: [
             {
                 name: "open_application",
-                description: "Opens an application on macOS",
+                description: "Opens an application on macOS and activates it",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        appName: {
-                            type: "string",
-                            description: "Name of the application to open (e.g. 'Calculator', 'Safari')",
-                        },
+                        appName: { type: "string" },
                     },
                     required: ["appName"],
                 },
             },
             {
                 name: "execute_command",
-                description: "Executes a shell command (Use with caution)",
+                description: "Executes a shell command",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        command: {
-                            type: "string",
-                            description: "Shell command to execute",
-                        },
+                        command: { type: "string" },
                     },
                     required: ["command"],
                 },
             },
             {
-                name: "speak_text",
-                description: "Speak text using system TTS",
+                name: "execute_applescript",
+                description: "Execute raw AppleScript for complex UI automation",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        text: { type: "string" }
+                        script: { type: "string" },
+                    },
+                    required: ["script"],
+                },
+            },
+            {
+                name: "keyboard_type",
+                description: "Simulate typing text (as if user typed it)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        text: { type: "string" },
+                        delay: { type: "number", description: "Delay between keystrokes in seconds (default 0.01)" }
                     },
                     required: ["text"]
                 }
             },
             {
-                name: "execute_applescript",
-                description: "Execute raw AppleScript for UI automation (e.g. keystrokes)",
+                name: "keyboard_press",
+                description: "Press a specific key combination",
                 inputSchema: {
                     type: "object",
                     properties: {
-                        script: { type: "string" }
+                        key: { type: "string", description: "Key code or character (e.g. 'return', 'space', 'a')" },
+                        modifiers: {
+                            type: "array",
+                            items: { type: "string" },
+                            description: "Modifiers: 'command down', 'shift down', 'option down', 'control down'"
+                        }
                     },
-                    required: ["script"]
+                    required: ["key"]
                 }
+            },
+            {
+                name: "mouse_click",
+                description: "Click mouse at specific coordinates",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        x: { type: "number" },
+                        y: { type: "number" },
+                        double: { type: "boolean" }
+                    },
+                    required: ["x", "y"]
+                }
+            },
+            {
+                name: "get_screen_size",
+                description: "Get current screen resolution",
+                inputSchema: { type: "object", properties: {} }
             }
         ],
     };
 });
+
+// Helper for python mouse click (native macOS without external deps is hard, using embedded python script)
+const clickScript = (x: number, y: number) => `
+import Quartz.CoreGraphics as CG
+import sys
+e = CG.CGEventCreateMouseEvent(None, CG.kCGEventLeftMouseDown, (${x}, ${y}), 0)
+CG.CGEventPost(CG.kCGHIDEventTap, e)
+e = CG.CGEventCreateMouseEvent(None, CG.kCGEventLeftMouseUp, (${x}, ${y}), 0)
+CG.CGEventPost(CG.kCGHIDEventTap, e)
+`;
 
 // Handle Tool Calls
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
@@ -91,11 +130,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
         if (name === "open_application") {
             const { appName } = args as { appName: string };
-            // Use AppleScript to activate for focus
             await execAsync(`osascript -e 'tell application "${appName}" to activate'`);
-            return {
-                content: [{ type: "text", text: `Opened application (Focus): ${appName}` }],
-            };
+            return { content: [{ type: "text", text: `Active: ${appName}` }] };
         }
 
         if (name === "execute_command") {
@@ -103,26 +139,48 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             const { stdout, stderr } = await execAsync(command);
             return {
                 content: [
-                    { type: "text", text: stdout || "Command executed successfully" },
+                    { type: "text", text: stdout || "Done" },
                     ...(stderr ? [{ type: "text", text: `STDERR: ${stderr}` }] : []),
                 ],
             };
         }
 
-        if (name === "speak_text") {
-            const { text } = args as { text: string };
-            await execAsync(`say "${text}"`);
-            return {
-                content: [{ type: "text", text: `Spoke: "${text}"` }]
-            }
-        }
-
         if (name === "execute_applescript") {
             const { script } = args as { script: string };
             const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\"'\"'")}'`);
-            return {
-                content: [{ type: "text", text: stdout || "Script executed" }]
+            return { content: [{ type: "text", text: stdout || "Script executed" }] };
+        }
+
+        if (name === "keyboard_type") {
+            const { text } = args as { text: string };
+            // Escape check needed
+            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${text.replace(/"/g, '\\"')}"'`);
+            return { content: [{ type: "text", text: `Typed: ${text}` }] };
+        }
+
+        if (name === "keyboard_press") {
+            const { key, modifiers } = args as { key: string, modifiers?: string[] };
+            const modStr = modifiers && modifiers.length ? ` using {${modifiers.join(", ")}}` : "";
+            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
+            return { content: [{ type: "text", text: `Pressed: ${key} ${modStr}` }] };
+        }
+
+        if (name === "mouse_click") {
+            const { x, y } = args as { x: number, y: number };
+            // Try simple python implementation if Quartz is available (often is on macOS system python)
+            // Fallback to cliclick if installed, or error.
+            try {
+                // Check for python3
+                await execAsync(`python3 -c "${clickScript(x, y)}"`);
+                return { content: [{ type: "text", text: `Clicked at ${x},${y}` }] };
+            } catch (e) {
+                return { content: [{ type: "text", text: `Mouse click failed (Quartz not found). Install 'pyobjc-framework-Quartz' or 'cliclick'. Error: ${e}` }] };
             }
+        }
+
+        if (name === "get_screen_size") {
+            const { stdout } = await execAsync(`system_profiler SPDisplaysDataType | grep Resolution`);
+            return { content: [{ type: "text", text: stdout.trim() }] };
         }
 
         throw new Error(`Unknown tool: ${name}`);
