@@ -1,7 +1,15 @@
 import React from 'react'
 import { Monitor, Cpu, Terminal as TerminalIcon, Settings } from 'lucide-react'
 
-export const Layout = ({ children }: { children: React.ReactNode }) => {
+export type View = 'dashboard' | 'logs' | 'agents' | 'settings'
+
+interface LayoutProps {
+    children: React.ReactNode
+    activeView: View
+    onNavigate: (view: View) => void
+}
+
+export const Layout = ({ children, activeView, onNavigate }: LayoutProps) => {
     return (
         <div className="min-h-screen bg-slate-950 text-slate-100 font-sans selection:bg-indigo-500/30 overflow-hidden relative">
             <div className="absolute inset-0 bg-noise opacity-30 pointer-events-none z-50"></div>
@@ -28,11 +36,31 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
                     </div>
 
                     <nav className="flex-1 flex flex-col gap-2 px-3">
-                        <NavItem icon={<Monitor />} label="Dashboard" active />
-                        <NavItem icon={<TerminalIcon />} label="System Logs" />
-                        <NavItem icon={<Cpu />} label="Agent Status" />
+                        <NavItem
+                            icon={<Monitor />}
+                            label="Dashboard"
+                            active={activeView === 'dashboard'}
+                            onClick={() => onNavigate('dashboard')}
+                        />
+                        <NavItem
+                            icon={<TerminalIcon />}
+                            label="System Logs"
+                            active={activeView === 'logs'}
+                            onClick={() => onNavigate('logs')}
+                        />
+                        <NavItem
+                            icon={<Cpu />}
+                            label="Agent Status"
+                            active={activeView === 'agents'}
+                            onClick={() => onNavigate('agents')}
+                        />
                         <div className="flex-1" />
-                        <NavItem icon={<Settings />} label="Settings" />
+                        <NavItem
+                            icon={<Settings />}
+                            label="Settings"
+                            active={activeView === 'settings'}
+                            onClick={() => onNavigate('settings')}
+                        />
                     </nav>
 
                     <div className="px-6 hidden lg:block">
@@ -60,9 +88,12 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
     )
 }
 
-function NavItem({ icon, label, active }: { icon: React.ReactNode, label: string, active?: boolean }) {
+function NavItem({ icon, label, active, onClick }: { icon: React.ReactNode, label: string, active?: boolean, onClick: () => void }) {
     return (
-        <button className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${active ? 'bg-white/10 text-white shadow-lg shadow-indigo-500/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}>
+        <button
+            onClick={onClick}
+            className={`flex items-center gap-3 p-3 rounded-xl transition-all duration-300 group relative overflow-hidden ${active ? 'bg-white/10 text-white shadow-lg shadow-indigo-500/10' : 'text-slate-400 hover:text-white hover:bg-white/5'}`}
+        >
             {active && <div className="absolute left-0 top-0 bottom-0 w-1 bg-indigo-500 rounded-r-full" />}
             <div className="relative z-10">{React.cloneElement(icon as React.ReactElement, { size: 20 })}</div>
             <span className="hidden lg:block font-medium tracking-wide relative z-10">{label}</span>
