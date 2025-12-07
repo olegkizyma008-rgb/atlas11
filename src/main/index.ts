@@ -4,9 +4,37 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createIPCHandler } from 'electron-trpc/main'
 import { synapse } from '../kontur/synapse'
+import { Core, CortexBrain, Synapse } from '../kontur'
+import { createPacket, PacketIntent } from '../kontur/protocol/nexus'
 
 // Import appRouter from a file we will create later
 import { appRouter } from './router'
+
+let konturCore: Core;
+let konturCortex: CortexBrain;
+
+async function initializeKONTUR() {
+    konturCore = new Core();
+    konturCortex = new CortexBrain();
+    konturCortex.on('decision', (packet) => konturCore.ingest(packet));
+    konturCortex.on('error', (packet) => konturCore.ingest(packet));
+    
+    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+    const workerScript = join(__dirname, '../kontur/organs/worker.py');
+    
+    try {
+        konturCore.loadPlugin('kontur://organ/worker', { cmd: pythonCmd, args: [workerScript] });
+    } catch (e) {
+        console.error('[KONTUR] Failed to load worker:', e);
+    }
+    
+    if (process.env.AG === 'true') {
+        const agScript = join(__dirname, '../kontur/ag/ag-worker.py');
+        konturCore.loadPlugin('kontur://organ/ag/sim', { cmd: pythonCmd, args: [agScript] });
+    }
+    
+    return { core: konturCore, cortex: konturCortex };
+}
 
 function createWindow(): void {
     // Create the browser window.
@@ -21,6 +49,16 @@ function createWindow(): void {
             sandbox: false
         }
     })
+
+    // Initialize KONTUR system
+    initializeKONTUR().catch(e => console.error('[KONTUR] Initialization failed:', e));
+
+    // Setup IPC handlers for KONTUR
+    ipcMain.handle('kontur:registry', () => konturCore.getRegistry());
+    ipcMain.handle('kontur:send', (_, packet) => {
+        konturCore.ingest(packet);
+        return true;
+    });
 
     // Initialize tRPC
     createIPCHandler({ router: appRouter, windows: [mainWindow] })

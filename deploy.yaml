@@ -1,0 +1,151 @@
+# Atlas 11 - KONTUR v11.0 Deployment Configuration
+# Google Cloud Run Deployment Template
+
+apiVersion: serving.knative.dev/v1
+kind: Service
+metadata:
+  name: atlas11-kontur
+  namespace: default
+  labels:
+    app: atlas11
+    version: v11.0
+    system: kontur
+spec:
+  template:
+    metadata:
+      labels:
+        app: atlas11
+        deployment: kontur
+      annotations:
+        autoscaling.knative.dev/minScale: "1"
+        autoscaling.knative.dev/maxScale: "10"
+    spec:
+      serviceAccountName: atlas11-kontur-sa
+      containers:
+      - name: kontur
+        image: gcr.io/atlas-11/kontur:v11.0
+        ports:
+        - containerPort: 8080
+        resources:
+          requests:
+            memory: "512Mi"
+            cpu: "250m"
+          limits:
+            memory: "2Gi"
+            cpu: "1000m"
+        env:
+        - name: NODE_ENV
+          value: "production"
+        - name: AG
+          value: "true"
+        - name: AI_PROVIDER
+          value: "gemini"
+        - name: GEMINI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: atlas11-secrets
+              key: gemini-api-key
+        - name: OPENAI_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: atlas11-secrets
+              key: openai-api-key
+        - name: DATABASE_URL
+          valueFrom:
+            secretKeyRef:
+              name: atlas11-secrets
+              key: database-url
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /ready
+            port: 8080
+          initialDelaySeconds: 3
+          periodSeconds: 5
+      timeoutSeconds: 300
+  traffic:
+  - percent: 100
+    latestRevision: true
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: atlas11-kontur-sa
+  namespace: default
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: atlas11-secrets
+  namespace: default
+type: Opaque
+data:
+  # Base64 encoded secrets - replace with actual values
+  gemini-api-key: ""
+  openai-api-key: ""
+  database-url: ""
+
+---
+apiVersion: autoscaling.knative.dev/v1alpha1
+kind: PodAutoscaler
+metadata:
+  name: atlas11-kontur-autoscaler
+  namespace: default
+spec:
+  scaleTargetRef:
+    name: atlas11-kontur
+  minReplicas: 1
+  maxReplicas: 10
+  targetUtilization: 0.7
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: atlas11-kontur-config
+  namespace: default
+data:
+  kontur.config.json: |
+    {
+      "system": {
+        "name": "KONTUR v11.0",
+        "version": "11.0.0",
+        "environment": "production"
+      },
+      "ai": {
+        "primaryProvider": "gemini",
+        "fallbackProvider": "openai",
+        "enableAutoSelect": true
+      },
+      "organs": {
+        "worker": {
+          "enabled": true,
+          "timeout": 30000
+        },
+        "ag_sim": {
+          "enabled": true,
+          "timeout": 60000
+        },
+        "memory": {
+          "enabled": true,
+          "type": "persistent"
+        }
+      },
+      "security": {
+        "enableEncryption": true,
+        "enableACL": true,
+        "tlsRequired": true
+      },
+      "monitoring": {
+        "enableMetrics": true,
+        "enableTracing": true,
+        "logLevel": "info"
+      }
+    }
