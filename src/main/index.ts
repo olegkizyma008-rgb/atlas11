@@ -83,7 +83,10 @@ function createWindow(): void {
     initializeKONTUR().catch(e => console.error('[KONTUR] Initialization failed:', e));
 
     // Setup IPC handlers for KONTUR
+    ipcMain.removeHandler('kontur:registry');
     ipcMain.handle('kontur:registry', () => konturCore.getRegistry());
+
+    ipcMain.removeHandler('kontur:send');
     ipcMain.handle('kontur:send', (_, packet) => {
         console.log('[MAIN IPC] Received packet:', JSON.stringify(packet, null, 2));
         konturCore.ingest(packet);
@@ -91,6 +94,7 @@ function createWindow(): void {
     });
 
     // Voice TTS handler
+    ipcMain.removeHandler('voice:speak');
     ipcMain.handle('voice:speak', async (_, { text, voiceName }) => {
         try {
             const { VoiceCapsule } = await import('../kontur/voice/VoiceCapsule');

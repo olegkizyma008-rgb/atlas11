@@ -1046,12 +1046,15 @@ function createWindow() {
     }
   });
   initializeKONTUR().catch((e) => console.error("[KONTUR] Initialization failed:", e));
+  electron.ipcMain.removeHandler("kontur:registry");
   electron.ipcMain.handle("kontur:registry", () => konturCore.getRegistry());
+  electron.ipcMain.removeHandler("kontur:send");
   electron.ipcMain.handle("kontur:send", (_, packet) => {
     console.log("[MAIN IPC] Received packet:", JSON.stringify(packet, null, 2));
     konturCore.ingest(packet);
     return true;
   });
+  electron.ipcMain.removeHandler("voice:speak");
   electron.ipcMain.handle("voice:speak", async (_, { text, voiceName }) => {
     try {
       const { VoiceCapsule } = await Promise.resolve().then(() => require("./VoiceCapsule-44d22c8d.js"));
