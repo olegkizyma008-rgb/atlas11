@@ -1,4 +1,26 @@
 "use strict";
+var __create = Object.create;
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __getProtoOf = Object.getPrototypeOf;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__getProtoOf(mod)) : {}, __copyProps(
+  // If the importer is in node compatibility mode or this is not an ESM
+  // file that has been converted to a CommonJS file using a Babel-
+  // compatible transform (i.e. "__esModule" has not been set), then set
+  // "default" to the CommonJS "module.exports" for node compatibility.
+  isNodeMode || !mod || !mod.__esModule ? __defProp(target, "default", { value: mod, enumerable: true }) : target,
+  mod
+));
 require("dotenv/config");
 const electron = require("electron");
 const path = require("path");
@@ -648,6 +670,11 @@ const ATLAS = {
 - Твої колеги: ТЕТЯНА (виконує задачі) та ГРИША (слідкує за безпекою)
 - Ти маєш доступ до інструментів через MCP-протокол
 
+## ВАЖЛИВО - Демонстрація дій:
+- Коли користувач просить щось зробити у програмі (наприклад, набрати на калькуляторі) - ЗАВЖДИ виконуй це візуально через keyboard_type
+- НЕ скорочуй та НЕ оптимізуй - демонструй дії так, як їх бачить користувач
+- Наприклад: "набрати 333*2 на калькуляторі" = open_application + keyboard_type для кожної частини
+
 ## FORMAT OUTPUT
 You MUST always respond with a valid JSON object matching this schema:
 \`\`\`json
@@ -1153,6 +1180,20 @@ function createWindow() {
       console.error("[MAIN] Failed to start Vision Service:", e);
     }
   })();
+  electron.ipcMain.removeHandler("vision:get_sources");
+  electron.ipcMain.handle("vision:get_sources", async () => {
+    const { desktopCapturer } = await import("electron");
+    const sources = await desktopCapturer.getSources({
+      types: ["window", "screen"],
+      thumbnailSize: { width: 150, height: 100 }
+    });
+    return sources.map((source) => ({
+      id: source.id,
+      name: source.name,
+      thumbnail: source.thumbnail.toDataURL(),
+      isScreen: source.id.startsWith("screen:")
+    }));
+  });
   main.createIPCHandler({ router: appRouter, windows: [mainWindow] });
   mainWindow.on("ready-to-show", () => {
     mainWindow.show();

@@ -42,8 +42,23 @@ async function initializeKONTUR() {
             send: (packet: any) => {
                 // Determine Source Name for UI (ATLAS, TETYANA, GRISHA, SYSTEM)
                 let source = 'SYSTEM';
-                if (packet.route.from.includes('cortex')) source = 'ATLAS';
-                if (packet.route.from.includes('ag')) source = 'GRISHA'; // AG module implies Grisha supervision
+
+                // ATLAS: AI responses from cortex
+                if (packet.route.from.includes('cortex')) {
+                    source = 'ATLAS';
+                }
+                // ATLAS: AI-generated chat responses (even routed through core)
+                else if (packet.payload?.type === 'chat' || packet.instruction?.intent === 'AI_PLAN') {
+                    source = 'ATLAS';
+                }
+                // TETYANA: Task execution results from MCP handlers
+                else if (packet.route.from.includes('mcp') || packet.payload?.type === 'task_result') {
+                    source = 'TETYANA';
+                }
+                // GRISHA: Security/observation from AG module
+                else if (packet.route.from.includes('ag') || packet.payload?.type === 'security') {
+                    source = 'GRISHA';
+                }
 
                 // Extract message
                 let payload = packet.payload;

@@ -317,10 +317,10 @@ export class Core extends EventEmitter {
 
     console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
 
-    // 1. Speak/Show response to User immediately
+    // 1. Speak/Show response to User immediately (from ATLAS)
     if (userResponse) {
       const chatPacket = createPacket(
-        'kontur://core/system',
+        'kontur://cortex/ai/main',  // Source as ATLAS for proper UI identification
         'kontur://organ/ui/shell',
         PacketIntent.EVENT,
         { msg: userResponse, type: 'chat' }
