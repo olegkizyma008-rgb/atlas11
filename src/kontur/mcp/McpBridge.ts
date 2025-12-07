@@ -67,13 +67,15 @@ export class McpBridge {
     async callTool(name: string, args: any): Promise<any> {
         if (!this.isConnected) await this.connect();
         try {
+            console.log(`[MCP] 🔧 Calling tool ${name} with args:`, JSON.stringify(args));
             const result = await this.client.callTool({
                 name,
                 arguments: args
             });
+            console.log(`[MCP] ✅ Tool ${name} result:`, JSON.stringify(result));
             return result;
         } catch (e) {
-            console.error(`[MCP] Failed to call tool ${name}:`, e);
+            console.error(`[MCP] ❌ Failed to call tool ${name}:`, e);
             throw e;
         }
     }

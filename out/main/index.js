@@ -773,7 +773,7 @@ class CortexBrain extends events.EventEmitter {
   async initMCP() {
     try {
       const split = (str) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((s) => s.replace(/^"|"$/g, "")) || [];
-      const { McpBridge } = await Promise.resolve().then(() => require("./McpBridge-7d5acb44.js"));
+      const { McpBridge } = await Promise.resolve().then(() => require("./McpBridge-69bff3b7.js"));
       const fsBridge = new McpBridge(
         "filesystem",
         "1.0.0",
