@@ -35,7 +35,7 @@ export const Terminal = ({ logs }: { logs: Log[] }) => {
             </div>
 
             {/* Content */}
-            <div className="h-64 overflow-auto p-3 font-mono text-[11px] space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
+            <div className="h-96 overflow-auto p-3 font-mono text-[11px] space-y-1 scrollbar-thin scrollbar-thumb-white/10 scrollbar-track-transparent">
                 {logs.length === 0 && (
                     <div className="text-slate-600 italic text-center py-16">Waiting for signal...</div>
                 )}

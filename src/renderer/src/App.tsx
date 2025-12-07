@@ -29,11 +29,11 @@ function App(): JSX.Element {
 
     return (
         <Layout>
-            <div className="space-y-6">
+            <div className="space-y-4">
                 {/* Agent Status Section */}
-                <div className="space-y-3">
-                    <h2 className="text-xs uppercase tracking-widest text-slate-500 font-semibold">Agent Status</h2>
-                    <div className="space-y-2">
+                <div className="space-y-2">
+                    <h2 className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">Agent Status</h2>
+                    <div className="space-y-1.5">
                         <AgentCard name="ATLAS" status="working" activity="Connected to Synapse." />
                         <AgentCard name="TETYANA" status="idle" activity="Standing by." />
                         <AgentCard name="GRISHA" status="working" activity="Monitoring stream." />
@@ -41,8 +41,8 @@ function App(): JSX.Element {
                 </div>
 
                 {/* Terminal Section */}
-                <div className="space-y-3">
-                    <h2 className="text-xs uppercase tracking-widest text-slate-500 font-semibold">System Logs</h2>
+                <div className="space-y-2">
+                    <h2 className="text-[10px] uppercase tracking-widest text-slate-500 font-semibold">System Logs</h2>
                     <Terminal logs={logs} />
                 </div>
             </div>

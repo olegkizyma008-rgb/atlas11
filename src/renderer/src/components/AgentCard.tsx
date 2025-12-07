@@ -40,30 +40,30 @@ export const AgentCard = ({ name, status, activity = 'Waiting...' }: AgentCardPr
     const Icon = config.icon
 
     return (
-        <div className="flex items-center gap-4 px-4 py-3 rounded-lg bg-slate-900/40 border border-white/5 hover:border-white/10 transition-all group">
+        <div className="flex items-center gap-3 px-3 py-1.5 rounded bg-slate-900/30 border border-white/5 hover:border-white/10 transition-all">
             {/* Status Indicator */}
-            <div className={clsx("w-2 h-2 rounded-full", statusColor)}></div>
+            <div className={clsx("w-1.5 h-1.5 rounded-full", statusColor)}></div>
 
             {/* Icon */}
             <div className={clsx(
-                "w-8 h-8 rounded-lg flex items-center justify-center border border-white/10",
+                "w-6 h-6 rounded flex items-center justify-center",
                 `bg-${config.color}-500/10 text-${config.color}-400`
             )}>
-                <Icon size={16} />
+                <Icon size={12} />
             </div>
 
             {/* Info */}
             <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                    <h3 className="font-semibold text-sm text-white">{name}</h3>
-                    <span className="text-[10px] text-slate-500 uppercase tracking-wider">{config.description}</span>
+                <div className="flex items-center gap-1.5">
+                    <h3 className="font-semibold text-[11px] text-white">{name}</h3>
+                    <span className="text-[9px] text-slate-500 uppercase tracking-wide">{config.description}</span>
                 </div>
-                <p className="text-xs text-slate-400 truncate mt-0.5">{activity}</p>
+                <p className="text-[10px] text-slate-400 truncate">{activity}</p>
             </div>
 
             {/* Status Badge */}
             <div className={clsx(
-                "px-2 py-1 rounded text-[10px] font-semibold uppercase tracking-wider",
+                "px-1.5 py-0.5 rounded text-[9px] font-semibold uppercase tracking-wider",
                 status === 'working' ? `bg-${config.color}-500/20 text-${config.color}-300` :
                     'bg-slate-800/50 text-slate-500'
             )}>
