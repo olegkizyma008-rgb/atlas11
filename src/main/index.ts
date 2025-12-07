@@ -93,6 +93,40 @@ async function initializeKONTUR() {
         konturCore.register('kontur://organ/system', systemHandler);
     }
 
+    // MCP Handlers (Filesystem)
+    konturCore.register('kontur://organ/mcp/filesystem', {
+        send: async (packet: any) => {
+            console.log('[MCP HANDLER] Processing Filesystem Request:', packet.payload);
+            const tool = packet.payload.tool || packet.payload.action; // Fallback
+            const args = packet.payload.args;
+
+            try {
+                const result = await konturCortex.executeTool(tool, args);
+
+                if (packet.route.reply_to) {
+                    const response = createPacket(
+                        'kontur://organ/mcp/filesystem',
+                        packet.route.reply_to,
+                        PacketIntent.RESPONSE,
+                        { msg: `MCP Logic Executed. Result: ${JSON.stringify(result)}` }
+                    );
+                    konturCore.ingest(response);
+                }
+            } catch (e: any) {
+                console.error('[MCP HANDLER] Execution Failed:', e);
+                if (packet.route.reply_to) {
+                    const response = createPacket(
+                        'kontur://organ/mcp/filesystem',
+                        packet.route.reply_to,
+                        PacketIntent.ERROR,
+                        { error: e.message, msg: `Failed to execute ${tool}: ${e.message}` }
+                    );
+                    konturCore.ingest(response);
+                }
+            }
+        }
+    });
+
     if (process.env.AG === 'true') {
         const agScript = join(__dirname, '../kontur/ag/ag-worker.py');
         konturCore.loadPlugin('kontur://organ/ag/sim', { cmd: pythonCmd, args: [agScript] });

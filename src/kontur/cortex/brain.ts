@@ -8,6 +8,7 @@ import { KPP_Packet, SecurityScope, createPacket, PacketIntent } from '../protoc
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { AGENT_PERSONAS } from './agentPersonas';
 import * as crypto from 'crypto';
+import type { McpBridge } from '../mcp/McpBridge';
 
 interface AIProvider {
   name: string;
@@ -59,16 +60,70 @@ export class CortexBrain extends EventEmitter {
     if (googleApiKey) {
       this.genAI = new GoogleGenerativeAI(googleApiKey);
       this.chatModel = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash', // Or 'gemini-1.5-pro' if available
+        model: 'gemini-2.5-flash',
         systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt,
         generationConfig: {
           temperature: 0.7,
-          responseMimeType: "application/json" // Force JSON output
-        }
+          responseMimeType: "application/json"
+        },
+        // We will add tools dynamically if possible, or inject into prompt
+        // checks: https://ai.google.dev/gemini-api/docs/function-calling
       });
-      console.log(`[CORTEX] 🧠 Initialized with Gemini AI (Real Intelligence)`);
+      console.log(`[CORTEX] 🧠 Initialized with Gemini AI`);
+
+      // Initialize MCP Bridges
+      this.initMCP();
     } else {
-      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY found. System running in LOBOTOMIZED mode.`);
+      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY`);
+    }
+  }
+
+  private mcpBridges: Record<string, McpBridge> = {};
+
+  private async initMCP() {
+    try {
+      const split = (str: string) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map(s => s.replace(/^"|"$/g, '')) || [];
+
+      // Filesystem MCP
+      const { McpBridge } = await import('../mcp/McpBridge');
+      const fsBridge = new McpBridge(
+        'filesystem',
+        '1.0.0',
+        'node',
+        ['node_modules/@modelcontextprotocol/server-filesystem/dist/index.js', process.cwd()]
+      );
+
+      await fsBridge.connect();
+      const tools = await fsBridge.listTools();
+      console.log(`[CORTEX] 🛠️ Loaded ${tools.length} MCP Tools from Filesystem:`, tools.map(t => t.name).join(', '));
+
+      this.mcpBridges['filesystem'] = fsBridge;
+
+      // Register generic tool mapping
+      tools.forEach(tool => {
+        this.toolsMap[tool.name] = 'kontur://organ/mcp/filesystem';
+      });
+
+      // Update System Prompt with Tool Definitions (Dynamic Tool Discovery)
+      // Since we can't easily update the instantiated model's systemPrompt without re-init,
+      // we'll rely on the PLANNER seeing these tools in the prompt context if we were to rebuild it.
+      // For now, let's append valid tools to the current AgentPersona prompt in memory IF we re-instantiate, 
+      // OR just assume ATLAS knows standard tools.
+      // Correct approach: Re-instantiate model with tools if using native Function Calling, 
+      // OR append to system instructions.
+
+      const toolDesc = tools.map((t: any) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.inputSchema)})`).join('\n');
+      const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}\n\n## AVAILABLE MCP TOOLS:\n${toolDesc}`;
+
+      // Re-init model with new prompt
+      this.chatModel = this.genAI!.getGenerativeModel({
+        model: 'gemini-2.5-flash',
+        systemInstruction: enhancedPrompt,
+        generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
+      });
+
+    } catch (e) {
+      console.error('[CORTEX] Failed to init MCP:', e);
     }
   }
 
@@ -136,7 +191,8 @@ export class CortexBrain extends EventEmitter {
     const systemSteps = decision.plan.map(step => ({
       target: this.toolsMap[step.tool] || step.tool, // Map 'calculator' -> 'kontur://organ/worker'
       action: step.action,
-      args: step.args
+      args: step.args,
+      tool: step.tool // Explicitly pass tool name for MCP
     }));
 
     // Create AI_PLAN packet for the System Core
@@ -197,6 +253,22 @@ export class CortexBrain extends EventEmitter {
       { error: error.message, msg: fallbackResponse }
     );
     this.emit('decision', errorPacket);
+  }
+
+  /**
+   * Execute MCP Tool directly (Called by Core/System)
+   */
+  async executeTool(toolName: string, args: any): Promise<any> {
+    // Find which bridge has this tool
+    for (const [bridgeName, bridge] of Object.entries(this.mcpBridges)) {
+      // This is inefficient, ideally we map tool -> bridge
+      const tools = await bridge.listTools();
+      if (tools.find(t => t.name === toolName)) {
+        console.log(`[CORTEX] 🛠️ Executing MCP Tool ${toolName} via ${bridgeName}`);
+        return await bridge.callTool(toolName, args);
+      }
+    }
+    throw new Error(`Tool ${toolName} not found in any MCP Bridge`);
   }
 
   /**
