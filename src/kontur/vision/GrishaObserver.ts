@@ -57,12 +57,18 @@ export class GrishaObserver extends EventEmitter {
         if (this.geminiLive && !this.geminiLive.isConnected) {
             try {
                 await this.geminiLive.connect();
+                // Wait for connection to stabilize
+                await new Promise(resolve => setTimeout(resolve, 500));
             } catch (e) {
                 console.error('[GRISHA OBSERVER] Failed to connect Gemini Live:', e);
             }
         }
 
-        // Start capturing screen at 2 FPS
+        // Send FIRST FRAME IMMEDIATELY to keep session alive
+        await this.captureAndSendFrame();
+        console.log(`[GRISHA OBSERVER] 📸 First frame sent`);
+
+        // Continue capturing screen at 2 FPS
         this.captureInterval = setInterval(async () => {
             await this.captureAndSendFrame();
         }, 500);
@@ -102,10 +108,13 @@ export class GrishaObserver extends EventEmitter {
      */
     private async captureAndSendFrame() {
         try {
+            console.log('[GRISHA OBSERVER] 📸 Capturing screen...');
             const sources = await desktopCapturer.getSources({
                 types: ['screen'],
                 thumbnailSize: { width: 640, height: 360 }
             });
+
+            console.log(`[GRISHA OBSERVER] 🖥️ Found ${sources.length} sources`);
 
             if (sources.length > 0) {
                 const thumbnail = sources[0].thumbnail;
@@ -113,13 +122,20 @@ export class GrishaObserver extends EventEmitter {
                 const base64 = jpegBuffer.toString('base64');
 
                 // Send to Gemini Live
-                if (this.geminiLive && this.geminiLive.isConnected) {
-                    this.geminiLive.sendVideoFrame(base64);
-                    this.frameCount++;
+                if (this.geminiLive) {
+                    if (this.geminiLive.isConnected) {
+                        this.geminiLive.sendVideoFrame(base64);
+                        this.frameCount++;
+                        console.log(`[GRISHA OBSERVER] 📤 Frame ${this.frameCount} sent`);
+                    } else {
+                        console.warn('[GRISHA OBSERVER] ⚠️ Gemini Live NOT connected, cannot send frame');
+                    }
+                } else {
+                    console.error('[GRISHA OBSERVER] ❌ Gemini Live instance is missing');
                 }
             }
         } catch (e) {
-            console.error('[GRISHA OBSERVER] Capture failed:', e);
+            console.error('[GRISHA OBSERVER] ❌ Capture failed:', e);
         }
     }
 

@@ -591,6 +591,16 @@ class Core extends events.EventEmitter {
     const steps = payload.steps || [];
     const userResponse = payload.user_response;
     console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
+    const grishaObserver = global.grishaObserver;
+    if (grishaObserver && steps.length > 0) {
+      grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
+      const totalTime = steps.length * 1e3 + 2e3;
+      setTimeout(() => {
+        if (grishaObserver.isActive) {
+          grishaObserver.stopObservation();
+        }
+      }, totalTime);
+    }
     if (userResponse) {
       const chatPacket = createPacket(
         "kontur://cortex/ai/main",
@@ -1178,7 +1188,15 @@ function createWindow() {
           geminiLive.sendVideoFrame(image);
           return true;
         });
+        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-e241726f.js"));
+        const grishaObserver = new GrishaObserver();
+        grishaObserver.setGeminiLive(geminiLive);
+        grishaObserver.on("observation", (result) => {
+          synapse.emit("GRISHA", result.type.toUpperCase(), result.message);
+        });
+        global.grishaObserver = grishaObserver;
         console.log("[MAIN] 👁️ Grisha Vision Service Bridge Active");
+        console.log("[MAIN] 🔍 Grisha Observer Initialized");
       } else {
         console.warn("[MAIN] ⚠️ No API Key for Gemini Live Vision (GEMINI_LIVE_API_KEY/GOOGLE_API_KEY)");
       }
