@@ -48,18 +48,22 @@ export class GeminiLiveService extends EventEmitter {
             console.log('[GEMINI LIVE] 🔌 Connecting...');
             const genAI = new GoogleGenAI({ apiKey: this.apiKey });
 
+            // Flattened config structure to fix deprecation warning
+            const liveConfig = {
+                responseModalities: this.config.generationConfig.responseModalities,
+                speechConfig: this.config.generationConfig.speechConfig,
+                systemInstruction: this.config.systemInstruction
+            };
+
             // Let's retry connecting WITH callbacks to handle messages properly
             this.session = await genAI.live.connect({
                 model: this.config.model,
-                config: {
-                    generationConfig: this.config.generationConfig,
-                    systemInstruction: this.config.systemInstruction
-                },
+                config: liveConfig,
                 callbacks: {
                     onmessage: (msg: LiveServerMessage) => this.handleIncomingMessage(msg),
                     onerror: (err) => console.error('[GEMINI LIVE] Stream Error:', err),
-                    onclose: () => {
-                        console.log('[GEMINI LIVE] Stream Closed');
+                    onclose: (e) => {
+                        console.log(`[GEMINI LIVE] Stream Closed. Code: ${e.code}, Reason: ${e.reason}`);
                         this.isConnected = false;
                         this.emit('disconnected');
                     }
