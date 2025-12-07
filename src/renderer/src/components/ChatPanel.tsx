@@ -73,7 +73,7 @@ export const ChatPanel = ({
                     // @ts-ignore
                     const result = await window.electron.ipcRenderer.invoke('voice:speak', {
                         text: latestAtlasMessage.message,
-                        voiceName: 'Kore' // ATLAS voice
+                        voiceName: 'Algieba' // ATLAS voice
                     })
 
                     if (result.success && result.audioBuffer) {
