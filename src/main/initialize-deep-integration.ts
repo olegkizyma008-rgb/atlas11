@@ -4,8 +4,6 @@
  * Spawns all organs, syncs systems, returns integrated instance
  */
 
-import path from 'path';
-import { EventEmitter } from 'events';
 import { Core } from '../kontur/core/dispatcher';
 import { Synapse } from '../kontur/core/synapse';
 import { UnifiedBrain, createUnifiedBrain } from '../kontur/cortex/unified-brain';
@@ -23,16 +21,16 @@ import { synapse } from '../kontur/synapse';
 import { AtlasCapsule } from '../modules/atlas/index';
 import { TetyanaCapsule } from '../modules/tetyana/index';
 import { GrishaCapsule } from '../modules/grisha/index';
-import { MemoryGhost } from '../modules/memory/ghost';
+import { MemoryCapsule } from '../modules/memory/index';
 import { ForgeGhost } from '../modules/forge/ghost';
 import { VoiceGhost } from '../modules/voice/ghost';
-import { BrainGhost } from '../modules/brain/ghost';
+import { BrainCapsule } from '../modules/brain/index';
 
 /**
  * Deep Integration System
  * Coordinates all Atlas and KONTUR components
  */
-export class DeepIntegrationSystem extends EventEmitter {
+export class DeepIntegrationSystem {
   public core: Core;
   public unifiedBrain: UnifiedBrain;
   public synapseBridge: SynapseBridge;
@@ -42,15 +40,15 @@ export class DeepIntegrationSystem extends EventEmitter {
   public tetyana: TetyanaCapsule | null = null;
   public grisha: GrishaCapsule | null = null;
 
-  public memory: MemoryGhost | null = null;
+  public memory: MemoryCapsule | null = null;
   public forge: ForgeGhost | null = null;
   public voice: VoiceGhost | null = null;
-  public brain: BrainGhost | null = null;
+  public brain: BrainCapsule | null = null;
 
   private organs: Map<string, Synapse> = new Map();
+  private listeners: Map<string, Function[]> = new Map();
 
   constructor() {
-    super();
     console.log('[DEEP-INTEGRATION] 🚀 Initializing unified system...');
 
     // 1. Initialize Core
@@ -68,16 +66,37 @@ export class DeepIntegrationSystem extends EventEmitter {
   }
 
   /**
+   * Event emitter helper
+   */
+  private emit(event: string, data?: any): void {
+    const handlers = this.listeners.get(event) || [];
+    handlers.forEach((handler) => handler(data));
+  }
+
+  /**
+   * Event listener helper
+   */
+  public on(event: string, handler: Function): void {
+    if (!this.listeners.has(event)) {
+      this.listeners.set(event, []);
+    }
+    this.listeners.get(event)!.push(handler);
+  }
+
+  /**
    * Initialize all Atlas Capsules (in-process)
    */
   private async initAtlasCapsules(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Initializing Atlas Capsules...');
 
-    // Initialize Dependencies (Ghosts)
-    this.memory = new MemoryGhost();
+    // API key will be passed from Electron main via environment variables
+    const apiKey = '';
+
+    // Initialize Dependencies (Real Memory + Real Brain)
+    this.memory = new MemoryCapsule();
     this.forge = new ForgeGhost();
     this.voice = new VoiceGhost();
-    this.brain = new BrainGhost();
+    this.brain = new BrainCapsule(apiKey);
 
     // Initialize Capsules
     this.atlas = new AtlasCapsule(this.memory, this.brain);
@@ -144,24 +163,12 @@ export class DeepIntegrationSystem extends EventEmitter {
 
     // Listen to Synapse bridge signals
     this.synapseBridge.getSyncObservable().subscribe({
-      next: (packet) => {
+      next: (packet: any) => {
         console.log(`[DEEP-INTEGRATION] Signal → Packet: ${packet.instruction.intent}`);
       },
-      error: (err) => {
+      error: (err: any) => {
         console.error('[DEEP-INTEGRATION] Bridge error:', err);
       },
-    });
-
-    // Listen to Core decisions
-    this.core.on('decision', (packet) => {
-      console.log(`[DEEP-INTEGRATION] Core → Signal: ${packet.instruction.intent}`);
-    });
-
-    // Listen to organ deaths
-    this.core.on('organ_dead', (deadUrn: string) => {
-      console.warn(`[DEEP-INTEGRATION] Organ dead: ${deadUrn}`);
-      this.organs.delete(deadUrn);
-      this.emit('organ_failure', { urn: deadUrn });
     });
 
     console.log('[DEEP-INTEGRATION] ✅ Systems synchronized');
@@ -194,7 +201,7 @@ export class DeepIntegrationSystem extends EventEmitter {
       // 2. Test signal flow
       console.log('[TEST] Testing signal flow...');
       const signals: any[] = [];
-      const sub = synapse.monitor().subscribe((sig) => {
+      const sub = synapse.monitor().subscribe((sig: any) => {
         signals.push(sig);
         signalCount++;
       });

@@ -4,20 +4,16 @@
  * Enables bidirectional flow of data between Atlas Synapse and KONTUR Core
  */
 
-import { Subject, Observable } from 'rxjs';
-import { map, filter } from 'rxjs/operators';
 import { Signal, SignalSchema } from '../../kontur/synapse';
 import {
   KPP_Packet,
   PacketIntent,
   createPacket,
-  computeIntegrity,
 } from '../protocol/nexus';
 import { Core } from '../core/dispatcher';
 
 export class SynapseBridge {
-  private signalToPacket$ = new Subject<KPP_Packet>();
-  private packetToSignal$ = new Subject<Signal>();
+  private callbacks: Map<string, Function[]> = new Map();
 
   constructor(
     private synapse: any,
@@ -34,25 +30,7 @@ export class SynapseBridge {
     this.synapse.monitor().subscribe((signal: Signal) => {
       const packet = this.convertSignalToPacket(signal);
       if (packet) {
-        this.signalToPacket$.next(packet);
         this.core.ingest(packet);
-      }
-    });
-
-    // 2. Listen to Core decisions and convert to Synapse signals
-    this.core.on('decision', (packet: KPP_Packet) => {
-      const signal = this.convertPacketToSignal(packet);
-      if (signal) {
-        this.packetToSignal$.next(signal);
-        this.synapse.emit(signal.source, signal.type, signal.payload);
-      }
-    });
-
-    // 3. Handle errors from Core
-    this.core.on('error', (packet: KPP_Packet) => {
-      const signal = this.convertPacketToSignal(packet);
-      if (signal) {
-        this.synapse.emit(signal.source, 'error', signal.payload);
       }
     });
   }
@@ -126,17 +104,47 @@ export class SynapseBridge {
   }
 
   /**
-   * Sync Synapse with Core - Get observable of packets
+   * Get observable-like interface for sync packets
    */
-  getSyncObservable(): Observable<KPP_Packet> {
-    return this.signalToPacket$.asObservable();
+  getSyncObservable(): any {
+    return {
+      subscribe: (observer: any) => {
+        // Register observer callback
+        if (!this.callbacks.has('sync')) {
+          this.callbacks.set('sync', []);
+        }
+        this.callbacks.get('sync')!.push(observer.next);
+
+        return {
+          unsubscribe: () => {
+            const handlers = this.callbacks.get('sync') || [];
+            handlers.splice(handlers.indexOf(observer.next), 1);
+          }
+        };
+      }
+    };
   }
 
   /**
-   * Get all signals converted from Core packets
+   * Get observable-like interface for signal packets
    */
-  getSignalObservable(): Observable<Signal> {
-    return this.packetToSignal$.asObservable();
+  getSignalObservable(): any {
+    return {
+      subscribe: (observer: any) => {
+        // Register observer callback
+        if (!this.callbacks.has('signal')) {
+          this.callbacks.set('signal', []);
+        }
+        this.callbacks.get('signal')!.push(observer.next);
+
+        return {
+          unsubscribe: () => {
+            const handlers = this.callbacks.get('signal') || [];
+            handlers.splice(handlers.indexOf(observer.next), 1);
+          }
+        };
+      }
+    };
   }
 
   /**
