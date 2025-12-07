@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow } from 'electron'
+import 'dotenv/config';
+import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from 'electron-toolkit'
 import { createIPCHandler } from 'electron-trpc/main'
