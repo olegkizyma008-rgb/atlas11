@@ -15,9 +15,9 @@ export class VoiceCapsule implements VoiceAPI {
     private isPlaying: boolean = false;
 
     constructor() {
-        this.apiKey = process.env.GEMINI_API_KEY || '';
+        this.apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GEMINI_API_KEY || '';
         if (!this.apiKey) {
-            console.error("❌ VoiceCapsule: GEMINI_API_KEY is missing!");
+            console.error("❌ VoiceCapsule: GEMINI_LIVE_API_KEY (or GEMINI_API_KEY) is missing!");
         }
     }
 
