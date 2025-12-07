@@ -59,8 +59,33 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
     }
 
     useEffect(() => {
-        return () => stopStream()
-    }, [])
+        let interval: NodeJS.Timeout
+
+        if (streamActive && videoRef.current) {
+            const canvas = document.createElement('canvas')
+            const ctx = canvas.getContext('2d')
+
+            interval = setInterval(() => {
+                const video = videoRef.current
+                if (!video || !ctx) return
+
+                canvas.width = 320
+                canvas.height = 180
+                ctx.drawImage(video, 0, 0, 320, 180)
+
+                // Get JPEG base64 (without prefix for simpler handling in Main)
+                const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]
+
+                // Send frame to Grisha Brain
+                window.electron.ipcRenderer.invoke('vision:stream_frame', { image: base64 })
+            }, 1000) // 1 FPS for initial testing (increase for smoother flow)
+        }
+
+        return () => {
+            if (interval) clearInterval(interval)
+            stopStream()
+        }
+    }, [streamActive])
 
     if (!isActive) return null
 
@@ -95,8 +120,8 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
                     style={{ borderColor: `${currentStatus.border}20` }}
                 >
                     <div className={`w-1.5 h-1.5 rounded-full ${status === 'stable' ? 'bg-emerald-400' :
-                            status === 'analyzing' ? 'bg-yellow-400 animate-pulse' :
-                                'bg-rose-400 animate-ping'
+                        status === 'analyzing' ? 'bg-yellow-400 animate-pulse' :
+                            'bg-rose-400 animate-ping'
                         }`} />
                     <span className={`text-[9px] font-mono uppercase tracking-wider ${currentStatus.text}`}>
                         {status === 'stable' ? 'STABLE' : status === 'analyzing' ? 'ANALYZING...' : 'ALERT!'}

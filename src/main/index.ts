@@ -148,6 +148,39 @@ function createWindow(): void {
         }
     });
 
+    // --- GRISHA: Gemini Live Vision Integration ---
+    try {
+        const { GeminiLiveService } = await import('../kontur/vision/GeminiLiveService');
+        const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+
+        if (apiKey) {
+            const geminiLive = new GeminiLiveService(apiKey);
+
+            // Connect automatically (or on demand)
+            geminiLive.connect().catch(e => console.error("Gemini Connect Fail", e));
+
+            // Forward Grisha's voice/text to UI
+            geminiLive.on('text', (text) => {
+                synapse.emit('GRISHA', 'INFO', text);
+            });
+
+            // IPC: Receive Video Stream from Client
+            ipcMain.removeHandler('vision:stream_frame');
+            ipcMain.handle('vision:stream_frame', (_, { image }) => {
+                // image is base64
+                geminiLive.sendVideoFrame(image);
+                return true;
+            });
+
+            console.log('[MAIN] 👁️ Grisha Vision Service Bridge Active');
+        } else {
+            console.warn('[MAIN] ⚠️ No API Key for Gemini Live Vision');
+        }
+    } catch (e) {
+        console.error('[MAIN] Failed to start Vision Service:', e);
+    }
+    // ----------------------------------------------
+
     // Initialize tRPC
     createIPCHandler({ router: appRouter, windows: [mainWindow] })
 
