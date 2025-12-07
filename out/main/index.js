@@ -773,12 +773,13 @@ class CortexBrain extends events.EventEmitter {
   async initMCP() {
     try {
       const split = (str) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((s) => s.replace(/^"|"$/g, "")) || [];
+      const homeDir = process.env.HOME || "/Users/dev";
       const { McpBridge } = await Promise.resolve().then(() => require("./McpBridge-69bff3b7.js"));
       const fsBridge = new McpBridge(
         "filesystem",
         "1.0.0",
         "node",
-        ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", process.cwd()]
+        ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", process.cwd(), `${homeDir}/Desktop`]
       );
       const osBridge = new McpBridge(
         "os",
@@ -797,8 +798,15 @@ class CortexBrain extends events.EventEmitter {
       fsTools.forEach((tool) => this.toolsMap[tool.name] = "kontur://organ/mcp/filesystem");
       osTools.forEach((tool) => this.toolsMap[tool.name] = "kontur://organ/mcp/os");
       const toolDesc = allTools.map((t2) => `- ${t2.name}: ${t2.description} (Args: ${JSON.stringify(t2.inputSchema)})`).join("\n");
+      const systemContext = `
+## SYSTEM CONTEXT:
+- User Home Directory: ${homeDir}
+- Desktop Path: ${homeDir}/Desktop
+- Current Working Directory: ${process.cwd()}
+- When saving files to Desktop, use path: ${homeDir}/Desktop/filename.txt
+`;
       const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}
-
+${systemContext}
 ## AVAILABLE MCP TOOLS (Use these instead of system/worker):
 ${toolDesc}`;
       this.chatModel = this.genAI.getGenerativeModel({
