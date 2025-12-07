@@ -20,7 +20,13 @@ export const GrishaContract = {
     }
 };
 
+export type SafetyReport = {
+    threats: string[];
+    level: 'low' | 'medium' | 'high';
+    timestamp: number;
+};
+
 export type GrishaAPI = {
-    observe: () => Promise<{ summary: string; threats: string[] }>;
+    observe: () => Promise<SafetyReport>;
     audit: (args: z.infer<typeof GrishaContract.audit.args>) => Promise<{ allowed: boolean; reason?: string }>;
 };

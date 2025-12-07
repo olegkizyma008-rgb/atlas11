@@ -7,6 +7,9 @@ export const PlanSchema = z.object({
     status: z.enum(['pending', 'active', 'completed', 'failed'])
 });
 
+export type Plan = z.infer<typeof PlanSchema>;
+
+
 export const AtlasContract = {
     // Methods
     plan: z.function()

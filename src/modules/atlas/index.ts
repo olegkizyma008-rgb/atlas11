@@ -1,25 +1,45 @@
-import { AtlasAPI } from './contract';
+
+import { AtlasAPI, Plan } from './contract';
 import { MemoryAPI } from '../memory/contract';
+import { BrainAPI } from '../brain/contract';
+import { synapse } from '../../kontur/synapse';
 
 export class AtlasCapsule implements AtlasAPI {
     private memory: MemoryAPI;
+    private brain: BrainAPI;
 
-    constructor(memory: MemoryAPI) {
+    constructor(memory: MemoryAPI, brain: BrainAPI) {
         this.memory = memory;
+        this.brain = brain;
     }
 
-    async plan(args: { goal: string }) {
-        // 1. Ask Memory for context
-        const context = await this.memory.recall({ query: args.goal });
-        console.log("ATLAS: Retrieved context", context.summary);
+    async plan(args: { goal: string; context?: Record<string, any> }): Promise<Plan> {
+        console.log(`ATLAS: Planning for "${args.goal}" using Brain...`);
 
-        // 2. Mock Logic for now (Real logic would use LLM)
-        return {
-            id: 'real-plan-1',
-            goal: args.goal,
-            steps: ['Step 1 from Real Atlas'],
-            status: 'active' as const
-        };
+        // 1. Recall relevant memories
+        // const memories = await this.memory.recall({ query: args.goal }); 
+
+        // 2. Ask Brain to plan
+        const response = await this.brain.think({
+            system_prompt: `You are ATLAS, the Architect of KONTUR.Your goal is to create a structured plan for: "${args.goal}".Return a JSON object with 'goal' and 'steps'(array of strings).`,
+            user_prompt: `Goal: ${args.goal}.Context: ${JSON.stringify(args.context || {})} `
+        });
+
+        try {
+            const result = JSON.parse(response.text || '{}');
+            const plan: Plan = {
+                id: crypto.randomUUID(),
+                goal: args.goal,
+                steps: result.steps || ["Step 1 (Fallback)", "Step 2 (Fallback)"],
+                status: 'active'
+            };
+
+            synapse.emit('atlas', 'plan_ready', { planId: plan.id, steps: plan.steps.length });
+            return plan;
+        } catch (e) {
+            console.error("ATLAS: Failed to parse Brain response", e);
+            return { id: 'error', goal: args.goal, steps: [], status: 'failed' };
+        }
     }
 
     async dream() {

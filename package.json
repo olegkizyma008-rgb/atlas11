@@ -10,6 +10,7 @@
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {
+        "@google/generative-ai": "^0.24.1",
         "@tanstack/react-query": "^4.18.0",
         "@trpc/client": "^10.0.0",
         "@trpc/react-query": "^10.0.0",

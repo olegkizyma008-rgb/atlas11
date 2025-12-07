@@ -8,13 +8,13 @@ export class ForgeGhost implements ForgeAPI {
     }
 
     async synthesize(args: { name: string; description: string; code: string }) {
-        console.log(`🔨 ForgeGhost: Synthesizing "${args.name}"...`);
+        console.log(`🔨 ForgeGhost: Synthesizing tool "${args.name}"...`);
         this.tools.set(args.name, args.code);
         return {
             name: args.name,
             description: args.description,
-            path: `/mock/path/modules/${args.name}.ts`,
-            status: 'verified' as const
+            path: `/mock/tools/${args.name}.ts`,
+            status: "verified" as const
         };
     }
 
