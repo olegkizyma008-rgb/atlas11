@@ -5,6 +5,8 @@
 
 import { EventEmitter } from 'events';
 import { KPP_Packet, SecurityScope, createPacket, PacketIntent } from '../protocol/nexus';
+import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
+import { AGENT_PERSONAS, getPersona } from './agentPersonas';
 import * as crypto from 'crypto';
 
 interface AIProvider {
@@ -18,6 +20,9 @@ export class CortexBrain extends EventEmitter {
   private provider: string = process.env.AI_PROVIDER || 'gemini';
   private apiKey: string = process.env.AI_API_KEY || '';
 
+  private genAI: GoogleGenerativeAI | null = null;
+  private chatModel: GenerativeModel | null = null;
+
   private toolsMap: Record<string, string> = {
     calculator: 'kontur://organ/worker',
     memory: 'kontur://organ/memory',
@@ -26,13 +31,27 @@ export class CortexBrain extends EventEmitter {
   };
 
   private providers: AIProvider[] = [
-    { name: 'gemini', available: !!process.env.GEMINI_API_KEY },
+    { name: 'gemini', available: !!process.env.GOOGLE_API_KEY },
     { name: 'openai', available: !!process.env.OPENAI_API_KEY },
     { name: 'claude', available: !!process.env.ANTHROPIC_API_KEY },
   ];
 
   constructor() {
     super();
+
+    // Initialize Gemini AI if API key is available
+    const googleApiKey = process.env.GOOGLE_API_KEY;
+    if (googleApiKey) {
+      this.genAI = new GoogleGenerativeAI(googleApiKey);
+      this.chatModel = this.genAI.getGenerativeModel({
+        model: 'gemini-2.0-flash-exp',
+        systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt
+      });
+      console.log(`[CORTEX] 🧠 Initialized with Gemini AI (ATLAS persona)`);
+    } else {
+      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY found, using fallback responses`);
+    }
+
     console.log(`[CORTEX] 🧠 Initialized with provider: ${this.provider}`);
   }
 
@@ -172,23 +191,30 @@ export class CortexBrain extends EventEmitter {
    * Handle simple chat messages with direct AI response
    */
   private async handleChat(prompt: string): Promise<string> {
+    console.log(`[CORTEX] 🤖 Using ATLAS persona for chat`);
+
+    // Use real AI if available
+    if (this.chatModel) {
+      try {
+        const result = await this.chatModel.generateContent(prompt);
+        const response = result.response.text();
+        console.log(`[CORTEX] ✅ AI response received`);
+        return response;
+      } catch (error: any) {
+        console.error(`[CORTEX] ❌ AI error:`, error.message);
+        // Fall through to fallback
+      }
+    }
+
+    // Fallback responses when AI is unavailable
+    console.log(`[CORTEX] ⚠️ Using fallback response`);
     const normalizedPrompt = prompt.toLowerCase().trim();
 
-    // Simple greeting responses
-    if (normalizedPrompt.includes('привіт') || normalizedPrompt.includes('hello') || normalizedPrompt.includes('hi')) {
-      return 'Привіт! Я ATLAS — твій AI-асистент. Чим можу допомогти?';
+    if (normalizedPrompt.includes('привіт') || normalizedPrompt.includes('hello')) {
+      return 'Привіт! Я ATLAS — твій AI-асистент. На жаль, наразі AI тимчасово недоступний, але я скоро повернуся! 🔧';
     }
 
-    if (normalizedPrompt.includes('як справи') || normalizedPrompt.includes('how are you')) {
-      return 'Все чудово, дякую! Працюю на повну потужність. Чим можу допомогти?';
-    }
-
-    if (normalizedPrompt.includes('хто ти') || normalizedPrompt.includes('who are you')) {
-      return 'Я ATLAS — система штучного інтелекту з архітектурою KONTUR. Можу допомогти з розрахунками, запуском додатків та іншими задачами.';
-    }
-
-    // Default friendly response
-    return `Зрозумів! Якщо потрібна допомога з конкретною задачею — просто скажи. Наприклад: "Відкрий калькулятор" або "Порахуй 2+2".`;
+    return 'Вибач, AI-сервіс тимчасово недоступний. Спробуй пізніше або скористайся командами типу "Відкрий калькулятор".';
   }
 
   /**

@@ -151,61 +151,75 @@ export class Core extends EventEmitter {
    * Evolve antibodies via DDR (Distributed DNA Repository)
    */
   private evolveDDR() {
-    console.log('[DDR] 🧬 Evolving antibody repository...');
-    // Placeholder for genetic evolution
-    // In real impl: would run genetic algorithm on antibodies
+    try {
+      console.log('[DDR] 🧬 Evolving antibody repository...');
+      // Placeholder for genetic evolution
+      // In real impl: would run genetic algorithm on antibodies
+    } catch (error: any) {
+      // Silently ignore EPIPE errors
+      if (error.code !== 'EPIPE') {
+        console.error('[DDR] Error:', error.message);
+      }
+    }
   }
 
   /**
    * Perform homeostasis - monitor and balance organ health
    */
   private performHomeostasis() {
-    const now = Date.now();
-    const deadOrgans: string[] = [];
+    try {
+      const now = Date.now();
+      const deadOrgans: string[] = [];
 
-    this.registry.forEach((organ, urn) => {
-      if (!(organ instanceof Synapse)) return;
+      this.registry.forEach((organ, urn) => {
+        if (!(organ instanceof Synapse)) return;
 
-      const metrics = organ.getMetrics();
+        const metrics = organ.getMetrics();
 
-      // Check heartbeat
-      if (!organ.isAlive()) {
-        console.error(`[CORE] 🚑 Organ ${urn} unresponsive, restarting...`);
-        organ.kill();
-        deadOrgans.push(urn);
-      }
-
-      // Auto-scale on overload
-      if (metrics.load_factor > 0.8) {
-        const duplicateUrn = `${urn}_dup`;
-        if (!this.registry.has(duplicateUrn)) {
-          console.log(`[CORE] 📊 Auto-scaling: Creating ${duplicateUrn}`);
-          // Placeholder: would spawn duplicate
+        // Check heartbeat
+        if (!organ.isAlive()) {
+          console.error(`[CORE] 🚑 Organ ${urn} unresponsive, restarting...`);
+          organ.kill();
+          deadOrgans.push(urn);
         }
+
+        // Auto-scale on overload
+        if (metrics.load_factor > 0.8) {
+          const duplicateUrn = `${urn}_dup`;
+          if (!this.registry.has(duplicateUrn)) {
+            console.log(`[CORE] 📊 Auto-scaling: Creating ${duplicateUrn}`);
+            // Placeholder: would spawn duplicate
+          }
+        }
+
+        // Send periodic heartbeat
+        const heartbeatPacket = createPacket(
+          'kontur://core/system',
+          urn,
+          PacketIntent.HEARTBEAT,
+          {}
+        );
+        organ.sendHeartbeat(heartbeatPacket);
+      });
+
+      // Log metrics (only if there are organs to monitor)
+      const metricsSnapshot = Array.from(this.registry.entries())
+        .filter(([_, o]) => o instanceof Synapse)
+        .map(([urn, o]) => ({
+          urn: urn.replace('kontur://', ''),
+          load: (o as Synapse).loadFactor.toFixed(2),
+          energy: (o as Synapse).energyUsage.toFixed(2),
+          state: (o as Synapse).state,
+        }));
+
+      if (metricsSnapshot.length > 0) {
+        console.log('[HOMEOSTASIS] 📈 Metrics:', metricsSnapshot);
       }
-
-      // Send periodic heartbeat
-      const heartbeatPacket = createPacket(
-        'kontur://core/system',
-        urn,
-        PacketIntent.HEARTBEAT,
-        {}
-      );
-      organ.sendHeartbeat(heartbeatPacket);
-    });
-
-    // Log metrics
-    const metricsSnapshot = Array.from(this.registry.entries())
-      .filter(([_, o]) => o instanceof Synapse)
-      .map(([urn, o]) => ({
-        urn: urn.replace('kontur://', ''),
-        load: (o as Synapse).loadFactor.toFixed(2),
-        energy: (o as Synapse).energyUsage.toFixed(2),
-        state: (o as Synapse).state,
-      }));
-
-    if (metricsSnapshot.length > 0) {
-      console.log('[HOMEOSTASIS] 📈 Metrics:', metricsSnapshot);
+    } catch (error: any) {
+      // Silently ignore EPIPE errors (happens during shutdown)
+      if (error.code !== 'EPIPE') {
+        console.error('[HOMEOSTASIS] Error:', error.message);
+      }
     }
   }
 

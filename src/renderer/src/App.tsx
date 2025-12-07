@@ -49,11 +49,11 @@ function createPacket(intent: string, payload: any) {
 
 type AgentStatus = 'idle' | 'working' | 'speaking' | 'listening' | 'error'
 
-// Agent stages on the orbital path
-const agentStages: Record<string, { angle: number; stage: string }> = {
-    ATLAS: { angle: 180, stage: 'LISTENING' },
-    TETYANA: { angle: 270, stage: 'PROCESSING' },
-    GRISHA: { angle: 225, stage: 'SECURITY REVIEW' }
+// Agent stages on the orbital path with distinct colors
+const agentStages: Record<string, { angle: number; stage: string; color: string }> = {
+    ATLAS: { angle: 180, stage: 'LISTENING', color: '#22d3ee' },      // Cyan
+    TETYANA: { angle: 270, stage: 'PROCESSING', color: '#34d399' },   // Emerald  
+    GRISHA: { angle: 225, stage: 'SECURITY REVIEW', color: '#fb7185' } // Rose
 }
 
 function App(): JSX.Element {
