@@ -19,6 +19,14 @@ async function initializeKONTUR() {
     konturCortex.on('decision', (packet) => konturCore.ingest(packet));
     konturCortex.on('error', (packet) => konturCore.ingest(packet));
 
+    // Register Cortex as AI handler
+    konturCore.register('kontur://cortex/ai/main', {
+        send: (packet: any) => {
+            console.log('[CORTEX HANDLER] Processing AI request...');
+            konturCortex.process(packet);
+        }
+    });
+
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
     const workerScript = join(__dirname, '../kontur/organs/worker.py');
 

@@ -488,6 +488,7 @@ class Core extends events.EventEmitter {
       console.warn(`[INTEGRITY FAIL] calculated hash mismatch for ${packet.nexus.uid}`);
       console.warn(`[INTEGRITY DEBUG] Integrity: ${packet.nexus.integrity}`);
       console.warn(`[INTEGRITY DEBUG] Payload: ${JSON.stringify(packet.payload)}`);
+      return;
     }
     const senderScope = this.permissions.get(packet.route.from) || SecurityScope.PUBLIC;
     if (packet.auth.scope > senderScope) {
@@ -603,8 +604,23 @@ class CortexBrain extends events.EventEmitter {
    * Process incoming packet and generate reasoning/plans
    */
   async process(packet) {
-    console.log(`[CORTEX] 🤔 Reasoning about: ${packet.payload.prompt || packet.instruction.op_code}`);
+    const prompt = packet.payload.prompt || packet.instruction.op_code;
+    console.log(`[CORTEX] 🤔 Reasoning about: ${prompt}`);
     try {
+      const isChat = this.isChatMessage(prompt);
+      if (isChat) {
+        console.log(`[CORTEX] 💬 Chat mode detected`);
+        const chatResponse = await this.handleChat(prompt);
+        const chatPacket = createPacket(
+          this.urn,
+          "kontur://organ/ui/shell",
+          PacketIntent.EVENT,
+          { msg: chatResponse, type: "chat" }
+        );
+        this.emit("decision", chatPacket);
+        return;
+      }
+      console.log(`[CORTEX] 📋 Task mode detected`);
       let aiResponse = { reasoning: "Default reasoning", plan: [] };
       if (this.provider === "gemini" && process.env.GEMINI_API_KEY) {
         aiResponse = await this.reasonWithGemini(packet);
@@ -649,6 +665,90 @@ class CortexBrain extends events.EventEmitter {
       );
       this.emit("error", errorPacket);
     }
+  }
+  /**
+   * Detect if message is a simple chat (greeting, question) vs action request
+   */
+  isChatMessage(prompt) {
+    const normalizedPrompt = prompt.toLowerCase().trim();
+    const greetings = [
+      "привіт",
+      "вітаю",
+      "доброго",
+      "добрий",
+      "здоров",
+      "хай",
+      "салют",
+      "hello",
+      "hi",
+      "hey",
+      "good morning",
+      "good afternoon",
+      "good evening"
+    ];
+    const chatPatterns = [
+      "як справи",
+      "що нового",
+      "як ти",
+      "хто ти",
+      "що ти",
+      "how are you",
+      "what are you",
+      "who are you",
+      "what's up"
+    ];
+    const taskActionWords = [
+      "відкрий",
+      "запусти",
+      "створи",
+      "обчисли",
+      "порахуй",
+      "знайди",
+      "покажи",
+      "open",
+      "launch",
+      "create",
+      "calculate",
+      "compute",
+      "find",
+      "show",
+      "run"
+    ];
+    for (const action of taskActionWords) {
+      if (normalizedPrompt.includes(action)) {
+        return false;
+      }
+    }
+    for (const greeting of greetings) {
+      if (normalizedPrompt.includes(greeting)) {
+        return true;
+      }
+    }
+    for (const pattern of chatPatterns) {
+      if (normalizedPrompt.includes(pattern)) {
+        return true;
+      }
+    }
+    if (normalizedPrompt.split(" ").length <= 3 && !normalizedPrompt.includes("?")) {
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Handle simple chat messages with direct AI response
+   */
+  async handleChat(prompt) {
+    const normalizedPrompt = prompt.toLowerCase().trim();
+    if (normalizedPrompt.includes("привіт") || normalizedPrompt.includes("hello") || normalizedPrompt.includes("hi")) {
+      return "Привіт! Я ATLAS — твій AI-асистент. Чим можу допомогти?";
+    }
+    if (normalizedPrompt.includes("як справи") || normalizedPrompt.includes("how are you")) {
+      return "Все чудово, дякую! Працюю на повну потужність. Чим можу допомогти?";
+    }
+    if (normalizedPrompt.includes("хто ти") || normalizedPrompt.includes("who are you")) {
+      return "Я ATLAS — система штучного інтелекту з архітектурою KONTUR. Можу допомогти з розрахунками, запуском додатків та іншими задачами.";
+    }
+    return `Зрозумів! Якщо потрібна допомога з конкретною задачею — просто скажи. Наприклад: "Відкрий калькулятор" або "Порахуй 2+2".`;
   }
   /**
    * Reasoning with Google Gemini
@@ -769,6 +869,12 @@ async function initializeKONTUR() {
   konturCortex = new CortexBrain();
   konturCortex.on("decision", (packet) => konturCore.ingest(packet));
   konturCortex.on("error", (packet) => konturCore.ingest(packet));
+  konturCore.register("kontur://cortex/ai/main", {
+    send: (packet) => {
+      console.log("[CORTEX HANDLER] Processing AI request...");
+      konturCortex.process(packet);
+    }
+  });
   const pythonCmd = process.platform === "win32" ? "python" : "python3";
   const workerScript = path.join(__dirname, "../kontur/organs/worker.py");
   try {
