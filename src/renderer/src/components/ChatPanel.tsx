@@ -95,9 +95,23 @@ export const ChatPanel = ({
         // @ts-ignore
         const handleAudio = async (audioBuffer: ArrayBuffer) => {
             try {
+                if (!audioBuffer || audioBuffer.byteLength === 0) {
+                    console.warn('[CHAT] ⚠️ Received empty audio buffer');
+                    return;
+                }
+
+                console.log('[CHAT] 📥 Received audio bytes:', audioBuffer.byteLength);
+
                 const audioContext = new AudioContext();
                 const sampleRate = 24000;
+
+                // Ensure correct array type interpretation
                 const int16Array = new Int16Array(audioBuffer);
+
+                if (int16Array.length === 0) {
+                    console.warn('[CHAT] ⚠️ Int16Array is empty');
+                    return;
+                }
 
                 const buffer = audioContext.createBuffer(1, int16Array.length, sampleRate);
                 const channelData = buffer.getChannelData(0);

@@ -22,7 +22,6 @@ export interface MultiSpeakerConfig {
 export class VoiceCapsule {
     private genAI: GoogleGenAI | null = null;
     private apiKey: string;
-    private audioContext: AudioContext | null = null;
 
     constructor(apiKey?: string) {
         this.apiKey = apiKey || process.env.GEMINI_API_KEY || '';
@@ -69,15 +68,15 @@ export class VoiceCapsule {
                 return null;
             }
 
-            // Convert base64 to ArrayBuffer
-            const binaryString = atob(audioData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
+            // Convert base64 to ArrayBuffer using Node.js Buffer
+            const buffer = Buffer.from(audioData, 'base64');
 
-            console.log('[VOICE CAPSULE] ✅ Generated audio:', bytes.length, 'bytes');
-            return bytes.buffer;
+            // Convert Node Buffer to ArrayBuffer
+            // This is necessary because IPC might handle ArrayBuffer better than Node Buffer
+            const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+            console.log('[VOICE CAPSULE] ✅ Generated audio:', arrayBuffer.byteLength, 'bytes');
+            return arrayBuffer;
         } catch (error: any) {
             console.error('[VOICE CAPSULE] ❌ TTS error:', error.message);
             return null;
@@ -123,74 +122,17 @@ export class VoiceCapsule {
                 return null;
             }
 
-            // Convert base64 to ArrayBuffer
-            const binaryString = atob(audioData);
-            const bytes = new Uint8Array(binaryString.length);
-            for (let i = 0; i < binaryString.length; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
+            // Convert base64 to ArrayBuffer using Node.js Buffer
+            const buffer = Buffer.from(audioData, 'base64');
 
-            console.log('[VOICE CAPSULE] ✅ Generated multi-speaker audio:', bytes.length, 'bytes');
-            return bytes.buffer;
+            // Convert Node Buffer to ArrayBuffer
+            const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+
+            console.log('[VOICE CAPSULE] ✅ Generated multi-speaker audio:', arrayBuffer.byteLength, 'bytes');
+            return arrayBuffer;
         } catch (error: any) {
             console.error('[VOICE CAPSULE] ❌ Multi-speaker TTS error:', error.message);
             return null;
-        }
-    }
-
-    /**
-     * Play audio buffer in browser
-     */
-    async playAudio(audioBuffer: ArrayBuffer): Promise<void> {
-        try {
-            if (!this.audioContext) {
-                this.audioContext = new AudioContext();
-            }
-
-            // Decode PCM to AudioBuffer
-            // Gemini TTS returns 16-bit PCM at 24kHz
-            const audioData = await this.decodePCM(audioBuffer);
-            const source = this.audioContext.createBufferSource();
-            source.buffer = audioData;
-            source.connect(this.audioContext.destination);
-            source.start(0);
-
-            console.log('[VOICE CAPSULE] 🔊 Playing audio');
-        } catch (error: any) {
-            console.error('[VOICE CAPSULE] ❌ Playback error:', error.message);
-        }
-    }
-
-    /**
-     * Decode PCM data to AudioBuffer
-     */
-    private async decodePCM(pcmData: ArrayBuffer): Promise<AudioBuffer> {
-        const sampleRate = 24000;
-        const numChannels = 1;
-        const int16Array = new Int16Array(pcmData);
-
-        const audioBuffer = this.audioContext!.createBuffer(
-            numChannels,
-            int16Array.length,
-            sampleRate
-        );
-
-        const channelData = audioBuffer.getChannelData(0);
-        for (let i = 0; i < int16Array.length; i++) {
-            channelData[i] = int16Array[i] / 32768.0; // Convert to float32 [-1, 1]
-        }
-
-        return audioBuffer;
-    }
-
-    /**
-     * Stop any ongoing playback
-     */
-    stop(): void {
-        if (this.audioContext) {
-            this.audioContext.close();
-            this.audioContext = null;
-            console.log('[VOICE CAPSULE] ⏹️ Stopped');
         }
     }
 }

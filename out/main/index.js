@@ -1053,7 +1053,7 @@ function createWindow() {
   });
   electron.ipcMain.handle("voice:speak", async (_, { text, voiceName }) => {
     try {
-      const { VoiceCapsule } = await Promise.resolve().then(() => require("./VoiceCapsule-307a247a.js"));
+      const { VoiceCapsule } = await Promise.resolve().then(() => require("./VoiceCapsule-44d22c8d.js"));
       const voice = new VoiceCapsule();
       const audioBuffer = await voice.speak(text, { voiceName });
       if (audioBuffer) {
