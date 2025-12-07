@@ -1,523 +1,502 @@
-<br />
+The Gemini API can transform text input into single speaker or multi-speaker
+audio using native text-to-speech (TTS) generation capabilities.
+Text-to-speech (TTS) generation is *[controllable](https://ai.google.dev/gemini-api/docs/speech-generation#controllable)* ,
+meaning you can use natural language to structure interactions and guide the
+*style* , *accent* , *pace* , and *tone* of the audio.
 
-Gemini can analyze and understand audio input, enabling use cases like the following:
+The TTS capability differs from speech generation provided through the
+[Live API](https://ai.google.dev/gemini-api/docs/live), which is designed for interactive,
+unstructured audio, and multimodal inputs and outputs. While the Live API excels
+in dynamic conversational contexts, TTS through the Gemini API
+is tailored for scenarios that require exact text recitation with fine-grained
+control over style and sound, such as podcast or audiobook generation.
 
-- Describe, summarize, or answer questions about audio content.
-- Provide a transcription of the audio.
-- Analyze specific segments of the audio.
+This guide shows you how to generate single-speaker and multi-speaker audio from
+text.
+| **Preview:** Native text-to-speech (TTS) is in [Preview](https://ai.google.dev/gemini-api/docs/models#preview).
 
-This guide shows you how to use the Gemini API to generate a text response to audio input.
+## Before you begin
 
-### Before you begin
+Ensure you use a Gemini 2.5 model variant with native text-to-speech (TTS) capabilities, as listed in the [Supported models](https://ai.google.dev/gemini-api/docs/speech-generation#supported-models) section. For optimal results, consider which model best fits your specific use case.
 
-Before calling the Gemini API, ensure you have[your SDK of choice](https://ai.google.dev/gemini-api/docs/downloads)installed, and a[Gemini API key](https://ai.google.dev/gemini-api/docs/api-key)configured and ready to use.
+You may find it useful to [test the Gemini 2.5 TTS models in AI Studio](https://aistudio.google.com/generate-speech) before you start building.
+| **Note:** TTS models accept text-only inputs and produce audio-only outputs. For a complete list of restrictions specific to TTS models, review the [Limitations](https://ai.google.dev/gemini-api/docs/speech-generation#limitations) section.
 
-## Input audio
+## Single-speaker text-to-speech
 
-You can provide audio data to Gemini in the following ways:
+To convert text to single-speaker audio, set the response modality to "audio",
+and pass a `SpeechConfig` object with `VoiceConfig` set.
+You'll need to choose a voice name from the prebuilt [output voices](https://ai.google.dev/gemini-api/docs/speech-generation#voices).
 
-- [Upload an audio file](https://ai.google.dev/gemini-api/docs/audio#upload-audio)before making a request to`generateContent`.
-- [Pass inline audio data](https://ai.google.dev/gemini-api/docs/audio#inline-audio)with the request to`generateContent`.
-
-### Upload an audio file
-
-You can use the[Files API](https://ai.google.dev/gemini-api/docs/files)to upload an audio file. Always use the Files API when the total request size (including the files, text prompt, system instructions, etc.) is larger than 20 MB.
-
-The following code uploads an audio file and then uses the file in a call to`generateContent`.  
+This example saves the output audio from the model in a wave file:  
 
 ### Python
 
     from google import genai
+    from google.genai import types
+    import wave
+
+    # Set up the wave file to save the output:
+    def wave_file(filename, pcm, channels=1, rate=24000, sample_width=2):
+       with wave.open(filename, "wb") as wf:
+          wf.setnchannels(channels)
+          wf.setsampwidth(sample_width)
+          wf.setframerate(rate)
+          wf.writeframes(pcm)
 
     client = genai.Client()
 
-    myfile = client.files.upload(file="path/to/sample.mp3")
-
     response = client.models.generate_content(
-        model="gemini-2.5-flash", contents=["Describe this audio clip", myfile]
+       model="gemini-2.5-flash-preview-tts",
+       contents="Say cheerfully: Have a wonderful day!",
+       config=types.GenerateContentConfig(
+          response_modalities=["AUDIO"],
+          speech_config=types.SpeechConfig(
+             voice_config=types.VoiceConfig(
+                prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                   voice_name='Kore',
+                )
+             )
+          ),
+       )
     )
 
-    print(response.text)
+    data = response.candidates[0].content.parts[0].inline_data.data
+
+    file_name='out.wav'
+    wave_file(file_name, data) # Saves the file to current directory
+
+| For more code samples, refer to the
+| "TTS - Get Started" file in the cookbooks repository:
+|
+|
+| [View
+| on GitHub](https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Get_started_TTS.ipynb)
 
 ### JavaScript
 
-    import {
-      GoogleGenAI,
-      createUserContent,
-      createPartFromUri,
-    } from "@google/genai";
+    import {GoogleGenAI} from '@google/genai';
+    import wav from 'wav';
 
-    const ai = new GoogleGenAI({});
+    async function saveWaveFile(
+       filename,
+       pcmData,
+       channels = 1,
+       rate = 24000,
+       sampleWidth = 2,
+    ) {
+       return new Promise((resolve, reject) => {
+          const writer = new wav.FileWriter(filename, {
+                channels,
+                sampleRate: rate,
+                bitDepth: sampleWidth * 8,
+          });
+
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+
+          writer.write(pcmData);
+          writer.end();
+       });
+    }
 
     async function main() {
-      const myfile = await ai.files.upload({
-        file: "path/to/sample.mp3",
-        config: { mimeType: "audio/mp3" },
-      });
+       const ai = new GoogleGenAI({});
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash",
-        contents: createUserContent([
-          createPartFromUri(myfile.uri, myfile.mimeType),
-          "Describe this audio clip",
-        ]),
-      });
-      console.log(response.text);
+       const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: 'Say cheerfully: Have a wonderful day!' }] }],
+          config: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                   voiceConfig: {
+                      prebuiltVoiceConfig: { voiceName: 'Kore' },
+                   },
+                },
+          },
+       });
+
+       const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+       const audioBuffer = Buffer.from(data, 'base64');
+
+       const fileName = 'out.wav';
+       await saveWaveFile(fileName, audioBuffer);
+    }
+    await main();
+
+### REST
+
+    curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent" \
+      -H "x-goog-api-key: $GEMINI_API_KEY" \
+      -X POST \
+      -H "Content-Type: application/json" \
+      -d '{
+            "contents": [{
+              "parts":[{
+                "text": "Say cheerfully: Have a wonderful day!"
+              }]
+            }],
+            "generationConfig": {
+              "responseModalities": ["AUDIO"],
+              "speechConfig": {
+                "voiceConfig": {
+                  "prebuiltVoiceConfig": {
+                    "voiceName": "Kore"
+                  }
+                }
+              }
+            },
+            "model": "gemini-2.5-flash-preview-tts",
+        }' | jq -r '.candidates[0].content.parts[0].inlineData.data' | \
+              base64 --decode >out.pcm
+    # You may need to install ffmpeg.
+    ffmpeg -f s16le -ar 24000 -ac 1 -i out.pcm out.wav
+
+## Multi-speaker text-to-speech
+
+For multi-speaker audio, you'll need a `MultiSpeakerVoiceConfig` object with
+each speaker (up to 2) configured as a `SpeakerVoiceConfig`.
+You'll need to define each `speaker` with the same names used in the
+[prompt](https://ai.google.dev/gemini-api/docs/speech-generation#controllable):  
+
+### Python
+
+    from google import genai
+    from google.genai import types
+    import wave
+
+    # Set up the wave file to save the output:
+    def wave_file(filename, pcm, channels=1, rate=24000, sample_width=2):
+       with wave.open(filename, "wb") as wf:
+          wf.setnchannels(channels)
+          wf.setsampwidth(sample_width)
+          wf.setframerate(rate)
+          wf.writeframes(pcm)
+
+    client = genai.Client()
+
+    prompt = """TTS the following conversation between Joe and Jane:
+             Joe: How's it going today Jane?
+             Jane: Not too bad, how about you?"""
+
+    response = client.models.generate_content(
+       model="gemini-2.5-flash-preview-tts",
+       contents=prompt,
+       config=types.GenerateContentConfig(
+          response_modalities=["AUDIO"],
+          speech_config=types.SpeechConfig(
+             multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
+                speaker_voice_configs=[
+                   types.SpeakerVoiceConfig(
+                      speaker='Joe',
+                      voice_config=types.VoiceConfig(
+                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name='Kore',
+                         )
+                      )
+                   ),
+                   types.SpeakerVoiceConfig(
+                      speaker='Jane',
+                      voice_config=types.VoiceConfig(
+                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name='Puck',
+                         )
+                      )
+                   ),
+                ]
+             )
+          )
+       )
+    )
+
+    data = response.candidates[0].content.parts[0].inline_data.data
+
+    file_name='out.wav'
+    wave_file(file_name, data) # Saves the file to current directory
+
+### JavaScript
+
+    import {GoogleGenAI} from '@google/genai';
+    import wav from 'wav';
+
+    async function saveWaveFile(
+       filename,
+       pcmData,
+       channels = 1,
+       rate = 24000,
+       sampleWidth = 2,
+    ) {
+       return new Promise((resolve, reject) => {
+          const writer = new wav.FileWriter(filename, {
+                channels,
+                sampleRate: rate,
+                bitDepth: sampleWidth * 8,
+          });
+
+          writer.on('finish', resolve);
+          writer.on('error', reject);
+
+          writer.write(pcmData);
+          writer.end();
+       });
+    }
+
+    async function main() {
+       const ai = new GoogleGenAI({});
+
+       const prompt = `TTS the following conversation between Joe and Jane:
+             Joe: How's it going today Jane?
+             Jane: Not too bad, how about you?`;
+
+       const response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: prompt }] }],
+          config: {
+                responseModalities: ['AUDIO'],
+                speechConfig: {
+                   multiSpeakerVoiceConfig: {
+                      speakerVoiceConfigs: [
+                            {
+                               speaker: 'Joe',
+                               voiceConfig: {
+                                  prebuiltVoiceConfig: { voiceName: 'Kore' }
+                               }
+                            },
+                            {
+                               speaker: 'Jane',
+                               voiceConfig: {
+                                  prebuiltVoiceConfig: { voiceName: 'Puck' }
+                               }
+                            }
+                      ]
+                   }
+                }
+          }
+       });
+
+       const data = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+       const audioBuffer = Buffer.from(data, 'base64');
+
+       const fileName = 'out.wav';
+       await saveWaveFile(fileName, audioBuffer);
     }
 
     await main();
 
-### Go
-
-    package main
-
-    import (
-      "context"
-      "fmt"
-      "os"
-      "google.golang.org/genai"
-    )
-
-    func main() {
-      ctx := context.Background()
-      client, err := genai.NewClient(ctx, nil)
-      if err != nil {
-          log.Fatal(err)
-      }
-
-      localAudioPath := "/path/to/sample.mp3"
-      uploadedFile, _ := client.Files.UploadFromPath(
-          ctx,
-          localAudioPath,
-          nil,
-      )
-
-      parts := []*genai.Part{
-          genai.NewPartFromText("Describe this audio clip"),
-          genai.NewPartFromURI(uploadedFile.URI, uploadedFile.MIMEType),
-      }
-      contents := []*genai.Content{
-          genai.NewContentFromParts(parts, genai.RoleUser),
-      }
-
-      result, _ := client.Models.GenerateContent(
-          ctx,
-          "gemini-2.5-flash",
-          contents,
-          nil,
-      )
-
-      fmt.Println(result.Text())
-    }
-
 ### REST
 
-    AUDIO_PATH="path/to/sample.mp3"
-    MIME_TYPE=$(file -b --mime-type "${AUDIO_PATH}")
-    NUM_BYTES=$(wc -c < "${AUDIO_PATH}")
-    DISPLAY_NAME=AUDIO
-
-    tmp_header_file=upload-header.tmp
-
-    # Initial resumable request defining metadata.
-    # The upload url is in the response headers dump them to a file.
-    curl "https://generativelanguage.googleapis.com/upload/v1beta/files" \
+    curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent" \
       -H "x-goog-api-key: $GEMINI_API_KEY" \
-      -D upload-header.tmp \
-      -H "X-Goog-Upload-Protocol: resumable" \
-      -H "X-Goog-Upload-Command: start" \
-      -H "X-Goog-Upload-Header-Content-Length: ${NUM_BYTES}" \
-      -H "X-Goog-Upload-Header-Content-Type: ${MIME_TYPE}" \
+      -X POST \
       -H "Content-Type: application/json" \
-      -d "{'file': {'display_name': '${DISPLAY_NAME}'}}" 2> /dev/null
+      -d '{
+      "contents": [{
+        "parts":[{
+          "text": "TTS the following conversation between Joe and Jane:
+                    Joe: Hows it going today Jane?
+                    Jane: Not too bad, how about you?"
+        }]
+      }],
+      "generationConfig": {
+        "responseModalities": ["AUDIO"],
+        "speechConfig": {
+          "multiSpeakerVoiceConfig": {
+            "speakerVoiceConfigs": [{
+                "speaker": "Joe",
+                "voiceConfig": {
+                  "prebuiltVoiceConfig": {
+                    "voiceName": "Kore"
+                  }
+                }
+              }, {
+                "speaker": "Jane",
+                "voiceConfig": {
+                  "prebuiltVoiceConfig": {
+                    "voiceName": "Puck"
+                  }
+                }
+              }]
+          }
+        }
+      },
+      "model": "gemini-2.5-flash-preview-tts",
+    }' | jq -r '.candidates[0].content.parts[0].inlineData.data' | \
+        base64 --decode > out.pcm
+    # You may need to install ffmpeg.
+    ffmpeg -f s16le -ar 24000 -ac 1 -i out.pcm out.wav
 
-    upload_url=$(grep -i "x-goog-upload-url: " "${tmp_header_file}" | cut -d" " -f2 | tr -d "\r")
-    rm "${tmp_header_file}"
+## Controlling speech style with prompts
 
-    # Upload the actual bytes.
-    curl "${upload_url}" \
-      -H "Content-Length: ${NUM_BYTES}" \
-      -H "X-Goog-Upload-Offset: 0" \
-      -H "X-Goog-Upload-Command: upload, finalize" \
-      --data-binary "@${AUDIO_PATH}" 2> /dev/null > file_info.json
+You can control style, tone, accent, and pace using natural language prompts
+for both single- and multi-speaker TTS.
+For example, in a single-speaker prompt, you can say:  
 
-    file_uri=$(jq ".file.uri" file_info.json)
-    echo file_uri=$file_uri
+    Say in an spooky whisper:
+    "By the pricking of my thumbs...
+    Something wicked this way comes"
 
-    # Now generate content using that file
-    curl "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent" \
-        -H "x-goog-api-key: $GEMINI_API_KEY" \
-        -H 'Content-Type: application/json' \
-        -X POST \
-        -d '{
-          "contents": [{
-            "parts":[
-              {"text": "Describe this audio clip"},
-              {"file_data":{"mime_type": "${MIME_TYPE}", "file_uri": '$file_uri'}}]
-            }]
-          }' 2> /dev/null > response.json
+In a multi-speaker prompt, provide the model with each speaker's name and
+corresponding transcript. You can also provide guidance for each speaker
+individually:  
 
-    cat response.json
-    echo
+    Make Speaker1 sound tired and bored, and Speaker2 sound excited and happy:
 
-    jq ".candidates[].content.parts[].text" response.json
+    Speaker1: So... what's on the agenda today?
+    Speaker2: You're never going to guess!
 
-To learn more about working with media files, see[Files API](https://ai.google.dev/gemini-api/docs/files).
+Try using a [voice option](https://ai.google.dev/gemini-api/docs/speech-generation#voices) that corresponds to the style or emotion you
+want to convey, to emphasize it even more. In the previous prompt, for example,
+*Enceladus* 's breathiness might emphasize "tired" and "bored", while
+*Puck*'s upbeat tone could complement "excited" and "happy".
 
-### Pass audio data inline
+## Generating a prompt to convert to audio
 
-Instead of uploading an audio file, you can pass inline audio data in the request to`generateContent`:  
+The TTS models only output audio, but you can use
+[other models](https://ai.google.dev/gemini-api/docs/models) to generate a transcript first,
+then pass that transcript to the TTS model to read aloud.  
 
 ### Python
 
     from google import genai
     from google.genai import types
 
-    with open('path/to/small-sample.mp3', 'rb') as f:
-        audio_bytes = f.read()
-
     client = genai.Client()
+
+    transcript = client.models.generate_content(
+       model="gemini-2.0-flash",
+       contents="""Generate a short transcript around 100 words that reads
+                like it was clipped from a podcast by excited herpetologists.
+                The hosts names are Dr. Anya and Liam.""").text
+
     response = client.models.generate_content(
-      model='gemini-2.5-flash',
-      contents=[
-        'Describe this audio clip',
-        types.Part.from_bytes(
-          data=audio_bytes,
-          mime_type='audio/mp3',
-        )
-      ]
+       model="gemini-2.5-flash-preview-tts",
+       contents=transcript,
+       config=types.GenerateContentConfig(
+          response_modalities=["AUDIO"],
+          speech_config=types.SpeechConfig(
+             multi_speaker_voice_config=types.MultiSpeakerVoiceConfig(
+                speaker_voice_configs=[
+                   types.SpeakerVoiceConfig(
+                      speaker='Dr. Anya',
+                      voice_config=types.VoiceConfig(
+                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name='Kore',
+                         )
+                      )
+                   ),
+                   types.SpeakerVoiceConfig(
+                      speaker='Liam',
+                      voice_config=types.VoiceConfig(
+                         prebuilt_voice_config=types.PrebuiltVoiceConfig(
+                            voice_name='Puck',
+                         )
+                      )
+                   ),
+                ]
+             )
+          )
+       )
     )
 
-    print(response.text)
+    # ...Code to stream or save the output
 
 ### JavaScript
 
     import { GoogleGenAI } from "@google/genai";
-    import * as fs from "node:fs";
 
     const ai = new GoogleGenAI({});
-    const base64AudioFile = fs.readFileSync("path/to/small-sample.mp3", {
-      encoding: "base64",
-    });
 
-    const contents = [
-      { text: "Please summarize the audio." },
-      {
-        inlineData: {
-          mimeType: "audio/mp3",
-          data: base64AudioFile,
-        },
-      },
-    ];
+    async function main() {
+
+    const transcript = await ai.models.generateContent({
+       model: "gemini-2.0-flash",
+       contents: "Generate a short transcript around 100 words that reads like it was clipped from a podcast by excited herpetologists. The hosts names are Dr. Anya and Liam.",
+       })
 
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: contents,
-    });
-    console.log(response.text);
-
-### Go
-
-    package main
-
-    import (
-      "context"
-      "fmt"
-      "os"
-      "google.golang.org/genai"
-    )
-
-    func main() {
-      ctx := context.Background()
-      client, err := genai.NewClient(ctx, nil)
-      if err != nil {
-          log.Fatal(err)
-      }
-
-      audioBytes, _ := os.ReadFile("/path/to/small-sample.mp3")
-
-      parts := []*genai.Part{
-          genai.NewPartFromText("Describe this audio clip"),
-        &genai.Part{
-          InlineData: &genai.Blob{
-            MIMEType: "audio/mp3",
-            Data:     audioBytes,
-          },
-        },
-      }
-      contents := []*genai.Content{
-          genai.NewContentFromParts(parts, genai.RoleUser),
-      }
-
-      result, _ := client.Models.GenerateContent(
-          ctx,
-          "gemini-2.5-flash",
-          contents,
-          nil,
-      )
-
-      fmt.Println(result.Text())
+       model: "gemini-2.5-flash-preview-tts",
+       contents: transcript,
+       config: {
+          responseModalities: ['AUDIO'],
+          speechConfig: {
+             multiSpeakerVoiceConfig: {
+                speakerVoiceConfigs: [
+                       {
+                         speaker: "Dr. Anya",
+                         voiceConfig: {
+                            prebuiltVoiceConfig: {voiceName: "Kore"},
+                         }
+                      },
+                      {
+                         speaker: "Liam",
+                         voiceConfig: {
+                            prebuiltVoiceConfig: {voiceName: "Puck"},
+                        }
+                      }
+                    ]
+                  }
+                }
+          }
+      });
     }
+    // ..JavaScript code for exporting .wav file for output audio
 
-A few things to keep in mind about inline audio data:
+    await main();
 
-- The maximum request size is 20 MB, which includes text prompts, system instructions, and files provided inline. If your file's size will make the*total request size* exceed 20 MB, then use the Files API to[upload an audio file](https://ai.google.dev/gemini-api/docs/audio#upload-audio)for use in the request.
-- If you're using an audio sample multiple times, it's more efficient to[upload an audio file](https://ai.google.dev/gemini-api/docs/audio#upload-audio).
+## Voice options
 
-## Get a transcript
+TTS models support the following 30 voice options in the `voice_name` field:  
 
-To get a transcript of audio data, just ask for it in the prompt:  
+|-----------------------------|-----------------------------------|---------------------------------|
+| **Zephyr** -- *Bright*      | **Puck** -- *Upbeat*              | **Charon** -- *Informative*     |
+| **Kore** -- *Firm*          | **Fenrir** -- *Excitable*         | **Leda** -- *Youthful*          |
+| **Orus** -- *Firm*          | **Aoede** -- *Breezy*             | **Callirrhoe** -- *Easy-going*  |
+| **Autonoe** -- *Bright*     | **Enceladus** -- *Breathy*        | **Iapetus** -- *Clear*          |
+| **Umbriel** -- *Easy-going* | **Algieba** -- *Smooth*           | **Despina** -- *Smooth*         |
+| **Erinome** -- *Clear*      | **Algenib** -- *Gravelly*         | **Rasalgethi** -- *Informative* |
+| **Laomedeia** -- *Upbeat*   | **Achernar** -- *Soft*            | **Alnilam** -- *Firm*           |
+| **Schedar** -- *Even*       | **Gacrux** -- *Mature*            | **Pulcherrima** -- *Forward*    |
+| **Achird** -- *Friendly*    | **Zubenelgenubi** -- *Casual*     | **Vindemiatrix** -- *Gentle*    |
+| **Sadachbia** -- *Lively*   | **Sadaltager** -- *Knowledgeable* | **Sulafat** -- *Warm*           |
 
-### Python
+You can hear all the voice options in
+[AI Studio](https://aistudio.google.com/generate-speech).
 
-    from google import genai
+## Supported languages
 
-    client = genai.Client()
-    myfile = client.files.upload(file='path/to/sample.mp3')
-    prompt = 'Generate a transcript of the speech.'
+The TTS models detect the input language automatically. They support the
+following 24 languages:
 
-    response = client.models.generate_content(
-      model='gemini-2.5-flash',
-      contents=[prompt, myfile]
-    )
+|        Language        |        BCP-47 Code        |       Language       | BCP-47 Code |
+|------------------------|---------------------------|----------------------|-------------|
+| Arabic (Egyptian)      | `ar-EG`                   | German (Germany)     | `de-DE`     |
+| English (US)           | `en-US`                   | Spanish (US)         | `es-US`     |
+| French (France)        | `fr-FR`                   | Hindi (India)        | `hi-IN`     |
+| Indonesian (Indonesia) | `id-ID`                   | Italian (Italy)      | `it-IT`     |
+| Japanese (Japan)       | `ja-JP`                   | Korean (Korea)       | `ko-KR`     |
+| Portuguese (Brazil)    | `pt-BR`                   | Russian (Russia)     | `ru-RU`     |
+| Dutch (Netherlands)    | `nl-NL`                   | Polish (Poland)      | `pl-PL`     |
+| Thai (Thailand)        | `th-TH`                   | Turkish (Turkey)     | `tr-TR`     |
+| Vietnamese (Vietnam)   | `vi-VN`                   | Romanian (Romania)   | `ro-RO`     |
+| Ukrainian (Ukraine)    | `uk-UA`                   | Bengali (Bangladesh) | `bn-BD`     |
+| English (India)        | `en-IN` \& `hi-IN` bundle | Marathi (India)      | `mr-IN`     |
+| Tamil (India)          | `ta-IN`                   | Telugu (India)       | `te-IN`     |
 
-    print(response.text)
+## Supported models
 
-### JavaScript
+|                                                   Model                                                   | Single speaker | Multispeaker |
+|-----------------------------------------------------------------------------------------------------------|----------------|--------------|
+| [Gemini 2.5 Flash Preview TTS](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-flash-preview-tts) | ✔️             | ✔️           |
+| [Gemini 2.5 Pro Preview TTS](https://ai.google.dev/gemini-api/docs/models#gemini-2.5-pro-preview-tts)     | ✔️             | ✔️           |
 
-    import {
-      GoogleGenAI,
-      createUserContent,
-      createPartFromUri,
-    } from "@google/genai";
+## Limitations
 
-    const ai = new GoogleGenAI({});
-    const myfile = await ai.files.upload({
-      file: "path/to/sample.mp3",
-      config: { mimeType: "audio/mpeg" },
-    });
-
-    const result = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
-      contents: createUserContent([
-        createPartFromUri(myfile.uri, myfile.mimeType),
-        "Generate a transcript of the speech.",
-      ]),
-    });
-    console.log("result.text=", result.text);
-
-### Go
-
-    package main
-
-    import (
-      "context"
-      "fmt"
-      "os"
-      "google.golang.org/genai"
-    )
-
-    func main() {
-      ctx := context.Background()
-      client, err := genai.NewClient(ctx, nil)
-      if err != nil {
-          log.Fatal(err)
-      }
-
-      localAudioPath := "/path/to/sample.mp3"
-      uploadedFile, _ := client.Files.UploadFromPath(
-          ctx,
-          localAudioPath,
-          nil,
-      )
-
-      parts := []*genai.Part{
-          genai.NewPartFromText("Generate a transcript of the speech."),
-          genai.NewPartFromURI(uploadedFile.URI, uploadedFile.MIMEType),
-      }
-      contents := []*genai.Content{
-          genai.NewContentFromParts(parts, genai.RoleUser),
-      }
-
-      result, _ := client.Models.GenerateContent(
-          ctx,
-          "gemini-2.5-flash",
-          contents,
-          nil,
-      )
-
-      fmt.Println(result.Text())
-    }
-
-## Refer to timestamps
-
-You can refer to specific sections of an audio file using timestamps of the form`MM:SS`. For example, the following prompt requests a transcript that
-
-- Starts at 2 minutes 30 seconds from the beginning of the file.
-- Ends at 3 minutes 29 seconds from the beginning of the file.
-
-### Python
-
-    # Create a prompt containing timestamps.
-    prompt = "Provide a transcript of the speech from 02:30 to 03:29."
-
-### JavaScript
-
-    // Create a prompt containing timestamps.
-    const prompt = "Provide a transcript of the speech from 02:30 to 03:29."
-
-### Go
-
-    package main
-
-    import (
-      "context"
-      "fmt"
-      "os"
-      "google.golang.org/genai"
-    )
-
-    func main() {
-      ctx := context.Background()
-      client, err := genai.NewClient(ctx, nil)
-      if err != nil {
-          log.Fatal(err)
-      }
-
-      localAudioPath := "/path/to/sample.mp3"
-      uploadedFile, _ := client.Files.UploadFromPath(
-          ctx,
-          localAudioPath,
-          nil,
-      )
-
-      parts := []*genai.Part{
-          genai.NewPartFromText("Provide a transcript of the speech " +
-                                "between the timestamps 02:30 and 03:29."),
-          genai.NewPartFromURI(uploadedFile.URI, uploadedFile.MIMEType),
-      }
-      contents := []*genai.Content{
-          genai.NewContentFromParts(parts, genai.RoleUser),
-      }
-
-      result, _ := client.Models.GenerateContent(
-          ctx,
-          "gemini-2.5-flash",
-          contents,
-          nil,
-      )
-
-      fmt.Println(result.Text())
-    }
-
-## Count tokens
-
-Call the`countTokens`method to get a count of the number of tokens in an audio file. For example:  
-
-### Python
-
-    from google import genai
-
-    client = genai.Client()
-    response = client.models.count_tokens(
-      model='gemini-2.5-flash',
-      contents=[myfile]
-    )
-
-    print(response)
-
-### JavaScript
-
-    import {
-      GoogleGenAI,
-      createUserContent,
-      createPartFromUri,
-    } from "@google/genai";
-
-    const ai = new GoogleGenAI({});
-    const myfile = await ai.files.upload({
-      file: "path/to/sample.mp3",
-      config: { mimeType: "audio/mpeg" },
-    });
-
-    const countTokensResponse = await ai.models.countTokens({
-      model: "gemini-2.5-flash",
-      contents: createUserContent([
-        createPartFromUri(myfile.uri, myfile.mimeType),
-      ]),
-    });
-    console.log(countTokensResponse.totalTokens);
-
-### Go
-
-    package main
-
-    import (
-      "context"
-      "fmt"
-      "os"
-      "google.golang.org/genai"
-    )
-
-    func main() {
-      ctx := context.Background()
-      client, err := genai.NewClient(ctx, nil)
-      if err != nil {
-          log.Fatal(err)
-      }
-
-      localAudioPath := "/path/to/sample.mp3"
-      uploadedFile, _ := client.Files.UploadFromPath(
-          ctx,
-          localAudioPath,
-          nil,
-      )
-
-      parts := []*genai.Part{
-          genai.NewPartFromURI(uploadedFile.URI, uploadedFile.MIMEType),
-      }
-      contents := []*genai.Content{
-          genai.NewContentFromParts(parts, genai.RoleUser),
-      }
-
-      tokens, _ := client.Models.CountTokens(
-          ctx,
-          "gemini-2.5-flash",
-          contents,
-          nil,
-      )
-
-      fmt.Printf("File %s is %d tokens\n", localAudioPath, tokens.TotalTokens)
-    }
-
-## Supported audio formats
-
-Gemini supports the following audio format MIME types:
-
-- WAV -`audio/wav`
-- MP3 -`audio/mp3`
-- AIFF -`audio/aiff`
-- AAC -`audio/aac`
-- OGG Vorbis -`audio/ogg`
-- FLAC -`audio/flac`
-
-## Technical details about audio
-
-- Gemini represents each second of audio as 32 tokens; for example, one minute of audio is represented as 1,920 tokens.
-- Gemini can "understand" non-speech components, such as birdsong or sirens.
-- The maximum supported length of audio data in a single prompt is 9.5 hours. Gemini doesn't limit the*number*of audio files in a single prompt; however, the total combined length of all audio files in a single prompt can't exceed 9.5 hours.
-- Gemini downsamples audio files to a 16 Kbps data resolution.
-- If the audio source contains multiple channels, Gemini combines those channels into a single channel.
+- TTS models can only receive text inputs and generate audio outputs.
+- A TTS session has a [context window](https://ai.google.dev/gemini-api/docs/long-context) limit of 32k tokens.
+- Review [Languages](https://ai.google.dev/gemini-api/docs/speech-generation#languages) section for language support.
 
 ## What's next
 
-This guide shows how to generate text in response to audio data. To learn more, see the following resources:
-
-- [File prompting strategies](https://ai.google.dev/gemini-api/docs/files#prompt-guide): The Gemini API supports prompting with text, image, audio, and video data, also known as multimodal prompting.
-- [System instructions](https://ai.google.dev/gemini-api/docs/text-generation#system-instructions): System instructions let you steer the behavior of the model based on your specific needs and use cases.
-- [Safety guidance](https://ai.google.dev/gemini-api/docs/safety-guidance): Sometimes generative AI models produce unexpected outputs, such as outputs that are inaccurate, biased, or offensive. Post-processing and human evaluation are essential to limit the risk of harm from such outputs.
-
-
---------
-https://ai.google.dev/gemini-api/docs/speech-generation
-
+- Try the [audio generation cookbook](https://colab.research.google.com/github/google-gemini/cookbook/blob/main/quickstarts/Get_started_TTS.ipynb).
+- Gemini's [Live API](https://ai.google.dev/gemini-api/docs/live) offers interactive audio generation options you can interleave with other modalities.
+- For working with audio *inputs* , visit the [Audio understanding](https://ai.google.dev/gemini-api/docs/audio) guide.

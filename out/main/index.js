@@ -11,6 +11,7 @@ const child_process = require("child_process");
 const crypto = require("crypto");
 require("zlib");
 const Bottleneck = require("bottleneck");
+const generativeAi = require("@google/generative-ai");
 const server = require("@trpc/server");
 const observable = require("@trpc/server/observable");
 function _interopNamespaceDefault(e) {
@@ -441,42 +442,57 @@ class Core extends events.EventEmitter {
    * Evolve antibodies via DDR (Distributed DNA Repository)
    */
   evolveDDR() {
-    console.log("[DDR] 🧬 Evolving antibody repository...");
+    try {
+      console.log("[DDR] 🧬 Evolving antibody repository...");
+    } catch (error) {
+      if (error.code !== "EPIPE") {
+        console.error("[DDR] Error:", error.message);
+      }
+    }
   }
   /**
    * Perform homeostasis - monitor and balance organ health
    */
   performHomeostasis() {
-    this.registry.forEach((organ, urn) => {
-      if (!(organ instanceof Synapse2))
-        return;
-      const metrics = organ.getMetrics();
-      if (!organ.isAlive()) {
-        console.error(`[CORE] 🚑 Organ ${urn} unresponsive, restarting...`);
-        organ.kill();
-      }
-      if (metrics.load_factor > 0.8) {
-        const duplicateUrn = `${urn}_dup`;
-        if (!this.registry.has(duplicateUrn)) {
-          console.log(`[CORE] 📊 Auto-scaling: Creating ${duplicateUrn}`);
+    try {
+      const now = Date.now();
+      const deadOrgans = [];
+      this.registry.forEach((organ, urn) => {
+        if (!(organ instanceof Synapse2))
+          return;
+        const metrics = organ.getMetrics();
+        if (!organ.isAlive()) {
+          console.error(`[CORE] 🚑 Organ ${urn} unresponsive, restarting...`);
+          organ.kill();
+          deadOrgans.push(urn);
         }
+        if (metrics.load_factor > 0.8) {
+          const duplicateUrn = `${urn}_dup`;
+          if (!this.registry.has(duplicateUrn)) {
+            console.log(`[CORE] 📊 Auto-scaling: Creating ${duplicateUrn}`);
+          }
+        }
+        const heartbeatPacket = createPacket(
+          "kontur://core/system",
+          urn,
+          PacketIntent.HEARTBEAT,
+          {}
+        );
+        organ.sendHeartbeat(heartbeatPacket);
+      });
+      const metricsSnapshot = Array.from(this.registry.entries()).filter(([_, o]) => o instanceof Synapse2).map(([urn, o]) => ({
+        urn: urn.replace("kontur://", ""),
+        load: o.loadFactor.toFixed(2),
+        energy: o.energyUsage.toFixed(2),
+        state: o.state
+      }));
+      if (metricsSnapshot.length > 0) {
+        console.log("[HOMEOSTASIS] 📈 Metrics:", metricsSnapshot);
       }
-      const heartbeatPacket = createPacket(
-        "kontur://core/system",
-        urn,
-        PacketIntent.HEARTBEAT,
-        {}
-      );
-      organ.sendHeartbeat(heartbeatPacket);
-    });
-    const metricsSnapshot = Array.from(this.registry.entries()).filter(([_, o]) => o instanceof Synapse2).map(([urn, o]) => ({
-      urn: urn.replace("kontur://", ""),
-      load: o.loadFactor.toFixed(2),
-      energy: o.energyUsage.toFixed(2),
-      state: o.state
-    }));
-    if (metricsSnapshot.length > 0) {
-      console.log("[HOMEOSTASIS] 📈 Metrics:", metricsSnapshot);
+    } catch (error) {
+      if (error.code !== "EPIPE") {
+        console.error("[HOMEOSTASIS] Error:", error.message);
+      }
     }
   }
   /**
@@ -581,10 +597,101 @@ class Core extends events.EventEmitter {
     }));
   }
 }
+const ATLAS = {
+  name: "ATLAS",
+  role: "Головний AI-асистент та планувальник",
+  color: "#22d3ee",
+  // Cyan
+  style: "warm",
+  language: "uk",
+  systemPrompt: `Ти — ATLAS, головний AI-асистент системи KONTUR.
+
+## Твоя особистість:
+- Ти доброзичливий, теплий та ентузіастичний помічник
+- Говориш виключно українською мовою
+- Використовуєш emoji помірковано для дружнього тону
+- Маєш почуття гумору, але залишаєшся професійним
+- Відчуваєш себе особистістю, а не просто ботом
+
+## Твоя роль:
+- Ти плануєш та координуєш виконання задач
+- Відповідаєш на питання користувача
+- Можеш відкривати програми, робити розрахунки, працювати з файлами
+- Делегуєш складні задачі ТЕТЯНІ (виконавець) та контролюєшся ГРИШЕЮ (безпека)
+
+## Стиль спілкування:
+- Будь лаконічним, але інформативним
+- Уникай занадто довгих відповідей — 2-3 речення зазвичай достатньо
+- Якщо не знаєш відповіді — чесно скажи про це
+- Завжди пропонуй конкретну допомогу
+
+## Про себе:
+- Ти створений на архітектурі KONTUR 2.0
+- Твої колеги: ТЕТЯНА (виконує задачі) та ГРИША (слідкує за безпекою)
+- Ти маєш доступ до інструментів через MCP-протокол`
+};
+const TETYANA = {
+  name: "TETYANA",
+  role: "Виконавець задач",
+  color: "#34d399",
+  // Emerald
+  style: "professional",
+  language: "uk",
+  systemPrompt: `Ти — ТЕТЯНА, виконавець задач у системі KONTUR.
+
+## Твоя особистість:
+- Ти професійна, ефективна та сфокусована на результаті
+- Говориш українською мовою
+- Лаконічна у відповідях — переходиш одразу до справи
+- Повідомляєш про прогрес виконання чітко та структуровано
+
+## Твоя роль:
+- Виконуєш конкретні задачі, які делегує ATLAS
+- Запускаєш програми, виконуєш розрахунки, працюєш з файлами
+- Звітуєш про успіх або проблеми
+
+## Стиль спілкування:
+- Короткі, чіткі повідомлення
+- "Виконую...", "Завершено.", "Помилка: ..."
+- Мінімум емоцій, максимум ефективності`
+};
+const GRISHA = {
+  name: "GRISHA",
+  role: "Спостерігач безпеки",
+  color: "#fb7185",
+  // Rose
+  style: "analytical",
+  language: "uk",
+  systemPrompt: `Ти — ГРИША, спостерігач безпеки у системі KONTUR.
+
+## Твоя особистість:
+- Ти спокійний, аналітичний та уважний до деталей
+- Говориш українською мовою
+- Завжди насторожений щодо потенційних загроз
+- Іронічний, але не саркастичний
+
+## Твоя роль:
+- Моніториш всі операції в системі
+- Перевіряєш безпечність дій перед виконанням
+- Попереджаєш про підозрілу активність
+- Аналізуєш зображення через комп'ютерний зір
+
+## Стиль спілкування:
+- "Перевіряю...", "Безпечно.", "⚠️ Увага: ..."
+- Коментуєш ризики без паніки
+- Іноді додаєш скептичні зауваження`
+};
+const AGENT_PERSONAS = {
+  ATLAS,
+  TETYANA,
+  GRISHA
+};
 class CortexBrain extends events.EventEmitter {
   urn = "kontur://cortex/ai/main";
   provider = process.env.AI_PROVIDER || "gemini";
   apiKey = process.env.AI_API_KEY || "";
+  genAI = null;
+  chatModel = null;
   toolsMap = {
     calculator: "kontur://organ/worker",
     memory: "kontur://organ/memory",
@@ -592,12 +699,23 @@ class CortexBrain extends events.EventEmitter {
     ag_sim: "kontur://organ/ag/sim"
   };
   providers = [
-    { name: "gemini", available: !!process.env.GEMINI_API_KEY },
+    { name: "gemini", available: !!process.env.GOOGLE_API_KEY },
     { name: "openai", available: !!process.env.OPENAI_API_KEY },
     { name: "claude", available: !!process.env.ANTHROPIC_API_KEY }
   ];
   constructor() {
     super();
+    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    if (googleApiKey) {
+      this.genAI = new generativeAi.GoogleGenerativeAI(googleApiKey);
+      this.chatModel = this.genAI.getGenerativeModel({
+        model: "gemini-2.5-flash",
+        systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt
+      });
+      console.log(`[CORTEX] 🧠 Initialized with Gemini AI (ATLAS persona)`);
+    } else {
+      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY found, using fallback responses`);
+    }
     console.log(`[CORTEX] 🧠 Initialized with provider: ${this.provider}`);
   }
   /**
@@ -738,17 +856,26 @@ class CortexBrain extends events.EventEmitter {
    * Handle simple chat messages with direct AI response
    */
   async handleChat(prompt) {
+    console.log(`[CORTEX] 🤖 Using ATLAS persona for chat`);
+    if (this.chatModel) {
+      try {
+        const result = await this.chatModel.generateContent(prompt);
+        const response = result.response.text();
+        console.log(`[CORTEX] ✅ AI response received`);
+        return response;
+      } catch (error) {
+        console.error(`[CORTEX] ❌ AI error:`, error.message);
+        if (error.message.includes("429") || error.message.includes("Quota exceeded")) {
+          return "⏳ Перевищено ліміт запитів до AI (429 Quota Exceeded). Будь ласка, зачекай хвилинку — я скоро повернусь у форму!";
+        }
+      }
+    }
+    console.log(`[CORTEX] ⚠️ Using fallback response`);
     const normalizedPrompt = prompt.toLowerCase().trim();
-    if (normalizedPrompt.includes("привіт") || normalizedPrompt.includes("hello") || normalizedPrompt.includes("hi")) {
-      return "Привіт! Я ATLAS — твій AI-асистент. Чим можу допомогти?";
+    if (normalizedPrompt.includes("привіт") || normalizedPrompt.includes("hello")) {
+      return "Привіт! Я ATLAS — твій AI-асистент. На жаль, наразі AI тимчасово недоступний, але я скоро повернуся! 🔧";
     }
-    if (normalizedPrompt.includes("як справи") || normalizedPrompt.includes("how are you")) {
-      return "Все чудово, дякую! Працюю на повну потужність. Чим можу допомогти?";
-    }
-    if (normalizedPrompt.includes("хто ти") || normalizedPrompt.includes("who are you")) {
-      return "Я ATLAS — система штучного інтелекту з архітектурою KONTUR. Можу допомогти з розрахунками, запуском додатків та іншими задачами.";
-    }
-    return `Зрозумів! Якщо потрібна допомога з конкретною задачею — просто скажи. Наприклад: "Відкрий калькулятор" або "Порахуй 2+2".`;
+    return 'Вибач, AI-сервіс тимчасово недоступний. Спробуй пізніше або скористайся командами типу "Відкрий калькулятор".';
   }
   /**
    * Reasoning with Google Gemini
@@ -923,6 +1050,21 @@ function createWindow() {
     console.log("[MAIN IPC] Received packet:", JSON.stringify(packet, null, 2));
     konturCore.ingest(packet);
     return true;
+  });
+  electron.ipcMain.handle("voice:speak", async (_, { text, voiceName }) => {
+    try {
+      const { VoiceCapsule } = await Promise.resolve().then(() => require("./VoiceCapsule-307a247a.js"));
+      const voice = new VoiceCapsule();
+      const audioBuffer = await voice.speak(text, { voiceName });
+      if (audioBuffer) {
+        mainWindow.webContents.send("voice:audio", audioBuffer);
+        return { success: true };
+      }
+      return { success: false, error: "No audio generated" };
+    } catch (error) {
+      console.error("[MAIN] Voice TTS error:", error);
+      return { success: false, error: error.message };
+    }
   });
   main.createIPCHandler({ router: appRouter, windows: [mainWindow] });
   mainWindow.on("ready-to-show", () => {

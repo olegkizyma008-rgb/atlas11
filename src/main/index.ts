@@ -90,6 +90,25 @@ function createWindow(): void {
         return true;
     });
 
+    // Voice TTS handler
+    ipcMain.handle('voice:speak', async (_, { text, voiceName }) => {
+        try {
+            const { VoiceCapsule } = await import('../kontur/voice/VoiceCapsule');
+            const voice = new VoiceCapsule();
+            const audioBuffer = await voice.speak(text, { voiceName });
+
+            if (audioBuffer) {
+                // Send audio to renderer for playback
+                mainWindow.webContents.send('voice:audio', audioBuffer);
+                return { success: true };
+            }
+            return { success: false, error: 'No audio generated' };
+        } catch (error: any) {
+            console.error('[MAIN] Voice TTS error:', error);
+            return { success: false, error: error.message };
+        }
+    });
+
     // Initialize tRPC
     createIPCHandler({ router: appRouter, windows: [mainWindow] })
 

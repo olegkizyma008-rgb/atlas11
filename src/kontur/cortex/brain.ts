@@ -40,11 +40,11 @@ export class CortexBrain extends EventEmitter {
     super();
 
     // Initialize Gemini AI if API key is available
-    const googleApiKey = process.env.GOOGLE_API_KEY;
+    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (googleApiKey) {
       this.genAI = new GoogleGenerativeAI(googleApiKey);
       this.chatModel = this.genAI.getGenerativeModel({
-        model: 'gemini-2.0-flash-exp',
+        model: 'gemini-2.5-flash',
         systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt
       });
       console.log(`[CORTEX] 🧠 Initialized with Gemini AI (ATLAS persona)`);
@@ -202,6 +202,12 @@ export class CortexBrain extends EventEmitter {
         return response;
       } catch (error: any) {
         console.error(`[CORTEX] ❌ AI error:`, error.message);
+
+        // Handle Rate Limit specifically
+        if (error.message.includes('429') || error.message.includes('Quota exceeded')) {
+          return '⏳ Перевищено ліміт запитів до AI (429 Quota Exceeded). Будь ласка, зачекай хвилинку — я скоро повернусь у форму!';
+        }
+
         // Fall through to fallback
       }
     }

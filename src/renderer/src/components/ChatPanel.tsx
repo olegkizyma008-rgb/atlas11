@@ -44,10 +44,87 @@ export const ChatPanel = ({
 }: ChatPanelProps) => {
     const endRef = useRef<HTMLDivElement>(null)
     const [inputText, setInputText] = useState('')
+    const lastSpokenMessageId = useRef<string | null>(null)
 
+    // Auto-scroll on new messages
     useEffect(() => {
         endRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
+
+    // TTS: Speak ATLAS messages when speakerEnabled
+    useEffect(() => {
+        if (!speakerEnabled) {
+            return
+        }
+
+        // Find the latest ATLAS message
+        const atlasMessages = messages.filter(m => m.source === 'ATLAS')
+        const latestAtlasMessage = atlasMessages[atlasMessages.length - 1]
+
+        // Only speak if it's a new message
+        if (latestAtlasMessage && latestAtlasMessage.id !== lastSpokenMessageId.current) {
+            lastSpokenMessageId.current = latestAtlasMessage.id
+
+            // Use Gemini TTS via IPC
+            const speakWithGemini = async () => {
+                try {
+                    // @ts-ignore
+                    await window.electron.ipcRenderer.invoke('voice:speak', {
+                        text: latestAtlasMessage.message,
+                        voiceName: 'Kore' // ATLAS voice
+                    })
+                    console.log('[CHAT] 🔊 Gemini TTS playing')
+                } catch (error) {
+                    console.error('[CHAT] ❌ Gemini TTS error:', error)
+                    // Fallback to Web Speech API
+                    if (window.speechSynthesis) {
+                        window.speechSynthesis.cancel()
+                        const utterance = new SpeechSynthesisUtterance(latestAtlasMessage.message)
+                        utterance.lang = 'uk-UA'
+                        window.speechSynthesis.speak(utterance)
+                    }
+                }
+            }
+
+            speakWithGemini()
+        }
+    }, [messages, speakerEnabled])
+
+    // Listen for audio from main process
+    useEffect(() => {
+        // @ts-ignore
+        const handleAudio = async (audioBuffer: ArrayBuffer) => {
+            try {
+                const audioContext = new AudioContext();
+                const sampleRate = 24000;
+                const int16Array = new Int16Array(audioBuffer);
+
+                const buffer = audioContext.createBuffer(1, int16Array.length, sampleRate);
+                const channelData = buffer.getChannelData(0);
+
+                for (let i = 0; i < int16Array.length; i++) {
+                    channelData[i] = int16Array[i] / 32768.0;
+                }
+
+                const source = audioContext.createBufferSource();
+                source.buffer = buffer;
+                source.connect(audioContext.destination);
+                source.start(0);
+
+                console.log('[CHAT] 🔊 Playing Gemini TTS audio');
+            } catch (error) {
+                console.error('[CHAT] ❌ Audio playback error:', error);
+            }
+        };
+
+        // @ts-ignore
+        window.electron?.ipcRenderer?.on('voice:audio', handleAudio);
+
+        return () => {
+            // @ts-ignore
+            window.electron?.ipcRenderer?.removeListener('voice:audio', handleAudio);
+        };
+    }, [])
 
     const handleSend = () => {
         if (inputText.trim()) {
