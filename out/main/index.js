@@ -584,7 +584,14 @@ class Core extends events.EventEmitter {
           "kontur://core/system",
           step.target || "kontur://organ/worker",
           PacketIntent.CMD,
-          step.args || {},
+          {
+            tool: step.tool,
+            // MCP tool name
+            action: step.action,
+            // Action/operation
+            args: step.args || {}
+            // Tool arguments
+          },
           {
             quantum_state: {
               amp1: 0.7,
