@@ -248,6 +248,23 @@ function createWindow(): void {
             console.error('[MAIN] Failed to start Vision Service:', e);
         }
     })();
+
+    // --- GRISHA: Window/Screen Source Selection ---
+    ipcMain.removeHandler('vision:get_sources');
+    ipcMain.handle('vision:get_sources', async () => {
+        const { desktopCapturer } = await import('electron');
+        const sources = await desktopCapturer.getSources({
+            types: ['window', 'screen'],
+            thumbnailSize: { width: 150, height: 100 }
+        });
+
+        return sources.map(source => ({
+            id: source.id,
+            name: source.name,
+            thumbnail: source.thumbnail.toDataURL(),
+            isScreen: source.id.startsWith('screen:')
+        }));
+    });
     // ----------------------------------------------
 
     // Initialize tRPC

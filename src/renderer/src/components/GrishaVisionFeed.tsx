@@ -1,19 +1,31 @@
 /**
  * GrishaVisionFeed Component
  * Live vision feed window showing what GRISHA is monitoring
- * Supports webcam or screen capture via Gemini Live API
+ * Supports webcam, screen capture, or specific window capture
+ * Can auto-select source based on current task
  */
 import { useEffect, useRef, useState } from 'react'
+
+interface SourceInfo {
+    id: string
+    name: string
+    thumbnail: string
+    isScreen: boolean
+}
 
 interface GrishaVisionFeedProps {
     isActive: boolean
     status?: 'stable' | 'analyzing' | 'alert'
+    targetApp?: string // Auto-select window by app name (e.g., "Terminal", "Calculator")
 }
 
-export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFeedProps) => {
+export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: GrishaVisionFeedProps) => {
     const videoRef = useRef<HTMLVideoElement>(null)
     const [streamActive, setStreamActive] = useState(false)
-    const [streamType, setStreamType] = useState<'camera' | 'screen'>('camera')
+    const [streamType, setStreamType] = useState<'camera' | 'screen' | 'window'>('camera')
+    const [sources, setSources] = useState<SourceInfo[]>([])
+    const [showSourcePicker, setShowSourcePicker] = useState(false)
+    const [selectedSource, setSelectedSource] = useState<SourceInfo | null>(null)
 
     const statusColors = {
         stable: { bg: 'rgba(16, 185, 129, 0.1)', border: '#10b981', text: 'text-emerald-400' },
@@ -22,7 +34,29 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
     }
 
     const currentStatus = statusColors[status]
+    const electron = (window as any).electron
 
+    // Load available sources
+    const loadSources = async () => {
+        try {
+            const result = await electron.ipcRenderer.invoke('vision:get_sources')
+            setSources(result)
+
+            // Auto-select if targetApp is specified
+            if (targetApp && result.length > 0) {
+                const matched = result.find((s: SourceInfo) =>
+                    s.name.toLowerCase().includes(targetApp.toLowerCase())
+                )
+                if (matched) {
+                    startWindowStream(matched)
+                }
+            }
+        } catch (err) {
+            console.error('Failed to load sources:', err)
+        }
+    }
+
+    // Start camera/screen stream
     const startStream = async (type: 'camera' | 'screen') => {
         try {
             let stream: MediaStream
@@ -49,15 +83,51 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
         }
     }
 
+    // Start specific window stream using desktopCapturer source
+    const startWindowStream = async (source: SourceInfo) => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({
+                audio: false,
+                video: {
+                    mandatory: {
+                        chromeMediaSource: 'desktop',
+                        chromeMediaSourceId: source.id,
+                        maxWidth: 320,
+                        maxHeight: 180
+                    }
+                } as any
+            })
+
+            if (videoRef.current) {
+                videoRef.current.srcObject = stream
+                setStreamActive(true)
+                setStreamType('window')
+                setSelectedSource(source)
+                setShowSourcePicker(false)
+            }
+        } catch (err) {
+            console.error('Failed to start window stream:', err)
+        }
+    }
+
     const stopStream = () => {
         if (videoRef.current?.srcObject) {
             const tracks = (videoRef.current.srcObject as MediaStream).getTracks()
             tracks.forEach(track => track.stop())
             videoRef.current.srcObject = null
             setStreamActive(false)
+            setSelectedSource(null)
         }
     }
 
+    // Auto-start based on targetApp
+    useEffect(() => {
+        if (isActive && targetApp) {
+            loadSources()
+        }
+    }, [isActive, targetApp])
+
+    // Send frames to Grisha Brain
     useEffect(() => {
         let interval: NodeJS.Timeout
 
@@ -73,13 +143,9 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
                 canvas.height = 180
                 ctx.drawImage(video, 0, 0, 320, 180)
 
-                // Get JPEG base64 (without prefix for simpler handling in Main)
                 const base64 = canvas.toDataURL('image/jpeg', 0.6).split(',')[1]
-
-                // Send frame to Grisha Brain
-                const electron = (window as any).electron
                 electron.ipcRenderer.invoke('vision:stream_frame', { image: base64 })
-            }, 1000) // 1 FPS for initial testing (increase for smoother flow)
+            }, 1000)
         }
 
         return () => {
@@ -127,6 +193,11 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
                     <span className={`text-[9px] font-mono uppercase tracking-wider ${currentStatus.text}`}>
                         {status === 'stable' ? 'STABLE' : status === 'analyzing' ? 'ANALYZING...' : 'ALERT!'}
                     </span>
+                    {selectedSource && (
+                        <span className="text-[8px] text-slate-500 ml-auto truncate max-w-[100px]">
+                            {selectedSource.name}
+                        </span>
+                    )}
                 </div>
 
                 {/* Video feed area */}
@@ -139,33 +210,52 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
                             muted
                             className="w-full h-full object-cover"
                         />
+                    ) : showSourcePicker ? (
+                        /* Window/Source Picker */
+                        <div className="absolute inset-0 overflow-y-auto p-2 grid grid-cols-2 gap-1">
+                            {sources.map(source => (
+                                <button
+                                    key={source.id}
+                                    onClick={() => startWindowStream(source)}
+                                    className="flex flex-col items-center p-1 rounded bg-slate-800/50 border border-rose-500/20
+                                        hover:bg-rose-500/20 hover:border-rose-500/50 transition-all"
+                                >
+                                    <img
+                                        src={source.thumbnail}
+                                        alt={source.name}
+                                        className="w-full h-10 object-cover rounded"
+                                    />
+                                    <span className="text-[7px] text-slate-400 truncate w-full text-center mt-1">
+                                        {source.name.slice(0, 20)}
+                                    </span>
+                                </button>
+                            ))}
+                        </div>
                     ) : (
+                        /* Source Selection Buttons */
                         <div className="absolute inset-0 flex flex-col items-center justify-center gap-3">
                             <div className="text-slate-600 text-[10px] mb-2">Оберіть джерело:</div>
-                            <div className="flex gap-2">
+                            <div className="flex gap-2 flex-wrap justify-center">
                                 <button
                                     onClick={() => startStream('camera')}
                                     className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-rose-500/30 text-rose-400 text-[9px] font-mono
                                         hover:bg-rose-500/20 hover:border-rose-500/50 transition-all flex items-center gap-1.5"
                                 >
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                            d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z"
-                                        />
-                                    </svg>
-                                    КАМЕРА
+                                    📷 КАМЕРА
                                 </button>
                                 <button
                                     onClick={() => startStream('screen')}
                                     className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-rose-500/30 text-rose-400 text-[9px] font-mono
                                         hover:bg-rose-500/20 hover:border-rose-500/50 transition-all flex items-center gap-1.5"
                                 >
-                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                                            d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-                                        />
-                                    </svg>
-                                    ЕКРАН
+                                    🖥️ ЕКРАН
+                                </button>
+                                <button
+                                    onClick={() => { loadSources(); setShowSourcePicker(true); }}
+                                    className="px-3 py-1.5 rounded-lg bg-slate-800/50 border border-cyan-500/30 text-cyan-400 text-[9px] font-mono
+                                        hover:bg-cyan-500/20 hover:border-cyan-500/50 transition-all flex items-center gap-1.5"
+                                >
+                                    🪟 ВІКНО
                                 </button>
                             </div>
                         </div>
@@ -189,13 +279,15 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable' }: GrishaVisionFe
                 </div>
 
                 {/* Controls */}
-                {streamActive && (
+                {(streamActive || showSourcePicker) && (
                     <div className="px-3 py-2 flex items-center justify-between border-t" style={{ borderColor: `${currentStatus.border}20` }}>
                         <span className="text-[9px] text-slate-500 font-mono">
-                            {streamType === 'camera' ? '📷 Camera Feed' : '🖥️ Screen Feed'}
+                            {streamType === 'camera' ? '📷 Camera' :
+                                streamType === 'screen' ? '🖥️ Screen' :
+                                    `🪟 ${selectedSource?.name.slice(0, 15) || 'Window'}`}
                         </span>
                         <button
-                            onClick={stopStream}
+                            onClick={() => { stopStream(); setShowSourcePicker(false); }}
                             className="px-2 py-1 rounded bg-rose-500/20 text-rose-400 text-[9px] font-mono
                                 hover:bg-rose-500/30 transition-all"
                         >
