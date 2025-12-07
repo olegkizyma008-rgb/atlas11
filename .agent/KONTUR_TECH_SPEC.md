@@ -45,7 +45,7 @@ KONTUR базується на філософії "живого коду", де 
 
 ### 2.4. Штучний Інтелект та Генерація (AI & Generative Layer)
 - **Принцип:** Cortex — LLM-brain для планів (AI_PLAN), code gen (GEN_CODE). QSSM (Quantum Solution Manager) симулює superposition планів (quantum-circuit). Prompts engineered для 97% accuracy (TSDoc/@ag-prompt).
-- **Для чого:** Автоматизація dev (gen organs/workflows), emergent behavior у agents. Інтеграція з OpenAI/Gemini/Claude; fallback emulation.
+- **Для чого:** Автоматизація dev (gen organs/workflows), emergent behavior у agents. Інтеграція з OpenAI/Gemini/Claude; fallback emulation. Див. [Gemini Integration Docs](../docs/README.md).
 - **Деталі:** GenCode: Prompt + context (e.g., "Gen TS with AG sim"); output as KPP payload. AG: Додає zero-g до планів якщо gravity_factor <0.5.
 
 ### 2.5. Антигравітація (Anti-Gravity Layer)
@@ -91,3 +91,9 @@ KONTUR призначена для створення resilient, scalable, self-
 v12: Real quantum hardware integration; full AG hardware support.
 
 Build levitating systems. Evolve with KONTUR.
+
+## 6. References
+- [Gemini Audio (STT)](../docs/STT.md)
+- [Gemini Speech Generation (TTS)](../docs/TTS.md)
+- [Gemini Live API Implementation](../docs/jemeni_live.md)
+```

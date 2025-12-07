@@ -1,3 +1,6 @@
+> [!NOTE]
+> **KONTUR Integration Context**: This document serves as the implementation reference for KONTUR's real-time communication layer ("Direct Neural Interface"). See [KONTUR Spec](../.agent/KONTUR_TECH_SPEC.md) for architectural details.
+
 // To run this code you need to install the following dependencies:
 // npm install @google/genai mime
 // npm install -D @types/node
