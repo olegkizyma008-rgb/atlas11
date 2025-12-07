@@ -41,7 +41,7 @@ export const AgentCard = ({ name, status, activity = 'Waiting...' }: AgentCardPr
 
     return (
         <div className={clsx(
-            "relative group overflow-hidden rounded-2xl border p-6 backdrop-blur-sm transition-all duration-500 hover:scale-[1.02]",
+            "relative group overflow-hidden rounded-2xl p-6 glass-card",
             statusStyles
         )}>
             {/* Dynamic Background Glow */}

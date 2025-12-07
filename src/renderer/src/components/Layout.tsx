@@ -13,7 +13,7 @@ export const Layout = ({ children }: { children: React.ReactNode }) => {
 
             <div className="relative z-10 flex h-screen">
                 {/* Sidebar */}
-                <aside className="w-20 lg:w-64 border-r border-white/5 bg-slate-900/40 backdrop-blur-2xl flex flex-col items-center lg:items-stretch py-6 gap-8">
+                <aside className="w-20 lg:w-64 border-r border-white/5 bg-slate-900/30 backdrop-blur-2xl flex flex-col items-center lg:items-stretch py-6 gap-8 relative z-20 shadow-[4px_0_24px_-12px_rgba(0,0,0,0.5)]">
                     <div className="flex items-center justify-center lg:justify-start lg:px-6 gap-3 group">
                         <div className="relative">
                             <div className="w-8 h-8 rounded-lg bg-gradient-to-tr from-indigo-500 to-blue-600 shadow-[0_0_20px_rgba(99,102,241,0.5)] flex items-center justify-center">

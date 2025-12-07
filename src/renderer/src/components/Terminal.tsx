@@ -54,7 +54,21 @@ export const Terminal = ({ logs }: { logs: Log[] }) => {
                                 {log.source} &gt;
                             </span>
                             <span className="text-slate-300 group-hover/line:text-white transition-colors">
-                                {log.message}
+                                {log.message.split(/(https?:\/\/[^\s]+)/g).map((part, i) =>
+                                    part.match(/^https?:\/\//) ? (
+                                        <a
+                                            key={i}
+                                            href={part}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="text-blue-400 hover:text-blue-300 underline underline-offset-2 decoration-blue-500/30 hover:decoration-blue-400"
+                                        >
+                                            {part}
+                                        </a>
+                                    ) : (
+                                        part
+                                    )
+                                )}
                             </span>
                         </div>
                     </div>
