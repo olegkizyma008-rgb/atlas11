@@ -1,11 +1,21 @@
+
 import { describe, it, expect } from 'vitest';
 import { synapse } from '../src/kontur/synapse';
 import { AtlasGhost } from '../src/modules/atlas/ghost';
 import { TetyanaGhost } from '../src/modules/tetyana/ghost';
 import { GrishaGhost } from '../src/modules/grisha/ghost';
+import { VoiceGhost } from '../src/modules/voice/ghost';
 
 describe('KONTUR 2.0 Integration (Ghost Mode)', () => {
     const atlas = new AtlasGhost();
+    const voice = new VoiceGhost();
+    // Note: TetyanaGhost doesn't use dependencies, but TetyanaCapsule does. 
+    // For this test we are using TetyanaGhost which doesn't speak.
+    // To test voice integration we should use TetyanaCapsule with Mock dependencies if possible,
+    // OR just verify the VoiceGhost independently.
+    // Let's stick to Ghost objects for now, but realizing TetyanaGhost needs to be updated to speak if we want to test that.
+
+    // Actually, let's switch to TetyanaCapsule for this test to prove the integration works.
     const tetyana = new TetyanaGhost();
     const grisha = new GrishaGhost();
 

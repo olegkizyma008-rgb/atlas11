@@ -7,6 +7,8 @@ export class TetyanaGhost implements TetyanaAPI {
 
     async execute(args: { tool: string; args: Record<string, any> }) {
         console.log(`🔴 TetyanaGhost: Executing tool "${args.tool}" with`, args.args);
+        // Simulate speaking
+        console.log(`🔊 VoiceGhost [tetyana]: "Executing ${args.tool}"`);
         return { success: true, output: "Mock Output from Ghost" };
     }
 

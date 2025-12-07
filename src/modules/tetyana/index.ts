@@ -1,17 +1,21 @@
 import { TetyanaAPI } from './contract';
 import { ForgeAPI } from '../forge/contract';
+import { VoiceAPI } from '../voice/contract';
 
 export class TetyanaCapsule implements TetyanaAPI {
     private forge: ForgeAPI;
+    private voice: VoiceAPI;
 
-    constructor(forge: ForgeAPI) {
+    constructor(forge: ForgeAPI, voice: VoiceAPI) {
         this.forge = forge;
+        this.voice = voice;
     }
 
     async execute(args: { tool: string; args: Record<string, any> }) {
         // In reality, this would load the tool file and run it.
         // Here we delegate to Forge for execution or run internal logic.
         console.log(`TETYANA: Running ${args.tool}`);
+        await this.voice.speak({ text: `Executing ${args.tool}`, voice: 'tetyana' }); // Speak
         return this.forge.execute({ tool_name: args.tool, args: args.args });
     }
 

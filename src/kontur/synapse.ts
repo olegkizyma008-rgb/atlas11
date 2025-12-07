@@ -3,9 +3,9 @@ import { z } from 'zod';
 
 // Define the Signal Structure
 export const SignalSchema = z.object({
-    source: z.string(), // e.g., 'atlas', 'system'
-    type: z.string(),   // e.g., 'context_updated', 'system_idle'
-    payload: z.any()
+    source: z.string(), // e.g., 'atlas', 'system', 'voice'
+    type: z.string(),   // e.g., 'context_updated', 'request_tts', 'voice_command'
+    payload: z.any()    // Flexible payload for now
 });
 
 export type Signal = z.infer<typeof SignalSchema>;

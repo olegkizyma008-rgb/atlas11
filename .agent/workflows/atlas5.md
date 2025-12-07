@@ -1,100 +1,111 @@
 ---
-description: ATLAS5 "KONTUR 2.0" Architecture: The Trinity System (Atlas, Tetyana, Grisha) on a KONTUR Kernel.
+description: ATLAS5 Autonomous System: Super-Intelligent, Self-correcting, persistent AI system with Memory, Reflection, and Visual Oversight.
 ---
 
-# ATLAS5 "KONTUR 2.0" Architecture (Final Blueprint)
+# ATLAS5 "Super Intelligence" Architecture
 
-## The Trinity Philosophy
-The System is composed of **Three Distinct Agents** (The Trinity) and a **Technical Kernel** (KONTUR).
-1.  **ATLAS** (The Head): Planning, Memory, Imagination.
-2.  **TETYANA** (The Hands): Execution, Tooling, File IO.
-3.  **GRISHA** (The Senses): Security, Oversight, Vision.
-
----
-
-## 1. The "Capsule" Standard
-Every Component is a **Capsule** that contains its own Law (`contract.ts`), Reality (`index.ts`), and Simulation (`ghost.ts`).
-
-### Directory Structure
-```text
-/src/modules/<name>/
-├── contract.ts    <-- THE LAW (Zod Schemas).
-├── index.ts       <-- THE REALITY (Logic).
-├── ghost.ts       <-- THE GHOST (Mock for Testing).
-├── schema.ts      <-- THE DATA (Drizzle Tables, if needed).
-└── test/          <-- THE LAB (Unit Tests).
-```
-
-### Module Types
-*   **Agent Capsules**: Have a Persona (`src/modules/atlas`).
-*   **System Capsules**: Have Utility, used by Agents (`src/modules/memory`).
+Загальні принципи (Super Intelligence Foundation)
+1.  **MCP-first & Tool-use**: Усі дії через інструменти.
+2.  **No Hardcoding**: Поведінка визначається політиками та пам'яттю, а не кодом.
+3.  **Cyclical Self-Correction**: Plan -> Do -> Check -> **Reflect & Learn**.
+4.  **Persistent Memory (The BRAIN)**: Система пам'ятає попередні сесії, помилки та успіхи (Episodic & Semantic Memory).
+5.  **Multi-Modal Oversight (GRISHA)**: Безперервний візуальний (Gemini Live/Screenshots) та логічний аудит.
+6.  **Recursive Problem Solving**: ATLAS може викликати "суб-агентів" (себе ж) для вирішення складних підзадач.
+7.  **Localization**: UI — виключно **UA 🇺🇦**; System/Logs — **EN 🇺🇸**.
 
 ---
 
-## 2. Agent Capabilities & Ownership
+## Структура Агентів
 
-### 🔵 ATLAS (The Planner)
-*   **Role**: Orchestrates the entire lifecycle.
-*   **Owns**:
-    *   **Memory System** (`src/modules/memory`): The storage of Identity & Context.
-    *   **Oracle Engine** (Internal): The ability to *Simulate* a plan.
+### 🧠 BRAIN — Memory & Knowledge Manager
+*   **Role**: Зберігач знань, досвіду та контексту.
+*   **Responsibilities**:
+    *   **Short-term**: Поточний контекст сесії, буфер думок.
+    *   **Long-term (Episodic)**: Історія минулих запусків ("Що я робив вчора?").
+    *   **Semantic**: База знань проектів, документації, сніпетів ("Як деплоїти цей проект?").
+    *   **Heuristics**: Правила "великого пальця", вивчені на помилках ("Я знаю, що цей тул часто падає, спробую інший").
 
-### 🔴 TETYANA (The Executor)
-*   **Role**: Interacts with the World.
-*   **Owns**:
-    *   **The Forge** (`src/modules/forge`): Synthesizes (writes) new tools on the fly.
-    *   **Standard Tools**: Access to `fs`, `shell`, `network`.
+### 🗺️ ATLAS — Planner & Context Enricher (Architect)
+*   **Role**: Головний стратег. Перетворює наміри користувача в плани, використовуючи досвід з BRAIN.
+*   **Input**: User Intent (Audio/Text/Video).
+*   **Process**:
+    1.  **Recall**: Запитує BRAIN про схожі задачі.
+    2.  **Enrich**: Доповнює інтент контекстом (файли, попередні помилки).
+    3.  **Discovery**: Знаходить tools через MCP.
+    4.  **Plan**: Генерує структурований JSON-план.
 
-### 👁️ GRISHA (The Observer)
-*   **Role**: Biometric & Security Oversight.
-*   **Owns**:
-    *   **Vision System**: Gemini Live / Screenshot analysis.
-    *   **The Sentinel**: Constitution enforcement.
+### 👁️ GRISHA — Guardian & Observer (Safety & QA)
+*   **Role**: Критик, охоронець та спостерігач реального часу.
+*   **Responsibilities**:
+    *   **Pre-check**: Валідація плану ATLAS проти політик безпеки.
+    *   **Live Oversight**: Спостереження за виконанням через Gemini Live (screen stream) або скріншоти. Детекція аномалій ("Ти відкрив не ту вкладку").
+    *   **Post-verification**: Дієва перевірка результату (Run tests, Check UI visually).
 
----
-
-## 3. System Topology
-
-### 🟣 KONTUR (The Kernel)
-*   **Location**: `src/kontur`
-*   **Role**: The Motherboard.
-*   **Technologies**:
-    *   **Synapse**: The Reactive Event Bus (**RxJS**) connecting the Trinity.
-    *   **Gateway**: Exposes signals to UI via **tRPC** (`electron-trpc`).
-
-### 🟡 THE SHELL (Electron)
-*   **Host**: `src/main` (Electron) initializes KONTUR.
-*   **UI**: `src/renderer` (React) connects via tRPC to visualize the Trinity's state.
-*   **Design**: Strictly follows `docs/electron-web` sketches.
+### ⚡ TETYANA — Executor (The Hands)
+*   **Role**: Виконавець. Сліпий, надійний worker.
+*   **Capabilities**: MCP-only. Execute, Install, Report.
+*   **Feedback**: Повертає структуровані результати кожного кроку.
 
 ---
 
-## 4. Development Workflow (The "Ghost" Method)
+## Детальний Циклічний Воркфлов (The Super Loop)
 
-**Scenario: Improving ATLAS's Memory**
-1.  **Target**: `src/modules/memory` (System Capsule).
-2.  **Action**: Optimize `index.ts` (Real Implementation).
-3.  **Verify**: Run `npm test` inside the module.
-4.  **Result**: ATLAS (The Agent) automatically inherits the speed boost.
+### Phase 0: Input & Recall (Заземлення)
+1.  **Input**: Користувач дає задачу ("Пофікси баг в логіні").
+2.  **Recall**: ATLAS робить запит до BRAIN:
+    *   *Episodic*: "Чи я вже намагався це фіксити?"
+    *   *Semantic*: "Які файли відповідають за логін?"
+    *   *Heuristic*: "Які типові помилки в цьому модулі?"
+3.  **Context Construction**: Формується "збагачений" промпт для планування.
 
-**Scenario: Training TETYANA**
-1.  **Target**: `src/modules/tetyana` (Agent Capsule).
-2.  **Action**: Add error handling logic to `index.ts`.
-3.  **Verify**: Use `TetyanaGhost` in integration tests to ensure stability.
+### Phase 1: Planning (Стратегія)
+1.  ATLAS формує **Plan V1**:
+    *   Goal, Constraints (Policy IDs).
+    *   Steps (High-level intents mapped to Tools).
+    *   **Success Criteria** (Що саме GRISHA має перевірити).
+    *   **Fallback Strategies** (План Б, якщо тул впаде).
+
+### Phase 2: Security Gate (Дозвіл)
+1.  GRISHA перевіряє план:
+    *   *Risk Assessment*: Чи безпечні дії?
+    *   *Resource Check*: Чи вистачить токенів/квоти?
+2.  Output: `APPROVE`, `MITIGATE` (sandbox), або `REJECT`.
+
+### Phase 3: Execution & Monitoring (Дія)
+1.  TETYANA виконує кроки (Tool Calls).
+2.  **Live Loop**:
+    *   TETYANA: `running step X`
+    *   GRISHA (Visual): Дивиться на екран. Якщо бачить error modal або не ту сторінку -> надсилає `INTERRUPT` сигнал.
+    *   ATLAS: Якщо interrupt -> переходить до Phase 1 (Re-plan).
+
+### Phase 4: Verification (Перевірка)
+1.  TETYANA звітує: "Done".
+2.  GRISHA запускає верифікацію:
+    *   *Technical*: Unit tests passed? File exists? Checksum matches?
+    *   *Visual*: UI виглядає як треба? (порівняння скріншоту з дизайном/очікуванням).
+
+### Phase 5: Reflection & Learning (Навчання - NEW CRITICAL STEP)
+1.  **Reflection**: Система (ATLAS + BRAIN) аналізує сесію.
+    *   *Did we succeed on first try?* -> Якщо ні, чому?
+    *   *Did a new tool work better?* -> Update Heuristic preference.
+    *   *Was the user annoyed?* -> Note context in Memory.
+2.  **Memory Update**:
+    *   Записати Episode Summary в Long-term memory.
+    *   Оновити Failed Attempts counter для конкретних файлів/задач.
+3.  **User Report**: ATLAS генерує фінальний звіт (UA 🇺🇦) і озвучує його.
 
 ---
 
-## Summary of File Structure
-```text
-/
-  /src
-    /kontur        <-- KERNEL (Synapse, Registry)
-    /modules
-       /atlas      <-- AGENT (Head)
-       /tetyana    <-- AGENT (Hands)
-       /grisha     <-- AGENT (Eyes)
-       /memory     <-- SYSTEM CAPSULE (Tool for Atlas)
-       /forge      <-- SYSTEM CAPSULE (Tool for Tetyana)
-    /main          <-- ELECTRON HOST
-    /renderer      <-- REACT UI
-```
+## Політики та Правила (Data-Driven)
+
+*   **Localization Rule**:
+    *   User Interface (Chat/Voice) => **Ukrainian Only**.
+    *   Internal Thoughts/Logs/Code => **English Only**.
+*   **TTS Blocking**:
+    *   Система **чекає** завершення аудіо-репліки перед початком слухання або переходу до наступної фази.
+
+## Технічна Реалізація "Пам'яті" (BRAIN)
+
+*   Див. деталі в [components/memory_architecture.md](./components/memory_architecture.md)
+*   Використовує підхід RAG (Retrieval Augmented Generation) для контексту.
+*   Зберігає "Уроки" (Lessons Learned) як окремий набір правил, що додаються до системного промпту.
