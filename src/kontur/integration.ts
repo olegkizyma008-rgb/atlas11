@@ -93,7 +93,7 @@ export function sendToKONTUR(
   payload: Record<string, any> = {}
 ) {
   try {
-    const packet = createPacket(intent, payload);
+    const packet = createPacket('system/integration', 'kontur://core/system', intent, payload);
     core.ingest(packet);
     return { success: true, packet };
   } catch (e) {
@@ -120,9 +120,14 @@ export function getKONTURRegistry(core: Core) {
 export async function shutdownKONTUR(core: Core, cortex: CortexBrain) {
   try {
     // Send shutdown signal
-    const shutdownPacket = createPacket('system/shutdown', {
-      timestamp: Date.now(),
-    });
+    const shutdownPacket = createPacket(
+      'system/shutdown',
+      'kontur://core/system',
+      PacketIntent.CMD,
+      {
+        timestamp: Date.now(),
+      }
+    );
     core.ingest(shutdownPacket);
 
     // Wait for graceful shutdown

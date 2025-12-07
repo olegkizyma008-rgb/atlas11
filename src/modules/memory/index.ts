@@ -7,7 +7,7 @@ import { z } from 'zod';
 
 export class MemoryCapsule implements MemoryAPI {
     private db = initDB();
-    private optimizeInterval: NodeJS.Timer | null = null;
+    private optimizeInterval: any = null;
 
     constructor() {
         console.log('🧠 MemoryCapsule: Real implementation with Drizzle ORM initialized');

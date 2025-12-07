@@ -1,8 +1,8 @@
 import { VoiceAPI } from './contract';
 import { synapse } from '../../kontur/synapse';
 import { GoogleGenAI, LiveServerMessage, Modality, Session } from '@google/genai';
-import mic from 'mic';
-import Speaker from 'speaker';
+// import mic from 'mic';
+// import Speaker from 'speaker';
 import { Readable } from 'stream';
 
 export class VoiceCapsule implements VoiceAPI {

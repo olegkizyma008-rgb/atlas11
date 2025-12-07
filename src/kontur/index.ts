@@ -12,7 +12,7 @@ export { AtlasOrganMapper, createAtlasOrganMapper } from './adapters/atlas-organ
 
 export {
   KPP_Schema,
-  KPP_Packet,
+  type KPP_Packet,
   SecurityScope,
   OrganState,
   PacketIntent,

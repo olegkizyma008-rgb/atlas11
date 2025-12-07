@@ -233,7 +233,7 @@ export class Core extends EventEmitter {
 
     // Route packet through limiter
     this.limiter
-      .schedule(() => {
+      .schedule(async () => {
         if (packet.route.to.includes('cortex') && this.cortex) {
           this.cortex.process(packet);
           return;
