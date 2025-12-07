@@ -83,14 +83,15 @@ export class CortexBrain extends EventEmitter {
   private async initMCP() {
     try {
       const split = (str: string) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map(s => s.replace(/^"|"$/g, '')) || [];
+      const homeDir = process.env.HOME || '/Users/dev';
 
-      // 1. Filesystem MCP (Official)
+      // 1. Filesystem MCP (Official) - Allow project dir + Desktop
       const { McpBridge } = await import('../mcp/McpBridge');
       const fsBridge = new McpBridge(
         'filesystem',
         '1.0.0',
         'node',
-        ['node_modules/@modelcontextprotocol/server-filesystem/dist/index.js', process.cwd()]
+        ['node_modules/@modelcontextprotocol/server-filesystem/dist/index.js', process.cwd(), `${homeDir}/Desktop`]
       );
 
       // 2. OS Automation MCP (Local)
@@ -121,7 +122,14 @@ export class CortexBrain extends EventEmitter {
 
       // Update System Prompt with Tool Definitions
       const toolDesc = allTools.map((t: any) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.inputSchema)})`).join('\n');
-      const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}\n\n## AVAILABLE MCP TOOLS (Use these instead of system/worker):\n${toolDesc}`;
+      const systemContext = `
+## SYSTEM CONTEXT:
+- User Home Directory: ${homeDir}
+- Desktop Path: ${homeDir}/Desktop
+- Current Working Directory: ${process.cwd()}
+- When saving files to Desktop, use path: ${homeDir}/Desktop/filename.txt
+`;
+      const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}\n${systemContext}\n## AVAILABLE MCP TOOLS (Use these instead of system/worker):\n${toolDesc}`;
 
       // Re-init model with new prompt
       this.chatModel = this.genAI!.getGenerativeModel({
