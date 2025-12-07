@@ -130,7 +130,8 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
         if (name === "open_application") {
             const { appName } = args as { appName: string };
-            await execAsync(`osascript -e 'tell application "${appName}" to activate'`);
+            // Activate app and wait for it to gain focus
+            await execAsync(`osascript -e 'tell application "${appName}" to activate' && sleep 0.5`);
             return { content: [{ type: "text", text: `Active: ${appName}` }] };
         }
 
@@ -153,16 +154,32 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (name === "keyboard_type") {
             const { text } = args as { text: string };
-            // Escape check needed
-            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${text.replace(/"/g, '\\"')}"'`);
+            // Use keystroke for regular text, escaping properly
+            const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${escaped}"'`);
             return { content: [{ type: "text", text: `Typed: ${text}` }] };
         }
 
         if (name === "keyboard_press") {
             const { key, modifiers } = args as { key: string, modifiers?: string[] };
             const modStr = modifiers && modifiers.length ? ` using {${modifiers.join(", ")}}` : "";
-            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
-            return { content: [{ type: "text", text: `Pressed: ${key} ${modStr}` }] };
+
+            // Map common key names to key codes
+            const keyCodes: Record<string, number> = {
+                'return': 36, 'enter': 36, 'tab': 48, 'space': 49, 'delete': 51,
+                'escape': 53, 'left': 123, 'right': 124, 'down': 125, 'up': 126,
+                'f1': 122, 'f2': 120, 'f3': 99, 'f4': 118, 'f5': 96
+            };
+
+            const keyLower = key.toLowerCase();
+            if (keyCodes[keyLower] !== undefined) {
+                // Use key code for special keys
+                await execAsync(`osascript -e 'tell application "System Events" to key code ${keyCodes[keyLower]}${modStr}'`);
+            } else {
+                // Use keystroke for regular characters
+                await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
+            }
+            return { content: [{ type: "text", text: `Pressed: ${key}${modStr}` }] };
         }
 
         if (name === "mouse_click") {
