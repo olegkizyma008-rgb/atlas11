@@ -98,9 +98,8 @@ function createWindow(): void {
             const audioBuffer = await voice.speak(text, { voiceName });
 
             if (audioBuffer) {
-                // Send audio to renderer for playback
-                mainWindow.webContents.send('voice:audio', audioBuffer);
-                return { success: true };
+                // Return audio buffer directly to renderer
+                return { success: true, audioBuffer };
             }
             return { success: false, error: 'No audio generated' };
         } catch (error: any) {

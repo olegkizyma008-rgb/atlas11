@@ -1057,8 +1057,7 @@ function createWindow() {
       const voice = new VoiceCapsule();
       const audioBuffer = await voice.speak(text, { voiceName });
       if (audioBuffer) {
-        mainWindow.webContents.send("voice:audio", audioBuffer);
-        return { success: true };
+        return { success: true, audioBuffer };
       }
       return { success: false, error: "No audio generated" };
     } catch (error) {

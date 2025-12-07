@@ -68,12 +68,22 @@ export const ChatPanel = ({
             // Use Gemini TTS via IPC
             const speakWithGemini = async () => {
                 try {
+                    console.log('[CHAT] 🗣️ Requesting TTS for:', latestAtlasMessage.message.substring(0, 20) + '...');
+
                     // @ts-ignore
-                    await window.electron.ipcRenderer.invoke('voice:speak', {
+                    const result = await window.electron.ipcRenderer.invoke('voice:speak', {
                         text: latestAtlasMessage.message,
                         voiceName: 'Kore' // ATLAS voice
                     })
-                    console.log('[CHAT] 🔊 Gemini TTS playing')
+
+                    if (result.success && result.audioBuffer) {
+                        console.log('[CHAT] � Received TTS audio');
+                        await playAudioBuffer(result.audioBuffer);
+                    } else {
+                        console.warn('[CHAT] ⚠️ TTS failed:', result.error);
+                        throw new Error(result.error);
+                    }
+
                 } catch (error) {
                     console.error('[CHAT] ❌ Gemini TTS error:', error)
                     // Fallback to Web Speech API
@@ -90,55 +100,45 @@ export const ChatPanel = ({
         }
     }, [messages, speakerEnabled])
 
-    // Listen for audio from main process
-    useEffect(() => {
-        // @ts-ignore
-        const handleAudio = async (audioBuffer: ArrayBuffer) => {
-            try {
-                if (!audioBuffer || audioBuffer.byteLength === 0) {
-                    console.warn('[CHAT] ⚠️ Received empty audio buffer');
-                    return;
-                }
+    // Audio Playback Helper
+    const playAudioBuffer = async (bufferData: any) => {
+        try {
+            if (!bufferData) return;
 
-                console.log('[CHAT] 📥 Received audio bytes:', audioBuffer.byteLength);
+            const audioContext = new AudioContext();
 
-                const audioContext = new AudioContext();
-                const sampleRate = 24000;
-
-                // Ensure correct array type interpretation
-                const int16Array = new Int16Array(audioBuffer);
-
-                if (int16Array.length === 0) {
-                    console.warn('[CHAT] ⚠️ Int16Array is empty');
-                    return;
-                }
-
-                const buffer = audioContext.createBuffer(1, int16Array.length, sampleRate);
-                const channelData = buffer.getChannelData(0);
-
-                for (let i = 0; i < int16Array.length; i++) {
-                    channelData[i] = int16Array[i] / 32768.0;
-                }
-
-                const source = audioContext.createBufferSource();
-                source.buffer = buffer;
-                source.connect(audioContext.destination);
-                source.start(0);
-
-                console.log('[CHAT] 🔊 Playing Gemini TTS audio');
-            } catch (error) {
-                console.error('[CHAT] ❌ Audio playback error:', error);
+            // Handle different buffer types (Node Buffer vs ArrayBuffer)
+            let arrayBuffer: ArrayBuffer;
+            if (bufferData.buffer) {
+                // It's likely a Node Buffer or Uint8Array
+                arrayBuffer = bufferData.buffer.slice(
+                    bufferData.byteOffset,
+                    bufferData.byteOffset + bufferData.byteLength
+                );
+            } else {
+                arrayBuffer = bufferData;
             }
-        };
 
-        // @ts-ignore
-        window.electron?.ipcRenderer?.on('voice:audio', handleAudio);
+            const sampleRate = 24000;
+            const int16Array = new Int16Array(arrayBuffer);
 
-        return () => {
-            // @ts-ignore
-            window.electron?.ipcRenderer?.removeListener('voice:audio', handleAudio);
-        };
-    }, [])
+            const audioBuffer = audioContext.createBuffer(1, int16Array.length, sampleRate);
+            const channelData = audioBuffer.getChannelData(0);
+
+            for (let i = 0; i < int16Array.length; i++) {
+                channelData[i] = int16Array[i] / 32768.0;
+            }
+
+            const source = audioContext.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContext.destination);
+            source.start(0);
+
+            console.log('[CHAT] 🔊 Playing Gemini TTS audio');
+        } catch (error) {
+            console.error('[CHAT] ❌ Playback helper error:', error);
+        }
+    };
 
     const handleSend = () => {
         if (inputText.trim()) {
