@@ -84,7 +84,7 @@ export class CortexBrain extends EventEmitter {
     try {
       const split = (str: string) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map(s => s.replace(/^"|"$/g, '')) || [];
 
-      // Filesystem MCP
+      // 1. Filesystem MCP (Official)
       const { McpBridge } = await import('../mcp/McpBridge');
       const fsBridge = new McpBridge(
         'filesystem',
@@ -93,27 +93,35 @@ export class CortexBrain extends EventEmitter {
         ['node_modules/@modelcontextprotocol/server-filesystem/dist/index.js', process.cwd()]
       );
 
+      // 2. OS Automation MCP (Local)
+      // We run it as a standard node process - interacting via stdio
+      const osBridge = new McpBridge(
+        'os',
+        '1.0.0',
+        'node',
+        ['--loader', 'ts-node/esm', 'src/kontur/mcp/servers/os.ts'] // Ensure ts-node handles the TS file directly
+      );
+
+      // Connect all bridges
       await fsBridge.connect();
-      const tools = await fsBridge.listTools();
-      console.log(`[CORTEX] 🛠️ Loaded ${tools.length} MCP Tools from Filesystem:`, tools.map(t => t.name).join(', '));
+      await osBridge.connect();
+
+      const fsTools = await fsBridge.listTools();
+      const osTools = await osBridge.listTools();
+
+      const allTools = [...fsTools, ...osTools];
+      console.log(`[CORTEX] 🛠️ Loaded ${allTools.length} MCP Tools:`, allTools.map(t => t.name).join(', '));
 
       this.mcpBridges['filesystem'] = fsBridge;
+      this.mcpBridges['os'] = osBridge;
 
       // Register generic tool mapping
-      tools.forEach(tool => {
-        this.toolsMap[tool.name] = 'kontur://organ/mcp/filesystem';
-      });
+      fsTools.forEach(tool => this.toolsMap[tool.name] = 'kontur://organ/mcp/filesystem');
+      osTools.forEach(tool => this.toolsMap[tool.name] = 'kontur://organ/mcp/os');
 
-      // Update System Prompt with Tool Definitions (Dynamic Tool Discovery)
-      // Since we can't easily update the instantiated model's systemPrompt without re-init,
-      // we'll rely on the PLANNER seeing these tools in the prompt context if we were to rebuild it.
-      // For now, let's append valid tools to the current AgentPersona prompt in memory IF we re-instantiate, 
-      // OR just assume ATLAS knows standard tools.
-      // Correct approach: Re-instantiate model with tools if using native Function Calling, 
-      // OR append to system instructions.
-
-      const toolDesc = tools.map((t: any) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.inputSchema)})`).join('\n');
-      const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}\n\n## AVAILABLE MCP TOOLS:\n${toolDesc}`;
+      // Update System Prompt with Tool Definitions
+      const toolDesc = allTools.map((t: any) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.inputSchema)})`).join('\n');
+      const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}\n\n## AVAILABLE MCP TOOLS (Use these instead of system/worker):\n${toolDesc}`;
 
       // Re-init model with new prompt
       this.chatModel = this.genAI!.getGenerativeModel({
