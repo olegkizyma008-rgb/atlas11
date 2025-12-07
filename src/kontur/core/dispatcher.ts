@@ -259,7 +259,7 @@ export class Core extends EventEmitter {
         }
 
         if (packet.instruction.intent === PacketIntent.AI_PLAN && senderScope === SecurityScope.ROOT) {
-          this.executePlan(packet.payload.steps);
+          this.executePlan(packet.payload);
           return;
         }
 
@@ -311,8 +311,23 @@ export class Core extends EventEmitter {
   /**
    * Execute AI-generated plan steps
    */
-  private executePlan(steps: any[]) {
+  private executePlan(payload: any) {
+    const steps = payload.steps || [];
+    const userResponse = payload.user_response;
+
     console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
+
+    // 1. Speak/Show response to User immediately
+    if (userResponse) {
+      const chatPacket = createPacket(
+        'kontur://core/system',
+        'kontur://organ/ui/shell',
+        PacketIntent.EVENT,
+        { msg: userResponse, type: 'chat' }
+      );
+      this.ingest(chatPacket);
+    }
+
 
     steps.forEach((step, idx) => {
       setTimeout(() => {

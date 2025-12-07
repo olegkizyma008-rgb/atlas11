@@ -1,12 +1,12 @@
 /**
  * Cortex Brain - AI Reasoning Engine for KONTUR
- * Integrates with OpenAI, Gemini, and Claude for intelligent planning
+ * "Pure Intelligence" implementation - No hardcoded business logic.
  */
 
 import { EventEmitter } from 'events';
 import { KPP_Packet, SecurityScope, createPacket, PacketIntent } from '../protocol/nexus';
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
-import { AGENT_PERSONAS, getPersona } from './agentPersonas';
+import { AGENT_PERSONAS } from './agentPersonas';
 import * as crypto from 'crypto';
 
 interface AIProvider {
@@ -15,331 +15,202 @@ interface AIProvider {
   available: boolean;
 }
 
+interface AIResponseSchema {
+  thought: string;
+  plan: Array<{
+    tool: string;
+    action: string;
+    args: Record<string, any>;
+  }>;
+  response: string;
+}
+
 export class CortexBrain extends EventEmitter {
   private urn = 'kontur://cortex/ai/main';
   private provider: string = process.env.AI_PROVIDER || 'gemini';
-  private apiKey: string = process.env.AI_API_KEY || '';
 
   private genAI: GoogleGenerativeAI | null = null;
   private chatModel: GenerativeModel | null = null;
 
+  // Mapping of abstract tool names to system URNs
   private toolsMap: Record<string, string> = {
     calculator: 'kontur://organ/worker',
     memory: 'kontur://organ/memory',
     ui: 'kontur://organ/ui/shell',
     ag_sim: 'kontur://organ/ag/sim',
-    system: 'kontur://organ/system', // For opening apps and OS commands
+    system: 'kontur://organ/system',
+    browser: 'kontur://organ/browser',
+    files: 'kontur://organ/files'
   };
 
   private providers: AIProvider[] = [
     { name: 'gemini', available: !!process.env.GOOGLE_API_KEY },
-    { name: 'openai', available: !!process.env.OPENAI_API_KEY },
-    { name: 'claude', available: !!process.env.ANTHROPIC_API_KEY },
+    { name: 'openai', available: !!process.env.OPENAI_API_KEY }, // Placeholder
+    { name: 'claude', available: !!process.env.ANTHROPIC_API_KEY }, // Placeholder
   ];
 
   constructor() {
     super();
+    this.initializeAI();
+  }
 
-    // Initialize Gemini AI if API key is available
+  private initializeAI() {
     const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
     if (googleApiKey) {
       this.genAI = new GoogleGenerativeAI(googleApiKey);
       this.chatModel = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
-        systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt
+        model: 'gemini-2.5-flash', // Or 'gemini-1.5-pro' if available
+        systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt,
+        generationConfig: {
+          temperature: 0.7,
+          responseMimeType: "application/json" // Force JSON output
+        }
       });
-      console.log(`[CORTEX] 🧠 Initialized with Gemini AI (ATLAS persona)`);
+      console.log(`[CORTEX] 🧠 Initialized with Gemini AI (Real Intelligence)`);
     } else {
-      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY found, using fallback responses`);
+      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY found. System running in LOBOTOMIZED mode.`);
     }
-
-    console.log(`[CORTEX] 🧠 Initialized with provider: ${this.provider}`);
   }
 
   /**
-   * Process incoming packet and generate reasoning/plans
+   * Process incoming packet using Pure Intelligence (LLM)
    */
   async process(packet: KPP_Packet) {
     const prompt = packet.payload.prompt || packet.instruction.op_code;
-    console.log(`[CORTEX] 🤔 Reasoning about: ${prompt}`);
+    const context = packet.payload.context || ''; // Optional context from Memory
+    console.log(`[CORTEX] 🤔 Reasoning about: "${prompt}"`);
 
     try {
-      // Detect if this is a simple chat (greeting, question) vs task request
-      const isChat = this.isChatMessage(prompt);
-
-      if (isChat) {
-        console.log(`[CORTEX] 💬 Chat mode detected`);
-        const chatResponse = await this.handleChat(prompt);
-
-        const chatPacket = createPacket(
-          this.urn,
-          'kontur://organ/ui/shell',
-          PacketIntent.EVENT,
-          { msg: chatResponse, type: 'chat' }
-        );
-
-        this.emit('decision', chatPacket);
-        return;
+      if (!this.chatModel) {
+        throw new Error("No AI Brain available (Missing API Key)");
       }
 
-      console.log(`[CORTEX] 📋 Task mode detected`);
-      let aiResponse: any = { reasoning: 'Default reasoning', plan: [] };
+      // 1. Send to LLM
+      const result = await this.chatModel.generateContent(
+        `User Input: "${prompt}"\nContext: ${JSON.stringify(context)}`
+      );
+      const outputText = result.response.text();
+      console.log(`[CORTEX] 💭 Thought:`, outputText);
 
-      // Try primary provider first
-      if (this.provider === 'gemini' && process.env.GEMINI_API_KEY) {
-        aiResponse = await this.reasonWithGemini(packet);
-      } else if (this.provider === 'openai' && process.env.OPENAI_API_KEY) {
-        aiResponse = await this.reasonWithOpenAI(packet);
-      } else if (this.provider === 'claude' && process.env.ANTHROPIC_API_KEY) {
-        aiResponse = await this.reasonWithClaude(packet);
+      // 2. Parse Intelligence
+      const aiDecision = this.parseAIResponse(outputText);
+
+      // 3. Act on Decision
+      if (aiDecision.plan && aiDecision.plan.length > 0) {
+        this.handlePlan(aiDecision, packet);
       } else {
-        aiResponse = this.fallbackReasoning(packet);
+        this.handleChat(aiDecision);
       }
 
-      // Enhance plan with AG if low gravity
-      if (packet.nexus.gravity_factor < 0.5) {
-        aiResponse.plan.push({
-          tool: 'ag_sim',
-          action: 'LEVITATE',
-          args: { msg: 'AG: Floating task for zero-g optimization' },
-        });
-      }
-
-      // Create system packet with plan
-      const systemPacket = createPacket(
-        this.urn,
-        'kontur://core/system',
-        PacketIntent.AI_PLAN,
-        {
-          reasoning: aiResponse.reasoning,
-          steps: aiResponse.plan.map((step: any) => ({
-            target: this.toolsMap[step.tool] || step.tool,
-            action: step.action,
-            args: step.args,
-          })),
-        },
-        { quantum_state: { amp1: 0.7, amp2: 0.3 } }
-      );
-
-      this.emit('decision', systemPacket);
-    } catch (e) {
+    } catch (e: any) {
       console.error(`[CORTEX ERROR]:`, e);
-      const errorPacket = createPacket(
-        this.urn,
-        'kontur://core/system',
-        PacketIntent.ERROR,
-        {
-          error: e instanceof Error ? e.message : String(e),
-        }
-      );
-      this.emit('error', errorPacket);
+      this.handleError(e, packet);
     }
   }
 
   /**
-   * Detect if message is a simple chat (greeting, question) vs action request
+   * Parse JSON response from LLM
    */
-  private isChatMessage(prompt: string): boolean {
-    const normalizedPrompt = prompt.toLowerCase().trim();
-
-    // Greetings patterns (Ukrainian and English)
-    const greetings = [
-      'привіт', 'вітаю', 'доброго', 'добрий', 'здоров', 'хай', 'салют',
-      'hello', 'hi', 'hey', 'good morning', 'good afternoon', 'good evening'
-    ];
-
-    // Chat questions patterns
-    const chatPatterns = [
-      'як справи', 'що нового', 'як ти', 'хто ти', 'що ти',
-      'how are you', 'what are you', 'who are you', "what's up"
-    ];
-
-    // Task action words (should trigger task mode)
-    const taskActionWords = [
-      'відкрий', 'запусти', 'створи', 'обчисли', 'порахуй', 'знайди', 'покажи',
-      'open', 'launch', 'create', 'calculate', 'compute', 'find', 'show', 'run'
-    ];
-
-    // If contains action word, it's a task
-    for (const action of taskActionWords) {
-      if (normalizedPrompt.includes(action)) {
-        return false;
-      }
-    }
-
-    // If it's a greeting or chat question, it's chat
-    for (const greeting of greetings) {
-      if (normalizedPrompt.includes(greeting)) {
-        return true;
-      }
-    }
-
-    for (const pattern of chatPatterns) {
-      if (normalizedPrompt.includes(pattern)) {
-        return true;
-      }
-    }
-
-    // Short messages without action verbs are likely chat
-    if (normalizedPrompt.split(' ').length <= 3 && !normalizedPrompt.includes('?')) {
-      return true;
-    }
-
-    return false;
-  }
-
-  /**
-   * Handle simple chat messages with direct AI response
-   */
-  private async handleChat(prompt: string): Promise<string> {
-    console.log(`[CORTEX] 🤖 Using ATLAS persona for chat`);
-
-    // Use real AI if available
-    if (this.chatModel) {
-      try {
-        const result = await this.chatModel.generateContent(prompt);
-        const response = result.response.text();
-        console.log(`[CORTEX] ✅ AI response received`);
-        return response;
-      } catch (error: any) {
-        console.error(`[CORTEX] ❌ AI error:`, error.message);
-
-        // Handle Rate Limit specifically
-        if (error.message.includes('429') || error.message.includes('Quota exceeded')) {
-          return '⏳ Перевищено ліміт запитів до AI (429 Quota Exceeded). Будь ласка, зачекай хвилинку — я скоро повернусь у форму!';
-        }
-
-        // Fall through to fallback
-      }
-    }
-
-    // Fallback responses when AI is unavailable
-    console.log(`[CORTEX] ⚠️ Using fallback response`);
-    const normalizedPrompt = prompt.toLowerCase().trim();
-
-    if (normalizedPrompt.includes('привіт') || normalizedPrompt.includes('hello')) {
-      return 'Привіт! Я ATLAS — твій AI-асистент. На жаль, наразі AI тимчасово недоступний, але я скоро повернуся! 🔧';
-    }
-
-    return 'Вибач, AI-сервіс тимчасово недоступний. Спробуй пізніше або скористайся командами типу "Відкрий калькулятор".';
-  }
-
-  /**
-   * Reasoning with Google Gemini
-   */
-  private async reasonWithGemini(packet: KPP_Packet): Promise<any> {
+  private parseAIResponse(text: string): AIResponseSchema {
     try {
-      // Placeholder for actual Gemini integration
-      // In production: use @google/generative-ai SDK
-      const prompt = packet.nexus.gen_prompt || packet.payload.prompt || 'Analyze and plan';
-
-      // Simulated response
-      return {
-        reasoning: `Analyzed prompt: ${prompt}`,
-        plan: [
-          { tool: 'ui', action: 'UPDATE', args: { msg: `I received your request: "${prompt}". Processing...` } },
-          { tool: 'memory', action: 'STORE', args: { data: prompt } },
-          { tool: 'calculator', action: 'EXECUTE', args: { task: 'process' } },
-        ],
-      };
+      // Clean markdown code blocks if present (despite MIME type config)
+      const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+      return JSON.parse(cleanJson);
     } catch (e) {
-      console.error('[CORTEX-GEMINI] Error:', e);
-      return this.fallbackReasoning(packet);
+      console.error("[CORTEX] ❌ JSON Parse Failed. Raw:", text);
+      return {
+        thought: "Failed to parse JSON response from LLM.",
+        plan: [],
+        response: "Вибачте, стався системний збій обробки думок. (JSON Parse Error)"
+      };
     }
   }
 
   /**
-   * Reasoning with OpenAI GPT
+   * Execute Plan flow (Phase 2 -> Phase 3 in Workflow)
    */
-  private async reasonWithOpenAI(packet: KPP_Packet): Promise<any> {
-    try {
-      // Placeholder for actual OpenAI integration
-      // In production: use openai SDK
-      const prompt = packet.nexus.gen_prompt || packet.payload.prompt || 'Analyze and plan';
+  private handlePlan(decision: AIResponseSchema, originalPacket: KPP_Packet) {
+    console.log(`[CORTEX] 📋 Plan generated causing ${decision.plan.length} steps`);
 
-      return {
-        reasoning: `GPT Analysis: ${prompt}`,
-        plan: [
-          { tool: 'memory', action: 'STORE', args: { data: prompt } },
-          { tool: 'ui', action: 'UPDATE', args: { msg: 'Processing...' } },
-        ],
-      };
-    } catch (e) {
-      console.error('[CORTEX-OPENAI] Error:', e);
-      return this.fallbackReasoning(packet);
+    // Map tool names to URNs
+    const systemSteps = decision.plan.map(step => ({
+      target: this.toolsMap[step.tool] || step.tool, // Map 'calculator' -> 'kontur://organ/worker'
+      action: step.action,
+      args: step.args
+    }));
+
+    // Create AI_PLAN packet for the System Core
+    const systemPacket = createPacket(
+      this.urn,
+      'kontur://core/system',
+      PacketIntent.AI_PLAN,
+      {
+        reasoning: decision.thought,
+        user_response: decision.response, // Text to speak/show to user while working
+        steps: systemSteps
+      },
+      { quantum_state: { amp1: 0.9, amp2: 0.1 } }
+    );
+
+    // Also emit the immediate chat response if there's one
+    if (decision.response) {
+      this.emitChat(decision.response);
     }
+
+    this.emit('decision', systemPacket);
   }
 
   /**
-   * Reasoning with Anthropic Claude
+   * Handle pure chat flow (No tools)
    */
-  private async reasonWithClaude(packet: KPP_Packet): Promise<any> {
-    try {
-      // Placeholder for actual Claude integration
-      // In production: use @anthropic-ai/sdk
-      const prompt = packet.nexus.gen_prompt || packet.payload.prompt || 'Analyze and plan';
+  private handleChat(decision: AIResponseSchema) {
+    console.log(`[CORTEX] 💬 Chat response: ${decision.response}`);
+    this.emitChat(decision.response);
 
-      return {
-        reasoning: `Claude Reasoning: ${prompt}`,
-        plan: [
-          { tool: 'memory', action: 'STORE', args: { data: prompt } },
-          { tool: 'calculator', action: 'EXECUTE', args: { task: 'analyze' } },
-        ],
-      };
-    } catch (e) {
-      console.error('[CORTEX-CLAUDE] Error:', e);
-      return this.fallbackReasoning(packet);
-    }
+    // Emit 'decision' with empty plan to signal completion
+    const eventPacket = createPacket(
+      this.urn,
+      'kontur://organ/ui/shell',
+      PacketIntent.EVENT,
+      { msg: decision.response, type: 'chat', reasoning: decision.thought }
+    );
+    this.emit('decision', eventPacket);
+  }
+
+  private emitChat(msg: string) {
+    // This might be redundant if the UI listens to the main decision, 
+    // but good for immediate feedback
+    this.emit('chat', msg);
+  }
+
+  private handleError(error: Error, originalPacket: KPP_Packet) {
+    const isOffline = error.message.includes("No AI Brain");
+
+    const fallbackResponse = isOffline
+      ? "⚠️ Система працює в автономному режимі. AI мозок недоступний. Перевірте API ключі."
+      : `⚠️ Сталася помилка мислення: ${error.message}`;
+
+    const errorPacket = createPacket(
+      this.urn,
+      'kontur://organ/ui/shell',
+      PacketIntent.ERROR,
+      { error: error.message, msg: fallbackResponse }
+    );
+    this.emit('decision', errorPacket);
   }
 
   /**
-   * Fallback reasoning when no AI provider available
-   */
-  private fallbackReasoning(packet: KPP_Packet): any {
-    console.warn('[CORTEX] Using fallback reasoning (no AI provider available)');
-
-    return {
-      reasoning: 'Fallback reasoning: Simple pattern matching',
-      plan: [
-        { tool: 'memory', action: 'LOG', args: { msg: packet.payload.prompt || 'No prompt' } },
-      ],
-    };
-  }
-
-  /**
-   * Generate code for given task with AI
+   * Generate code for given task (Direct LLM)
    */
   async genCode(packet: KPP_Packet): Promise<string> {
-    let prompt = packet.nexus.gen_prompt || `Generate ${packet.payload.lang || 'typescript'} code for ${packet.payload.task}.`;
+    if (!this.chatModel) return "// Error: No AI Model";
 
-    if (packet.nexus.gravity_factor < 0.5) {
-      prompt += ' Optimize for zero-gravity (low overhead) using physics-js or similar.';
-    }
+    const task = packet.payload.task || "unknown task";
+    const lang = packet.payload.lang || "typescript";
 
-    console.log(`[CORTEX] 💻 Generating code with prompt: ${prompt}`);
-
-    // Placeholder for actual code generation
-    // In production: would call AI API and get actual code
-    return `// Auto-generated code for: ${packet.payload.task}\nconsole.log('Generated code placeholder');`;
-  }
-
-  /**
-   * Get available AI providers
-   */
-  public getProviders(): AIProvider[] {
-    return this.providers;
-  }
-
-  /**
-   * Check provider health
-   */
-  public async checkHealth(): Promise<Record<string, boolean>> {
-    const health: Record<string, boolean> = {};
-
-    for (const provider of this.providers) {
-      health[provider.name] = provider.available;
-    }
-
-    return health;
+    const result = await this.chatModel.generateContent(
+      `Generate ${lang} code for: ${task}. Output JAVA SCRIPT/TYPESCRIPT code only.`
+    );
+    return result.response.text();
   }
 }
