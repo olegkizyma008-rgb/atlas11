@@ -68,6 +68,17 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                     },
                     required: ["text"]
                 }
+            },
+            {
+                name: "execute_applescript",
+                description: "Execute raw AppleScript for UI automation (e.g. keystrokes)",
+                inputSchema: {
+                    type: "object",
+                    properties: {
+                        script: { type: "string" }
+                    },
+                    required: ["script"]
+                }
             }
         ],
     };
@@ -80,9 +91,10 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
     try {
         if (name === "open_application") {
             const { appName } = args as { appName: string };
-            await execAsync(`open -a "${appName}"`);
+            // Use AppleScript to activate for focus
+            await execAsync(`osascript -e 'tell application "${appName}" to activate'`);
             return {
-                content: [{ type: "text", text: `Opened application: ${appName}` }],
+                content: [{ type: "text", text: `Opened application (Focus): ${appName}` }],
             };
         }
 
@@ -102,6 +114,14 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             await execAsync(`say "${text}"`);
             return {
                 content: [{ type: "text", text: `Spoke: "${text}"` }]
+            }
+        }
+
+        if (name === "execute_applescript") {
+            const { script } = args as { script: string };
+            const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\"'\"'")}'`);
+            return {
+                content: [{ type: "text", text: stdout || "Script executed" }]
             }
         }
 
