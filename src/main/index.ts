@@ -18,21 +18,42 @@ async function initializeKONTUR() {
     konturCortex = new CortexBrain();
     konturCortex.on('decision', (packet) => konturCore.ingest(packet));
     konturCortex.on('error', (packet) => konturCore.ingest(packet));
-    
+
     const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
     const workerScript = join(__dirname, '../kontur/organs/worker.py');
-    
+
     try {
         konturCore.loadPlugin('kontur://organ/worker', { cmd: pythonCmd, args: [workerScript] });
     } catch (e) {
         console.error('[KONTUR] Failed to load worker:', e);
     }
-    
+
+    {
+        // UI Bridge - Forward Core packets to Synapse (Frontend)
+        const uiBridge = {
+            send: (packet: any) => {
+                // Determine Source Name for UI (ATLAS, TETYANA, GRISHA, SYSTEM)
+                let source = 'SYSTEM';
+                if (packet.route.from.includes('cortex')) source = 'ATLAS';
+                if (packet.route.from.includes('ag')) source = 'GRISHA'; // AG module implies Grisha supervision
+
+                // Extract message
+                let payload = packet.payload;
+                if (payload && payload.msg) payload = payload.msg;
+
+                // Emit to Synapse Bus (which TRPC forwards to UI)
+                console.log(`[MAIN BRIDGE] Forwarding to UI: ${source} -> ${JSON.stringify(payload)}`);
+                synapse.emit(source, packet.instruction.intent || 'INFO', payload);
+            }
+        };
+        konturCore.register('kontur://organ/ui/shell', uiBridge);
+    }
+
     if (process.env.AG === 'true') {
         const agScript = join(__dirname, '../kontur/ag/ag-worker.py');
         konturCore.loadPlugin('kontur://organ/ag/sim', { cmd: pythonCmd, args: [agScript] });
     }
-    
+
     return { core: konturCore, cortex: konturCortex };
 }
 
@@ -56,6 +77,7 @@ function createWindow(): void {
     // Setup IPC handlers for KONTUR
     ipcMain.handle('kontur:registry', () => konturCore.getRegistry());
     ipcMain.handle('kontur:send', (_, packet) => {
+        console.log('[MAIN IPC] Received packet:', JSON.stringify(packet, null, 2));
         konturCore.ingest(packet);
         return true;
     });

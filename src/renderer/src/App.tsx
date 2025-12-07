@@ -14,6 +14,39 @@ interface Log {
     type?: 'info' | 'success' | 'warning' | 'error'
 }
 
+// KPP Helper types and functions (mimics core protocol)
+async function computeIntegrity(payload: any): Promise<string> {
+    const msgBuffer = new TextEncoder().encode(JSON.stringify(payload));
+    const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+}
+
+function createPacket(intent: string, payload: any) {
+    return {
+        nexus: {
+            ver: '11.0',
+            uid: crypto.randomUUID(),
+            timestamp: Date.now(),
+            ttl: 5000,
+            integrity: '', // Computed later
+            priority: 5,
+            compressed: false,
+            gravity_factor: 1
+        },
+        route: {
+            from: 'kontur://organ/ui/shell',
+            to: 'kontur://cortex/ai/main'
+        },
+        auth: { scope: 1 }, // USER scope
+        instruction: {
+            intent: intent,
+            op_code: 'PROCESS'
+        },
+        payload
+    };
+}
+
 type AgentStatus = 'idle' | 'working' | 'speaking' | 'listening' | 'error'
 
 // Agent stages on the orbital path
@@ -92,7 +125,7 @@ function App(): JSX.Element {
         stage: agentStages[name].stage
     }))
 
-    const handleSendMessage = (text: string) => {
+    const handleSendMessage = async (text: string) => {
         // Add user message to logs
         const userLog: Log = {
             id: Math.random().toString(36),
@@ -101,7 +134,26 @@ function App(): JSX.Element {
             timestamp: Date.now()
         }
         setLogs(prev => [...prev, userLog])
-        // TODO: Send to backend via tRPC
+
+        // Send to backend via IPC
+        try {
+            const payload = { prompt: text, task: text }; // task/prompt for flexibility
+            const packet = createPacket('AI_PLAN', payload);
+            packet.nexus.integrity = await computeIntegrity(payload);
+
+            // @ts-ignore
+            await window.electron.ipcRenderer.invoke('kontur:send', packet);
+            console.log('[UI] Packet sent:', packet);
+        } catch (err) {
+            console.error('[UI] Failed to send packet:', err);
+            setLogs(prev => [...prev, {
+                id: Math.random().toString(),
+                source: 'SYSTEM',
+                message: 'Failed to send message: ' + String(err),
+                timestamp: Date.now(),
+                type: 'error'
+            }])
+        }
     }
 
     return (

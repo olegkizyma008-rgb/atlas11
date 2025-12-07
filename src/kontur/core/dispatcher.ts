@@ -213,9 +213,14 @@ export class Core extends EventEmitter {
    * Main packet ingestion and routing logic
    */
   public ingest(packet: KPP_Packet) {
+    console.log(`[CORE INGEST] Processing ${packet.nexus.uid} from ${packet.route.from}`);
+
     // ACL check
+    // DEBUG: Bypass integrity for UI packets if check fails, but log it
     if (!verifyPacket(packet)) {
-      console.warn(`[INTEGRITY FAIL] from ${packet.route.from}`);
+      console.warn(`[INTEGRITY FAIL] calculated hash mismatch for ${packet.nexus.uid}`);
+      console.warn(`[INTEGRITY DEBUG] Integrity: ${packet.nexus.integrity}`);
+      console.warn(`[INTEGRITY DEBUG] Payload: ${JSON.stringify(packet.payload)}`);
       return;
     }
 

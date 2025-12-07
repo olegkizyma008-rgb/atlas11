@@ -109,6 +109,7 @@ export class CortexBrain extends EventEmitter {
       return {
         reasoning: `Analyzed prompt: ${prompt}`,
         plan: [
+          { tool: 'ui', action: 'UPDATE', args: { msg: `I received your request: "${prompt}". Processing...` } },
           { tool: 'memory', action: 'STORE', args: { data: prompt } },
           { tool: 'calculator', action: 'EXECUTE', args: { task: 'process' } },
         ],

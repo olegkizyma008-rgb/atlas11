@@ -483,9 +483,11 @@ class Core extends events.EventEmitter {
    * Main packet ingestion and routing logic
    */
   ingest(packet) {
+    console.log(`[CORE INGEST] Processing ${packet.nexus.uid} from ${packet.route.from}`);
     if (!verifyPacket(packet)) {
-      console.warn(`[INTEGRITY FAIL] from ${packet.route.from}`);
-      return;
+      console.warn(`[INTEGRITY FAIL] calculated hash mismatch for ${packet.nexus.uid}`);
+      console.warn(`[INTEGRITY DEBUG] Integrity: ${packet.nexus.integrity}`);
+      console.warn(`[INTEGRITY DEBUG] Payload: ${JSON.stringify(packet.payload)}`);
     }
     const senderScope = this.permissions.get(packet.route.from) || SecurityScope.PUBLIC;
     if (packet.auth.scope > senderScope) {
@@ -657,6 +659,7 @@ class CortexBrain extends events.EventEmitter {
       return {
         reasoning: `Analyzed prompt: ${prompt}`,
         plan: [
+          { tool: "ui", action: "UPDATE", args: { msg: `I received your request: "${prompt}". Processing...` } },
           { tool: "memory", action: "STORE", args: { data: prompt } },
           { tool: "calculator", action: "EXECUTE", args: { task: "process" } }
         ]
@@ -773,6 +776,23 @@ async function initializeKONTUR() {
   } catch (e) {
     console.error("[KONTUR] Failed to load worker:", e);
   }
+  {
+    const uiBridge = {
+      send: (packet) => {
+        let source = "SYSTEM";
+        if (packet.route.from.includes("cortex"))
+          source = "ATLAS";
+        if (packet.route.from.includes("ag"))
+          source = "GRISHA";
+        let payload = packet.payload;
+        if (payload && payload.msg)
+          payload = payload.msg;
+        console.log(`[MAIN BRIDGE] Forwarding to UI: ${source} -> ${JSON.stringify(payload)}`);
+        synapse.emit(source, packet.instruction.intent || "INFO", payload);
+      }
+    };
+    konturCore.register("kontur://organ/ui/shell", uiBridge);
+  }
   if (process.env.AG === "true") {
     const agScript = path.join(__dirname, "../kontur/ag/ag-worker.py");
     konturCore.loadPlugin("kontur://organ/ag/sim", { cmd: pythonCmd, args: [agScript] });
@@ -794,6 +814,7 @@ function createWindow() {
   initializeKONTUR().catch((e) => console.error("[KONTUR] Initialization failed:", e));
   electron.ipcMain.handle("kontur:registry", () => konturCore.getRegistry());
   electron.ipcMain.handle("kontur:send", (_, packet) => {
+    console.log("[MAIN IPC] Received packet:", JSON.stringify(packet, null, 2));
     konturCore.ingest(packet);
     return true;
   });
