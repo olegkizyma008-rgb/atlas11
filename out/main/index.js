@@ -1043,6 +1043,36 @@ async function initializeKONTUR() {
       }
     }
   });
+  konturCore.register("kontur://organ/mcp/os", {
+    send: async (packet) => {
+      console.log("[MCP HANDLER] Processing OS Request:", packet.payload);
+      const tool = packet.payload.tool || packet.payload.action;
+      const args = packet.payload.args;
+      try {
+        const result = await konturCortex.executeTool(tool, args);
+        if (packet.route.reply_to) {
+          const response = createPacket(
+            "kontur://organ/mcp/os",
+            packet.route.reply_to,
+            PacketIntent.RESPONSE,
+            { msg: `OS Command Executed: ${JSON.stringify(result)}` }
+          );
+          konturCore.ingest(response);
+        }
+      } catch (e) {
+        console.error("[MCP HANDLER] OS Execution Failed:", e);
+        if (packet.route.reply_to) {
+          const response = createPacket(
+            "kontur://organ/mcp/os",
+            packet.route.reply_to,
+            PacketIntent.ERROR,
+            { error: e.message, msg: `Failed to execute ${tool}: ${e.message}` }
+          );
+          konturCore.ingest(response);
+        }
+      }
+    }
+  });
   if (process.env.AG === "true") {
     const agScript = path.join(__dirname, "../kontur/ag/ag-worker.py");
     konturCore.loadPlugin("kontur://organ/ag/sim", { cmd: pythonCmd, args: [agScript] });
