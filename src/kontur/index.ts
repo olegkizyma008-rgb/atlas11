@@ -6,6 +6,9 @@
 export { Core } from './core/dispatcher';
 export { Synapse } from './core/synapse';
 export { CortexBrain } from './cortex/brain';
+export { UnifiedBrain, createUnifiedBrain } from './cortex/unified-brain';
+export { SynapseBridge, createSynapseBridge } from './adapters/synapse-bridge';
+export { AtlasOrganMapper, createAtlasOrganMapper } from './adapters/atlas-organ-mapper';
 
 export {
   KPP_Schema,
