@@ -1,12 +1,12 @@
 import 'dotenv/config';
 import { app, shell, BrowserWindow, ipcMain } from 'electron'
 import { join } from 'path'
-import { electronApp, optimizer, is } from 'electron-toolkit'
+import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { createIPCHandler } from 'electron-trpc/main'
 import { synapse } from '../kontur/synapse'
 
 // Import appRouter from a file we will create later
-import { appRouter } from '../router'
+import { appRouter } from './router'
 
 function createWindow(): void {
     // Create the browser window.

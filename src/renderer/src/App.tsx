@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Layout } from './components/Layout'
 import { AgentCard } from './components/AgentCard'
 import { Terminal } from './components/Terminal'
@@ -16,11 +16,11 @@ function App(): JSX.Element {
 
     // Real-time connection to KONTUR Synapse
     trpc.synapse.useSubscription(undefined, {
-        onData(signal) {
+        onData(signal: any) {
             const newLog = {
                 id: Math.random().toString(36),
-                source: signal.source.toUpperCase(),
-                message: JSON.stringify(signal.payload),
+                source: signal.source?.toUpperCase() || 'UNKNOWN',
+                message: typeof signal.payload === 'string' ? signal.payload : JSON.stringify(signal.payload),
                 timestamp: Date.now()
             }
             setLogs(prev => [...prev, newLog].slice(-50)) // Keep last 50
