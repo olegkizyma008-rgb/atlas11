@@ -123,6 +123,7 @@ export class GrishaObserver extends EventEmitter {
 
         console.log(`[GRISHA OBSERVER] 👁️ Observation stopped after ${this.frameCount} frames`);
         this.isObserving = false;
+        this.isSpeaking = false; // Reset lock
 
         if (this.captureInterval) {
             clearInterval(this.captureInterval);
