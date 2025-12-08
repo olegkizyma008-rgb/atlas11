@@ -4,6 +4,7 @@
  * Supports multiple AI providers with Atlas fallback
  */
 
+import { GoogleGenAI } from '@google/genai';
 import { EventEmitter } from 'events';
 import { CortexBrain } from './brain';
 import { BrainAPI } from '../../modules/brain/contract';
@@ -86,34 +87,76 @@ export class UnifiedBrain extends CortexBrain {
   }
 
   /**
-   * Think using KONTUR Cortex providers
+   * Think using KONTUR Cortex providers (Real Intelligence)
    */
   private async thinkWithCortex(
     request: ThinkRequest
   ): Promise<ThinkResponse> {
-    // Simulate Cortex reasoning
-    console.log('[UNIFIED-BRAIN] Using Cortex for reasoning...');
+    console.log('[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (Gemini 2.0)...');
 
-    const provider = process.env.AI_PROVIDER || 'gemini';
-    const apiKey = process.env.AI_API_KEY || '';
+    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY;
 
     if (!apiKey) {
+      console.error('[UNIFIED-BRAIN] ❌ No API key found for Cortex');
       throw new Error('No AI provider configured');
     }
 
-    // In real implementation, call actual API
-    // For now, simulate structured response
-    return {
-      text: JSON.stringify({
-        reasoning: 'Unified reasoning process',
-        steps: ['Analyze', 'Plan', 'Execute'],
-        provider,
-      }),
-      usage: {
-        input_tokens: 100,
-        output_tokens: 50,
-      },
-    };
+    try {
+      const genAI = new GoogleGenAI({ apiKey });
+      // Use 'gemini-2.0-flash-exp' for maximum speed/intelligence balance, or 'gemini-exp-1206'
+      const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+
+      const systemPrompt = `${request.system_prompt}\n\nIMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
+
+      const response = await genAI.models.generateContent({
+        model: modelName,
+        contents: [
+          { role: 'user', parts: [{ text: request.user_prompt }] }
+        ],
+        config: {
+          systemInstruction: systemPrompt,
+          temperature: 0.7, // Balance between creativity and precision
+          responseMimeType: 'application/json', // Force JSON structure
+          // safetySettings: ... (Configure as needed)
+        }
+      });
+
+      const content = response.candidates?.[0]?.content?.parts?.[0]?.text;
+
+      if (!content) {
+        throw new Error('Empty response from Cortex');
+      }
+
+      // Parse JSON response safely
+      let parsed: any;
+      try {
+        parsed = JSON.parse(content);
+      } catch (e) {
+        // Fallback if model didn't return pure JSON (sometimes adds markdown blocks)
+        const jsonMatch = content.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          parsed = JSON.parse(jsonMatch[0]);
+        } else {
+          throw new Error('Failed to parse JSON from Cortex response');
+        }
+      }
+
+      return {
+        text: JSON.stringify(parsed), // Keep consistent format for internal passing
+        tool_calls: parsed.plan?.map((step: any) => ({
+          name: step.tool,
+          args: step.args
+        })) || [],
+        usage: {
+          input_tokens: response.usageMetadata?.promptTokenCount || 0,
+          output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+        }
+      };
+
+    } catch (error: any) {
+      console.error('[UNIFIED-BRAIN] ❌ Cortex Reasoning Failed:', error.message);
+      throw error; // Let the fallback mechanism handle it
+    }
   }
 
   /**
@@ -232,6 +275,89 @@ export class UnifiedBrain extends CortexBrain {
   /**
    * Process packet with unified reasoning
    */
+  /**
+   * Process packet with unified reasoning
+   * OVERRIDES CortexBrain.process to ensure we use the new 'think' logic
+   */
+  async process(packet: KPP_Packet): Promise<void> {
+    const prompt = packet.payload.prompt || packet.instruction.op_code;
+    console.log(`[UNIFIED-BRAIN] 🧠 Processing: "${prompt}"`);
+
+    try {
+      // 1. Think using the new architecture
+      const response = await this.think({
+        system_prompt: 'You are KONTUR Unified Brain (Gemini 2.0).',
+        user_prompt: prompt,
+        tools: [], // We could inject tools here if we had them in request
+      });
+
+      // 2. Parse the result (The 'think' method returns text which is JSON string)
+      if (!response.text) throw new Error("No response text from Brain");
+
+      let decision: any;
+      try {
+        decision = JSON.parse(response.text);
+      } catch (e) {
+        // Fallback if already parsed or malformed
+        decision = { response: response.text, thought: "Raw output", plan: [] };
+      }
+
+      // 3. Emit Decision (Standard Cortex Protocol)
+      // We construct a similar structure to CortexBrain.handlePlan/handleChat
+
+      // If there is a plan
+      if (decision.plan && decision.plan.length > 0) {
+        const systemPacket = createPacket(
+          'kontur://cortex/ai/main',
+          'kontur://core/system',
+          PacketIntent.AI_PLAN,
+          {
+            reasoning: decision.thought,
+            user_response: decision.response,
+            steps: decision.plan.map((step: any) => ({
+              tool: step.tool,
+              action: step.action,
+              args: step.args,
+              target: 'kontur://organ/worker' // Default, router handles optimization
+            }))
+          }
+        );
+        this.emit('decision', systemPacket);
+
+        // Also emit chat if present
+        if (decision.response) {
+          const chatPacket = createPacket(
+            'kontur://cortex/ai/main',
+            'kontur://organ/ui/shell',
+            PacketIntent.EVENT,
+            { msg: decision.response, type: 'chat', reasoning: decision.thought }
+          );
+          this.emit('decision', chatPacket);
+        }
+
+      } else {
+        // Just Chat
+        const chatPacket = createPacket(
+          'kontur://cortex/ai/main',
+          'kontur://organ/ui/shell',
+          PacketIntent.EVENT,
+          { msg: decision.response, type: 'chat', reasoning: decision.thought }
+        );
+        this.emit('decision', chatPacket);
+      }
+
+    } catch (error: any) {
+      console.error('[UNIFIED-BRAIN] ❌ Process Error:', error);
+      const errorPacket = createPacket(
+        'kontur://cortex/ai/main',
+        'kontur://organ/ui/shell',
+        PacketIntent.ERROR,
+        { error: error.message, msg: "Brain Failure: " + error.message }
+      );
+      this.emit('decision', errorPacket);
+    }
+  }
+
   async processUnified(packet: KPP_Packet): Promise<KPP_Packet> {
     const response = await this.think({
       system_prompt: 'You are KONTUR Unified Brain',

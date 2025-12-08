@@ -47,46 +47,53 @@ export class VoiceCapsule {
             return null;
         }
 
-        try {
-            const voiceName = config.voiceName || 'Kore'; // Default voice
+        const MAX_RETRIES = 3;
+        let lastError;
 
-            const response = await this.genAI.models.generateContent({
-                model: 'gemini-2.5-flash-preview-tts',
-                contents: [{ parts: [{ text }] }],
-                config: {
-                    responseModalities: ['AUDIO'],
-                    speechConfig: {
-                        voiceConfig: {
-                            prebuiltVoiceConfig: {
-                                voiceName
+        for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+            try {
+                const voiceName = config.voiceName || 'Kore'; // Default voice
+
+                const response = await this.genAI.models.generateContent({
+                    model: 'gemini-2.5-flash-preview-tts',
+                    contents: [{ parts: [{ text }] }],
+                    config: {
+                        responseModalities: ['AUDIO'],
+                        speechConfig: {
+                            voiceConfig: {
+                                prebuiltVoiceConfig: {
+                                    voiceName
+                                }
+                                // Enforce Ukrainian locale (model auto-detects from text, but good to note)
+                                // locale: 'uk-UA' 
                             }
-                            // Enforce Ukrainian locale (model auto-detects from text, but good to note)
-                            // locale: 'uk-UA' 
                         }
                     }
+                });
+
+                const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+
+                if (!audioData) {
+                    throw new Error('No audio data received in response');
                 }
-            });
 
-            const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+                // Convert base64 to ArrayBuffer using Node.js Buffer
+                const buffer = Buffer.from(audioData, 'base64');
+                const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
 
-            if (!audioData) {
-                console.error('[VOICE CAPSULE] ❌ No audio data received');
-                return null;
+                console.log(`[VOICE CAPSULE] ✅ Generated audio (Attempt ${attempt}):`, arrayBuffer.byteLength, 'bytes');
+                return arrayBuffer;
+
+            } catch (error: any) {
+                console.warn(`[VOICE CAPSULE] ⚠️ TTS Attempt ${attempt} failed:`, error.message);
+                lastError = error;
+                // Wait briefly before retry (exponential backoff)
+                await new Promise(resolve => setTimeout(resolve, 500 * attempt));
             }
-
-            // Convert base64 to ArrayBuffer using Node.js Buffer
-            const buffer = Buffer.from(audioData, 'base64');
-
-            // Convert Node Buffer to ArrayBuffer
-            // This is necessary because IPC might handle ArrayBuffer better than Node Buffer
-            const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-
-            console.log('[VOICE CAPSULE] ✅ Generated audio:', arrayBuffer.byteLength, 'bytes');
-            return arrayBuffer;
-        } catch (error: any) {
-            console.error('[VOICE CAPSULE] ❌ TTS error:', error.message);
-            return null;
         }
+
+        console.error('[VOICE CAPSULE] ❌ TTS failed after', MAX_RETRIES, 'attempts:', lastError?.message);
+        return null;
     }
 
     /**

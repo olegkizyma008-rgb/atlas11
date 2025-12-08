@@ -37,9 +37,9 @@ graph TD
         Core <-->|Cortex Connection| Brain[Unified Brain]
         
         subgraph "Consciousness (Capsules)"
-            Brain -.-> Atlas[ATLAS Agent]
-            Brain -.-> Tetyana[TETYANA Agent]
-            Brain -.-> Grisha[GRISHA Agent]
+            Brain -- Real-Time Intelligence --> Atlas[ATLAS Agent]
+            Brain -- Execution Intelligence --> Tetyana[TETYANA Agent]
+            Brain -- Security Analysis --> Grisha[GRISHA Agent]
         end
     end
 ```
@@ -48,18 +48,31 @@ graph TD
 The system is brought to life via the `DeepIntegrationSystem`. This kernel:
 1.  **Boots the Core**: Establishes the message bus.
 2.  **Spawns Organs**: Activates capabilities (Python workers, System control).
-3.  **Wakes the Agents**: Initializes the Capsules (ATLAS, TETYANA, GRISHA) and connects them to the brain.
+3.  **Wakes the Agents**: Initializes the Capsules (ATLAS, TETYANA, GRISHA) and connects them to the **Unified Brain (Gemini 2.0 Flash Thinking)**.
 4.  **Syncs Synapses**: Binds the Electron UI to the internal state.
 
-### Flux of Information
+### Flux of Information (The Intelligence Loop)
 1.  **Perception**: `GrishaObserver` (Vision) or `VoiceCapsule` (Hearing) captures raw data.
 2.  **Transmission**: Data travels via `Synapse` to `Core`.
-3.  **Cognition**: `Core` routes data to the `UnifiedBrain`. Agents perceive the event.
-4.  **Reaction**: Agents decide an action (Speak, Execute Command).
+3.  **Cognition**:
+    *   `UnifiedBrain` receives the signal.
+    *   It engages the **Deep Reasoning Loop** (English internal monologue).
+    *   It formulates a plan using available tools (MCP).
+4.  **Reaction**: Agents decide an action (Speak, Execute Command) based on the plan.
 5.  **Execution**: `Core` routes the command to `SystemOrgan` or `VoiceOrgan`.
 
 ## 3. Localization & Compliance
-- **Internal Dialect**: `English` (Strict System-Level). All logs, tool names, and code comments.
-- **External Voice**: `Ukrainian` (Strict User-Level). All TTS, Chat responses, and UI labels.
+- **Internal Dialect (The Thought)**: `English` (Strict System-Level).
+    - All logs, tool names, code comments, and **Internal Chain-of-Thought** must be in English.
+    - This ensures maximum reasoning capability and compatibility with LLM logic.
+- **External Voice (The Speech)**: `Ukrainian` (Strict User-Level).
+    - All TTS (Text-to-Speech), `response` fields, and UI labels must be in **Ukrainian**.
+    - No English should ever leak to the user interface.
 
-This architecture ensures that ATLAS is not just "using" tools, but "embodying" them.
+## 4. Intelligence Standards (Maximum Level)
+- **Zero-Mock Policy**: No simulated reasoning. All decisions come from the VLM/LLM.
+- **Zero-Failure Architecture**:
+    - "Misses" are unacceptable.
+    - If a tool fails, the Brain must **re-plan** and try an alternative strategy.
+    - Network glitches must be handled with silent retries.
+- **Chain of Thought**: Every complex action must be preceded by a transparent reasoning step (visible in logs/internals, hidden from user).
