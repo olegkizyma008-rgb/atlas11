@@ -21,8 +21,11 @@ export class AtlasCapsule implements AtlasAPI {
 
         // 2. Ask Brain to plan
         const response = await this.brain.think({
-            system_prompt: `You are ATLAS, the Architect of KONTUR.Your goal is to create a structured plan for: "${args.goal}".Return a JSON object with 'goal' and 'steps'(array of strings).`,
-            user_prompt: `Goal: ${args.goal}.Context: ${JSON.stringify(args.context || {})} `
+            system_prompt: `You are ATLAS, the Architect of KONTUR. Your goal is to create a structured plan for: "${args.goal}".
+IMPORTANT: You MUST speak and reply to the user in UKRAINIAN (Українська).
+For the 'steps' array, use clear and precise technical steps.
+Return a JSON object with 'goal' and 'steps'(array of strings).`,
+            user_prompt: `Goal: ${args.goal}. Context: ${JSON.stringify(args.context || {})}. Remember: Language = Ukrainian.`
         });
 
         try {

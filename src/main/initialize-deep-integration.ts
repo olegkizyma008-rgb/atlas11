@@ -16,6 +16,7 @@ import {
   createAtlasOrganMapper,
 } from '../kontur/adapters/atlas-organ-mapper';
 import { synapse } from '../kontur/synapse';
+import { createPacket, PacketIntent } from '../kontur/protocol/nexus'; // Import packet utils
 
 // Import Atlas Capsules
 import { AtlasCapsule } from '../modules/atlas/index';
@@ -25,6 +26,15 @@ import { MemoryCapsule } from '../modules/memory/index';
 import { ForgeGhost } from '../modules/forge/ghost';
 import { VoiceGhost } from '../modules/voice/ghost';
 import { BrainCapsule } from '../modules/brain/index';
+
+// Import Real Implementations for IO
+import { VoiceCapsule } from '../kontur/voice/VoiceCapsule'; // Real Voice
+import { GeminiLiveService } from '../kontur/vision/GeminiLiveService'; // Real Vision
+import { GrishaObserver } from '../kontur/vision/GrishaObserver'; // Real Observer
+import { SystemCapsule } from '../kontur/system/SystemCapsule'; // Real System
+
+import { IpcMain } from 'electron';
+import { join } from 'path';
 
 /**
  * Deep Integration System
@@ -42,8 +52,14 @@ export class DeepIntegrationSystem {
 
   public memory: MemoryCapsule | null = null;
   public forge: ForgeGhost | null = null;
-  public voice: VoiceGhost | null = null;
+  public voiceGhost: VoiceGhost | null = null;
   public brain: BrainCapsule | null = null;
+
+  // Real IO Capsules
+  public voiceCapsule: VoiceCapsule | null = null;
+  public systemCapsule: SystemCapsule | null = null;
+  public geminiLive: GeminiLiveService | null = null;
+  public grishaObserver: GrishaObserver | null = null;
 
   private organs: Map<string, Synapse> = new Map();
   private listeners: Map<string, Function[]> = new Map();
@@ -56,7 +72,7 @@ export class DeepIntegrationSystem {
 
     // 2. Initialize Unified Brain
     this.unifiedBrain = createUnifiedBrain();
-    this.core.cortex = this.unifiedBrain;
+    this.core.cortex = this.unifiedBrain; // Attach unified brain to core
 
     // 3. Initialize Bridges
     this.synapseBridge = createSynapseBridge(synapse, this.core);
@@ -84,28 +100,230 @@ export class DeepIntegrationSystem {
   }
 
   /**
+   * Initialize System Organ (Motor Control)
+   */
+  private async initSystemOrgan(): Promise<void> {
+    console.log('[DEEP-INTEGRATION] Initializing System Organ...');
+    this.systemCapsule = new SystemCapsule();
+
+    const systemHandler = {
+      send: async (packet: any) => {
+        console.log('[SYSTEM ORGAN] Received packet:', packet.instruction.op_code);
+
+        const { intent, op_code } = packet.instruction;
+        const { task, app } = packet.payload;
+
+        let result: any = { success: false, output: '' };
+
+        if (op_code === 'OPEN_APP' || (task && task.startsWith('open '))) {
+          const appName = app || task.replace('open ', '').trim();
+          result = await this.systemCapsule?.openApp(appName);
+        } else if (op_code === 'EXEC' || intent === 'CMD') {
+          result = await this.systemCapsule?.runCommand(task);
+        }
+
+        // Send response back
+        if (packet.route.reply_to) {
+          const response = createPacket(
+            'kontur://organ/system',
+            packet.route.reply_to,
+            PacketIntent.RESPONSE,
+            { msg: result.success ? `Done: ${result.output || result.message}` : `Error: ${result.message || result.output}` }
+          );
+          this.core.ingest(response);
+        }
+      }
+    };
+    this.core.register('kontur://organ/system', systemHandler);
+    console.log('[DEEP-INTEGRATION] ✅ System Organ registered');
+  }
+
+  /**
+   * Initialize Vision System (Grisha's Eyes)
+   */
+  private async initVisionSystem(): Promise<void> {
+    console.log('[DEEP-INTEGRATION] Initializing Vision System...');
+    const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
+
+    if (apiKey) {
+      try {
+        this.geminiLive = new GeminiLiveService(apiKey);
+        // Auto connect
+        this.geminiLive.connect().catch(e => console.error("[VISION] Gemini Connect Connect Error:", e));
+
+        this.geminiLive.on('error', (err) => {
+          console.error('[VISION] Gemini Live Error:', err.message);
+          synapse.emit('GRISHA', 'ALERT', `Помилка доступу до зору: ${err.message}`);
+        });
+
+        // Initialize Observer
+        this.grishaObserver = new GrishaObserver();
+        this.grishaObserver.setGeminiLive(this.geminiLive);
+
+        // Forward Grisha's observations to Synapse (UI)
+        this.grishaObserver.on('observation', (result: any) => {
+          synapse.emit('GRISHA', result.type.toUpperCase(), result.message);
+        });
+
+        // Forward Audio to Synapse (UI)
+        this.grishaObserver.on('audio', (audioChunk: string) => {
+          synapse.emit('GRISHA', 'AUDIO_CHUNK', { chunk: audioChunk });
+        });
+
+        // Expose observer globally for ad-hoc debugging if needed
+        (global as any).grishaObserver = this.grishaObserver;
+
+        console.log('[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active');
+      } catch (error) {
+        console.error('[DEEP-INTEGRATION] Failed to init Vision:', error);
+      }
+    } else {
+      console.warn('[DEEP-INTEGRATION] ⚠️ No API Key for Vision. Grisha will be blind.');
+    }
+  }
+
+  /**
+   * Initialize MCP Handlers (Filesystem & OS)
+   */
+  private async initMCP(): Promise<void> {
+    console.log('[DEEP-INTEGRATION] Initializing MCP Handlers...');
+
+    // Filesystem
+    this.core.register('kontur://organ/mcp/filesystem', {
+      send: async (packet: any) => {
+        const tool = packet.payload.tool || packet.payload.action;
+        const args = packet.payload.args;
+        try {
+          const result = await this.unifiedBrain.executeTool(tool, args); // Use unifiedBrain methods
+          if (packet.route.reply_to) {
+            this.core.ingest(createPacket(
+              'kontur://organ/mcp/filesystem', packet.route.reply_to, PacketIntent.RESPONSE,
+              { msg: `MCP Logic Executed. Result: ${JSON.stringify(result)}` }
+            ));
+          }
+        } catch (e: any) {
+          if (packet.route.reply_to) {
+            this.core.ingest(createPacket(
+              'kontur://organ/mcp/filesystem', packet.route.reply_to, PacketIntent.ERROR,
+              { error: e.message, msg: `Failed: ${e.message}` }
+            ));
+          }
+        }
+      }
+    });
+
+    // OS
+    this.core.register('kontur://organ/mcp/os', {
+      send: async (packet: any) => {
+        const tool = packet.payload.tool || packet.payload.action;
+        const args = packet.payload.args;
+        try {
+          const result = await this.unifiedBrain.executeTool(tool, args);
+          if (packet.route.reply_to) {
+            this.core.ingest(createPacket(
+              'kontur://organ/mcp/os', packet.route.reply_to, PacketIntent.RESPONSE,
+              { msg: `OS Command Executed: ${JSON.stringify(result)}` }
+            ));
+          }
+        } catch (e: any) {
+          if (packet.route.reply_to) {
+            this.core.ingest(createPacket(
+              'kontur://organ/mcp/os', packet.route.reply_to, PacketIntent.ERROR,
+              { error: e.message, msg: `Failed: ${e.message}` }
+            ));
+          }
+        }
+      }
+    });
+    console.log('[DEEP-INTEGRATION] ✅ MCP Handlers registered (Filesystem, OS)');
+  }
+
+  /**
+   * Setup Electron IPC Bindings
+   */
+  public setupIPC(ipcMain: IpcMain): void {
+    console.log('[DEEP-INTEGRATION] Setting up IPC Bridge...');
+
+    // Registry Access
+    ipcMain.removeHandler('kontur:registry');
+    ipcMain.handle('kontur:registry', () => this.core.getRegistry());
+
+    // Direct Packet Send
+    ipcMain.removeHandler('kontur:send');
+    ipcMain.handle('kontur:send', (_, packet) => {
+      console.log('[IPC BRIDGE] Received packet from UI');
+      this.core.ingest(packet);
+      return true;
+    });
+
+    // Voice TTS
+    ipcMain.removeHandler('voice:speak');
+    ipcMain.handle('voice:speak', async (_, { text, voiceName }) => {
+      try {
+        if (!this.voiceCapsule) this.voiceCapsule = new VoiceCapsule(); // Lazy init separate instance if needed, or reuse
+        const audioBuffer = await this.voiceCapsule.speak(text, { voiceName });
+        if (audioBuffer) return { success: true, audioBuffer };
+        return { success: false, error: 'No audio generated' };
+      } catch (err: any) {
+        console.error('[IPC BRIDGE] TTS Error:', err);
+        return { success: false, error: err.message };
+      }
+    });
+
+    // Vision Stream
+    ipcMain.removeHandler('vision:stream_frame');
+    ipcMain.handle('vision:stream_frame', (_, { image }) => {
+      if (this.geminiLive) {
+        this.geminiLive.sendVideoFrame(image);
+      }
+      return true;
+    });
+
+    // Screen Sources for Vision
+    ipcMain.removeHandler('vision:get_sources');
+    ipcMain.handle('vision:get_sources', async () => {
+      const { desktopCapturer } = await import('electron');
+      const sources = await desktopCapturer.getSources({
+        types: ['window', 'screen'],
+        thumbnailSize: { width: 150, height: 100 }
+      });
+      return sources.map(source => ({
+        id: source.id,
+        name: source.name,
+        thumbnail: source.thumbnail.toDataURL(),
+        isScreen: source.id.startsWith('screen:')
+      }));
+    });
+
+    console.log('[DEEP-INTEGRATION] ✅ IPC Bridge established');
+  }
+
+  /**
    * Initialize all Atlas Capsules (in-process)
    */
   private async initAtlasCapsules(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Initializing Atlas Capsules...');
 
-    // API key will be passed from Electron main via environment variables
-    const apiKey = '';
+    // API key from env
+    const deepThinkingKey = process.env.ATLAS_API_KEY || ''; // If applicable
 
     // Initialize Dependencies (Real Memory + Real Brain)
     this.memory = new MemoryCapsule();
-    this.forge = new ForgeGhost();
-    this.voice = new VoiceGhost();
-    this.brain = new BrainCapsule(apiKey);
+    this.forge = new ForgeGhost(); // Internal logic
+    this.voiceGhost = new VoiceGhost(); // Internal logic
+    this.brain = new BrainCapsule(deepThinkingKey);
 
     // Initialize Capsules
     this.atlas = new AtlasCapsule(this.memory, this.brain);
-    this.tetyana = new TetyanaCapsule(this.forge, this.voice, this.brain);
+    // Tetyana gets the ForgeGhost to think about files, but uses SystemOrgan to act
+    this.tetyana = new TetyanaCapsule(this.forge, this.voiceGhost, this.brain);
     this.grisha = new GrishaCapsule(this.brain);
 
     // Register with Unified Brain
     this.unifiedBrain.setAtlasBrain(this.brain);
     this.unifiedBrain.setAtlasOrgan(this.atlas);
+    // Note: We might want to register Tetyana/Grisha with UnifiedBrain too in future, 
+    // but for now Atlas is the main "Thinker" registered there.
 
     console.log('[DEEP-INTEGRATION] ✅ Atlas Capsules initialized');
   }
@@ -116,11 +334,27 @@ export class DeepIntegrationSystem {
   private async spawnOrgans(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Spawning KONTUR organs...');
 
-    if (!this.memory || !this.forge || !this.voice || !this.brain) {
+    if (!this.memory || !this.forge || !this.voiceGhost || !this.brain) {
       throw new Error('Atlas Capsules not initialized');
     }
 
-    // Create Atlas Organ
+    // 1. Python Worker (AG/Sim) - if enabled
+    if (process.env.AG === 'true') {
+      const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+      const agScript = join(__dirname, '../kontur/ag/ag-worker.py');
+      // We might also have a general worker
+      const workerScript = join(__dirname, '../kontur/organs/worker.py');
+
+      try {
+        this.core.loadPlugin('kontur://organ/worker', { cmd: pythonCmd, args: [workerScript] });
+        this.core.loadPlugin('kontur://organ/ag/sim', { cmd: pythonCmd, args: [agScript] });
+        console.log('[DEEP-INTEGRATION] 🐍 Python Workers spawned (System + AG)');
+      } catch (e) {
+        console.error('[DEEP-INTEGRATION] Failed to spawn python workers:', e);
+      }
+    }
+
+    // 2. Create Atlas Organ (Maps logic to Core)
     const atlasOrgan = this.organMapper.createAtlasOrgan(
       this.memory,
       this.brain
@@ -128,29 +362,22 @@ export class DeepIntegrationSystem {
     this.core.register(atlasOrgan.urn, atlasOrgan);
     this.organs.set(atlasOrgan.urn, atlasOrgan);
 
-    // Create Tetyana Organ
+    // 3. Create Tetyana Organ
     const tetyanaOrgan = this.organMapper.createTetyanaOrgan(
       this.forge,
-      this.voice,
+      this.voiceGhost,
       this.brain
     );
     this.core.register(tetyanaOrgan.urn, tetyanaOrgan);
     this.organs.set(tetyanaOrgan.urn, tetyanaOrgan);
 
-    // Create Grisha Organ
+    // 4. Create Grisha Organ
     const grishaOrgan = this.organMapper.createGrishaOrgan(this.brain);
     this.core.register(grishaOrgan.urn, grishaOrgan);
     this.organs.set(grishaOrgan.urn, grishaOrgan);
 
-    // Create Memory Organ
-    const memoryOrgan = this.organMapper.createMemoryOrgan();
-    this.core.register(memoryOrgan.urn, memoryOrgan);
-    this.organs.set(memoryOrgan.urn, memoryOrgan);
-
-    // Create Voice Organ
-    const voiceOrgan = this.organMapper.createVoiceOrgan();
-    this.core.register(voiceOrgan.urn, voiceOrgan);
-    this.organs.set(voiceOrgan.urn, voiceOrgan);
+    // Note: Memory/Voice Organs mapped by mapper are often proxies.
+    // Since we have specific handlers for System/Vision/MCP, we rely on those.
 
     console.log('[DEEP-INTEGRATION] ✅ All organs spawned');
   }
@@ -161,14 +388,29 @@ export class DeepIntegrationSystem {
   private async syncSystems(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Synchronizing systems...');
 
-    // Listen to Synapse bridge signals
-    this.synapseBridge.getSyncObservable().subscribe({
-      next: (packet: any) => {
-        console.log(`[DEEP-INTEGRATION] Signal → Packet: ${packet.instruction.intent}`);
-      },
-      error: (err: any) => {
-        console.error('[DEEP-INTEGRATION] Bridge error:', err);
-      },
+    // Synapse Bridge: UI -> Core
+    // handled by SynapseBridge class created in constructor
+
+    // Reverse: Core -> UI (Synapse)
+    // We register a 'shell' organ that forwards everything relevant to UI
+    this.core.register('kontur://organ/ui/shell', {
+      send: (packet: any) => {
+        // Determine Source Name for UI (ATLAS, TETYANA, GRISHA, SYSTEM)
+        let source = 'SYSTEM';
+
+        if (packet.route.from.includes('cortex')) source = 'ATLAS';
+        else if (packet.payload?.type === 'chat' || packet.instruction?.intent === 'AI_PLAN') source = 'ATLAS';
+        else if (packet.route.from.includes('mcp') || packet.payload?.type === 'task_result') source = 'TETYANA';
+        else if (packet.route.from.includes('ag') || packet.payload?.type === 'security') source = 'GRISHA';
+
+        // Extract message
+        let payload = packet.payload;
+        if (payload && payload.msg) payload = payload.msg;
+
+        // Emit to Synapse Bus (for UI to pick up)
+        // console.log(`[DEEP BRIDGE] Forwarding to UI: ${source} -> ${JSON.stringify(payload)}`);
+        synapse.emit(source, packet.instruction.intent || 'INFO', payload);
+      }
     });
 
     console.log('[DEEP-INTEGRATION] ✅ Systems synchronized');
@@ -252,13 +494,18 @@ export class DeepIntegrationSystem {
     console.log('[DEEP-INTEGRATION] Starting complete initialization...');
 
     try {
-      // 1. Initialize Atlas Capsules
+      // 1. Initialize Capabilities first
+      await this.initSystemOrgan();
+      await this.initVisionSystem();
+      await this.initMCP();
+
+      // 2. Initialize Atlas Capsules (The Mind)
       await this.initAtlasCapsules();
 
-      // 2. Spawn KONTUR Organs
+      // 3. Spawn KONTUR Organs (The Body Integration)
       await this.spawnOrgans();
 
-      // 3. Synchronize Systems
+      // 4. Synchronize Systems
       await this.syncSystems();
 
       console.log('[DEEP-INTEGRATION] ✅ Deep integration complete!');
@@ -300,16 +547,9 @@ export class DeepIntegrationSystem {
    */
   public async shutdown(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Shutting down...');
-
-    // Stop core health checks
+    this.geminiLive?.disconnect();
     this.core.stop();
-
-    // Terminate all organs
-    for (const [urn, organ] of this.organs) {
-      console.log(`[DEEP-INTEGRATION] Terminating ${urn}`);
-      organ.kill();
-    }
-
+    // ... kill workers
     console.log('[DEEP-INTEGRATION] ✅ Shutdown complete');
     this.emit('shutdown');
   }
@@ -325,3 +565,4 @@ export async function initializeDeepIntegration(): Promise<DeepIntegrationSystem
 }
 
 export default DeepIntegrationSystem;
+

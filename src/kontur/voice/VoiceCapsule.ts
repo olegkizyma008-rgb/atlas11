@@ -24,13 +24,17 @@ export class VoiceCapsule {
     private apiKey: string;
 
     constructor(apiKey?: string) {
-        this.apiKey = apiKey || process.env.GEMINI_API_KEY || '';
+        this.apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY || '';
 
         if (this.apiKey) {
             this.genAI = new GoogleGenAI({ apiKey: this.apiKey });
-            console.log('[VOICE CAPSULE] 🔊 Initialized with Gemini TTS');
+            const keySource = apiKey ? 'Custom' :
+                process.env.GEMINI_API_KEY ? 'GEMINI_API_KEY' :
+                    process.env.GOOGLE_API_KEY ? 'GOOGLE_API_KEY' :
+                        process.env.GEMINI_LIVE_API_KEY ? 'GEMINI_LIVE_API_KEY' : 'Unknown';
+            console.log(`[VOICE CAPSULE] 🔊 Initialized with Gemini TTS (Key Source: ${keySource})`);
         } else {
-            console.warn('[VOICE CAPSULE] ⚠️ No API key found');
+            console.warn('[VOICE CAPSULE] ⚠️ No API key found (Checked: GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_LIVE_API_KEY)');
         }
     }
 
@@ -56,6 +60,8 @@ export class VoiceCapsule {
                             prebuiltVoiceConfig: {
                                 voiceName
                             }
+                            // Enforce Ukrainian locale (model auto-detects from text, but good to note)
+                            // locale: 'uk-UA' 
                         }
                     }
                 }

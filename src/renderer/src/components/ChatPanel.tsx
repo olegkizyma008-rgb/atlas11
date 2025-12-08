@@ -101,7 +101,7 @@ export const ChatPanel = ({
                     if (window.speechSynthesis) {
                         window.speechSynthesis.cancel()
                         const utterance = new SpeechSynthesisUtterance(latestAtlasMessage.message)
-                        utterance.lang = 'uk-UA'
+                        utterance.lang = 'uk-UA' // Strict localization enforcement
                         window.speechSynthesis.speak(utterance)
                     }
                 }

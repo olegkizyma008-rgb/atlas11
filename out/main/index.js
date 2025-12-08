@@ -52,6 +52,7 @@ function _interopNamespaceDefault(e) {
   n.default = e;
   return Object.freeze(n);
 }
+const path__namespace = /* @__PURE__ */ _interopNamespaceDefault(path);
 const crypto__namespace = /* @__PURE__ */ _interopNamespaceDefault(crypto);
 const SignalSchema = zod.z.object({
   source: zod.z.string(),
@@ -625,7 +626,7 @@ class Core extends events.EventEmitter {
           console.log(`[CORE] ⏳ Waiting for Grisha confirmation...`);
           await this.waitForGrishaConfirmation(grishaObserver);
           console.log(`[CORE] ✅ Grisha confirmed step ${i + 1}`);
-          await new Promise((resolve) => setTimeout(resolve, 3e3));
+          await new Promise((resolve) => setTimeout(resolve, 4e3));
         } catch (error) {
           console.error(`[CORE] 🛑 Grisha HALTED execution:`, error.message);
           grishaObserver.stopObservation();
@@ -868,7 +869,7 @@ class CortexBrain extends events.EventEmitter {
       const osBridge = new McpBridge(
         "os",
         "1.0.0",
-        "./node_modules/.bin/tsx",
+        path__namespace.resolve(process.cwd(), "node_modules", ".bin", "tsx"),
         ["src/kontur/mcp/servers/os.ts"]
       );
       await fsBridge.connect();
@@ -1236,7 +1237,7 @@ function createWindow() {
           geminiLive.sendVideoFrame(image);
           return true;
         });
-        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-5611a3c7.js"));
+        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-3a809fcc.js"));
         const grishaObserver = new GrishaObserver();
         grishaObserver.setGeminiLive(geminiLive);
         grishaObserver.on("observation", (result) => {
