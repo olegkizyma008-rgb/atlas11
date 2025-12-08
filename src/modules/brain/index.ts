@@ -16,7 +16,7 @@ export class BrainCapsule implements BrainAPI {
 
         try {
             const model = this.genAI.getGenerativeModel({
-                model: args.model || 'gemini-2.0-flash-exp',
+                model: args.model || process.env.GEMINI_MODEL || 'gemini-2.5-flash',
                 systemInstruction: args.system_prompt
             });
 

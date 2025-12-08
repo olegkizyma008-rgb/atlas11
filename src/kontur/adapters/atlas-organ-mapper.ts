@@ -71,13 +71,25 @@ export class AtlasOrganMapper {
       __dirname,
       '../organs/tetyana-worker.py'
     );
-
     const synapse = new Synapse(urn, this.pythonCmd, [workerPath]);
 
+    // Note: Deep Integration now registers TetyanaCapsule directly as the primary handler.
+    // This Synapse organ serves as a fallback or for python-side processing if needed.
+
     synapse.on('packet', (packet: KPP_Packet) => {
-      if (packet.instruction.op_code === 'TETYANA_EXEC') {
-        this.handleTetyanaExecutionRequest(synapse, packet, forge, voice);
-      }
+      // Log or forward if needed
+      // console.log(`[MAPPER/TETYANA] Packet to Python Worker: ${packet.instruction.intent}`);
+    });
+
+    // FIX: We need to change `initialize-deep-integration.ts` to register `this.tetyana` (Capsule) 
+    // INSTEAD of the organ from mapper.
+
+    // For this file (Mapper), we leave it as legacy or for python-side tasks.
+    // But we should clean it up to avoid confusion.
+
+    synapse.on('packet', (packet: KPP_Packet) => {
+      // Forward to python if needed, or just log
+      console.log(`[MAPPER/TETYANA] Packet received: ${packet.instruction.intent}`);
     });
 
     console.log(`[MAPPER] ⚡ Created Tetyana Execution Organ: ${urn}`);

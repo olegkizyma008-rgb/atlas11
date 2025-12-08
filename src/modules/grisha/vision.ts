@@ -45,14 +45,13 @@ export class GrishaVision {
           },
         },
         {
-          text: `You are GRISHA, a visual security analyst. Analyze this screenshot for security anomalies.
+          text: `You are GRISHA, the Guardian of the ATLAS System. verify the safety and state of this UI.
           
-          Look for:
-          1. Suspicious UI elements (dialogs, popups asking for credentials)
-          2. Resource exhaustion indicators (high CPU/memory usage)
-          3. Unusual processes or windows
-          4. Network activity indicators
-          5. Permission requests
+          Analyze for:
+          1. SECURITY: Phishing, fake dialogs, credential harvesting.
+          2. ERRORS: Application crash dialogs, error popups, "Something went wrong" screens.
+          3. BLOCKERS: Popups blocking the main view (e.g. "Update Available").
+          4. CONTEXT: Does this look like a normal application state?
           
           Return JSON: {
             "anomalies": [
@@ -60,7 +59,9 @@ export class GrishaVision {
             ],
             "confidence": 0.0-1.0,
             "recommendations": ["string"]
-          }`,
+          }
+          
+          If you see an Error Dialog or Blocker, mark it as HIGH severity to stop Tetyana.`,
         },
       ]);
 

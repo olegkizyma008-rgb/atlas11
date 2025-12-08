@@ -22,6 +22,8 @@ import { createPacket, PacketIntent } from '../kontur/protocol/nexus'; // Import
 import { AtlasCapsule } from '../modules/atlas/index';
 import { TetyanaCapsule } from '../modules/tetyana/index';
 import { GrishaCapsule } from '../modules/grisha/index';
+import { createReasoningCapsule, ReasoningCapsule } from '../modules/reasoning';
+import { TetyanaExecutor } from '../modules/tetyana/executor';
 import { MemoryCapsule } from '../modules/memory/index';
 import { ForgeGhost } from '../modules/forge/ghost';
 import { VoiceGhost } from '../modules/voice/ghost';
@@ -49,6 +51,7 @@ export class DeepIntegrationSystem {
   public atlas: AtlasCapsule | null = null;
   public tetyana: TetyanaCapsule | null = null;
   public grisha: GrishaCapsule | null = null;
+  public reasoning: ReasoningCapsule | null = null; // New Reasoning Organ
 
   public memory: MemoryCapsule | null = null;
   public forge: ForgeGhost | null = null;
@@ -298,17 +301,22 @@ export class DeepIntegrationSystem {
     // Screen Sources for Vision
     ipcMain.removeHandler('vision:get_sources');
     ipcMain.handle('vision:get_sources', async () => {
-      const { desktopCapturer } = await import('electron');
-      const sources = await desktopCapturer.getSources({
-        types: ['window', 'screen'],
-        thumbnailSize: { width: 150, height: 100 }
-      });
-      return sources.map(source => ({
-        id: source.id,
-        name: source.name,
-        thumbnail: source.thumbnail.toDataURL(),
-        isScreen: source.id.startsWith('screen:')
-      }));
+      try {
+        const { desktopCapturer } = await import('electron');
+        const sources = await desktopCapturer.getSources({
+          types: ['window', 'screen'],
+          thumbnailSize: { width: 150, height: 100 }
+        });
+        return sources.map(source => ({
+          id: source.id,
+          name: source.name,
+          thumbnail: source.thumbnail.toDataURL(),
+          isScreen: source.id.startsWith('screen:')
+        }));
+      } catch (err: any) {
+        console.error("[IPC] Failed to get sources:", err);
+        return [];
+      }
     });
 
     console.log('[DEEP-INTEGRATION] ✅ IPC Bridge established');
@@ -321,7 +329,8 @@ export class DeepIntegrationSystem {
     console.log('[DEEP-INTEGRATION] Initializing Atlas Capsules...');
 
     // API key from env
-    const deepThinkingKey = process.env.ATLAS_API_KEY || ''; // If applicable
+    // API key from env (Fallback chain)
+    const deepThinkingKey = process.env.ATLAS_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
 
     // Initialize Dependencies (Real Memory + Real Brain)
     this.memory = new MemoryCapsule();
@@ -331,9 +340,11 @@ export class DeepIntegrationSystem {
 
     // Initialize Capsules
     this.atlas = new AtlasCapsule(this.memory, this.brain);
-    // Tetyana gets the ForgeGhost to think about files, but uses SystemOrgan to act
-    this.tetyana = new TetyanaCapsule(this.forge, this.voiceGhost, this.brain);
-    this.grisha = new GrishaCapsule(this.brain);
+    // Tetyana gets Core to drive execution
+    this.tetyana = new TetyanaCapsule(this.forge, this.voiceGhost, this.brain, this.core);
+    this.grisha = new GrishaCapsule(this.brain, this.core);
+    this.reasoning = createReasoningCapsule(deepThinkingKey); // Initialize with key
+    console.log('[DEEP-INTEGRATION] 🧠 Reasoning Capsule (Gemini 3) created');
 
     // Register with Unified Brain
     this.unifiedBrain.setAtlasBrain(this.brain);
@@ -370,15 +381,68 @@ export class DeepIntegrationSystem {
       }
     }
 
-    // 2. Create Atlas Organ (Maps logic to Core)
-    const atlasOrgan = this.organMapper.createAtlasOrgan(
-      this.memory,
-      this.brain
-    );
-    this.core.register(atlasOrgan.urn, atlasOrgan);
-    this.organs.set(atlasOrgan.urn, atlasOrgan);
+    // 2. Register Atlas Capsule (The Architect)
+    // Legacy Python Organ replaced with TS Capsule
+    if (this.atlas) {
+      const atlasUrn = 'kontur://organ/atlas';
+      this.core.register(atlasUrn, {
+        send: async (packet: any) => {
+          // Determine goal from packet
+          const goal = packet.payload.goal || packet.payload.prompt || packet.payload.msg;
+          // Execute Plan
+          const plan = await this.atlas?.plan({ goal, context: packet.payload });
 
-    // 3. Create Tetyana Organ
+          if (plan) {
+            // Emit AI_PLAN packet for Core to route to Tetyana
+            this.core.ingest(createPacket(
+              'kontur://organ/atlas',
+              'kontur://core/system', // Core decides where it goes (Tetyana)
+              PacketIntent.AI_PLAN,
+              plan // The plan object is the payload
+            ));
+          }
+        },
+        isAlive: () => true,
+        getMetrics: () => ({ load_factor: 0.5, state: 'ACTIVE' }),
+        sendHeartbeat: () => { }
+      });
+      console.log(`[DEEP-INTEGRATION] 🧠 Atlas Capsule registered as ${atlasUrn}`);
+    }
+
+    // 5. Register Reasoning Capsule (The Deep Thinker)
+    if (this.reasoning) {
+      const reasoningUrn = 'kontur://organ/reasoning';
+      this.core.register(reasoningUrn, async (packet) => {
+        return this.reasoning?.handlePacket(packet);
+      });
+
+      // Let it know about Core if needed
+      this.reasoning.register(this.core);
+      console.log(`[DEEP-INTEGRATION] 🧠 Reasoning Capsule registered as ${reasoningUrn}`);
+    }
+
+    // 3. Register Tetyana Capsule as Organ (Executor)
+    // We create a simple adapter since TetyanaCapsule doesn't implement 'send' directly in the same way,
+    // but it has `processPacket`.
+
+    if (this.tetyana) {
+      const tetyanaUrn = 'kontur://organ/tetyana';
+      this.core.register(tetyanaUrn, {
+        send: (packet: any) => {
+          this.tetyana?.processPacket(packet);
+        },
+        // Metadata for Homeostasis
+        isAlive: () => true,
+        getMetrics: () => ({ load_factor: 0, state: 'ACTIVE' }),
+        sendHeartbeat: () => { }
+      });
+      console.log(`[DEEP-INTEGRATION] ⚡ Tetyana Capsule registered as ${tetyanaUrn}`);
+    } else {
+      console.warn("[DEEP-INTEGRATION] Tetyana Capsule not ready!");
+    }
+
+    // Legacy Mapper call removed for Tetyana to avoid duplicate registration
+    /*
     const tetyanaOrgan = this.organMapper.createTetyanaOrgan(
       this.forge,
       this.voiceGhost,
@@ -386,11 +450,28 @@ export class DeepIntegrationSystem {
     );
     this.core.register(tetyanaOrgan.urn, tetyanaOrgan);
     this.organs.set(tetyanaOrgan.urn, tetyanaOrgan);
+    */
 
-    // 4. Create Grisha Organ
+    // 4. Register Grisha Capsule as Security Organ
+    if (this.grisha) {
+      const grishaUrn = 'kontur://organ/grisha';
+      this.core.register(grishaUrn, {
+        send: (packet: any) => {
+          this.grisha?.processPacket(packet);
+        },
+        isAlive: () => true,
+        getMetrics: () => ({ load_factor: 1, state: 'ACTIVE' }),
+        sendHeartbeat: () => { }
+      });
+      console.log(`[DEEP-INTEGRATION] 🛡️ Grisha Capsule registered as ${grishaUrn}`);
+    }
+
+    // Legacy Grisha Mapper call removed
+    /*
     const grishaOrgan = this.organMapper.createGrishaOrgan(this.brain);
     this.core.register(grishaOrgan.urn, grishaOrgan);
     this.organs.set(grishaOrgan.urn, grishaOrgan);
+    */
 
     // Note: Memory/Voice Organs mapped by mapper are often proxies.
     // Since we have specific handlers for System/Vision/MCP, we rely on those.
@@ -455,6 +536,12 @@ export class DeepIntegrationSystem {
         goal: 'Integrate KONTUR and Atlas',
       });
       console.log('[TEST] Atlas plan generated:', plan.id);
+
+      if (plan.steps.length > 0 && typeof plan.steps[0] === 'object') {
+        console.log(`[TEST] ✅ Verified structured step: ${plan.steps[0].action}`);
+      } else {
+        throw new Error('Plan steps are not structured objects');
+      }
 
       // 2. Test signal flow
       console.log('[TEST] Testing signal flow...');

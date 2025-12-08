@@ -103,8 +103,9 @@ export class UnifiedBrain extends CortexBrain {
 
     try {
       const genAI = new GoogleGenAI({ apiKey });
-      // Use 'gemini-2.0-flash-exp' for maximum speed/intelligence balance, or 'gemini-exp-1206'
-      const modelName = process.env.GEMINI_MODEL || 'gemini-2.0-flash-exp';
+      // User requested 'gemini-2.5-flash'
+      const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName})...`);
 
       const systemPrompt = `${request.system_prompt}\n\nIMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
 

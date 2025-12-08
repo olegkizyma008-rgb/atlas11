@@ -15,12 +15,11 @@ export class AtlasGhost implements AtlasAPI {
             id: 'plan-' + Math.random().toString(36).substring(7),
             goal: args.goal,
             steps: [
-                'Analyze requirements',
-                'Check memory for similar tasks',
-                'Synthesize necessary tools',
-                'Execute plan'
+                { tool: 'kontur://organ/mcp/filesystem', action: 'list_directory', args: { path: './' } },
+                { tool: 'kontur://organ/system', action: 'run_command', args: { command: 'echo "Ghost Plan executed"' } }
             ],
-            status: 'active' as const // typical typescript enum workaround
+            user_response_ua: "Гріша, я емулюю цей план для тестування.",
+            status: 'active' as const
         };
     }
 

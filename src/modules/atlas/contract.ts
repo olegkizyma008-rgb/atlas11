@@ -1,9 +1,18 @@
 import { z } from 'zod';
 
+export const PlanStepSchema = z.object({
+    tool: z.string(),
+    action: z.string(),
+    args: z.record(z.any())
+});
+
+export type PlanStep = z.infer<typeof PlanStepSchema>;
+
 export const PlanSchema = z.object({
     id: z.string(),
     goal: z.string(),
-    steps: z.array(z.string()),
+    steps: z.array(PlanStepSchema),
+    user_response_ua: z.string().optional(), // Localized response for the user
     status: z.enum(['pending', 'active', 'completed', 'failed'])
 });
 

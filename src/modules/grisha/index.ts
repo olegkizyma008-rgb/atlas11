@@ -1,17 +1,21 @@
 import { GrishaAPI, SafetyReport } from './contract';
 import { synapse } from '../../kontur/synapse';
 import { BrainAPI } from '../brain/contract';
-import { 
-  validateOperation, 
-  analyzeThreat, 
-  ATLAS_SECURITY_POLICY,
-  ThreatLevel 
+import { Core } from '../../kontur/core/dispatcher';
+import { KPP_Packet, PacketIntent, createPacket } from '../../kontur/protocol/nexus';
+import {
+    validateOperation,
+    analyzeThreat,
+    ATLAS_SECURITY_POLICY,
+    ThreatLevel
 } from './policies';
 import { GrishaVision, VisualAnomalyReport, createGrishaVision } from './vision';
 
 export class GrishaCapsule implements GrishaAPI {
     private brain: BrainAPI;
     private vision: GrishaVision;
+    private core: Core | null = null; // Opsu optional for now until we inject it
+
     private auditLog: Array<{
         timestamp: number;
         action: string;
@@ -22,10 +26,120 @@ export class GrishaCapsule implements GrishaAPI {
     private threatHistory: Map<string, number> = new Map();
     private lastVisualAnalysis: VisualAnomalyReport | null = null;
 
-    constructor(brain: BrainAPI) {
+    constructor(brain: BrainAPI, core?: Core) {
         this.brain = brain;
+        this.core = core || null;
         this.vision = createGrishaVision(process.env.GOOGLE_API_KEY);
         console.log('🛡️ GrishaCapsule: Real security implementation initialized with vision oversight');
+    }
+
+    /**
+     * Handle incoming KPP Packet
+     */
+    public processPacket(packet: KPP_Packet) {
+        // Handle VALIDATE requests (from Tetyana)
+        if (packet.instruction.op_code === 'VALIDATE' && packet.instruction.intent === PacketIntent.QUERY) {
+            console.log(`[GRISHA] 🛡️ Validating Packet from ${packet.route.from}`);
+            this.handleValidationRequest(packet);
+        }
+    }
+
+    private async handleValidationRequest(packet: KPP_Packet) {
+        const { action, args, stepNum } = packet.payload;
+
+        // Visual Verification for UI Actions
+        if (['mouse_click', 'ui_action', 'keyboard_type'].includes(action)) {
+            console.log(`[GRISHA] 👁️ Visual Verification triggered for ${action}`);
+
+            try {
+                // 1. Get Screenshot
+                const screenshot = await this.executeTool('kontur://organ/mcp/os', 'get_screenshot', { action: 'screen' });
+
+                if (screenshot.content && screenshot.content[1] && screenshot.content[1].type === 'image') {
+                    const base64 = screenshot.content[1].data;
+
+                    // 2. Analyze
+                    const visionReport = await this.vision.analyzeScreenshot(base64);
+                    this.lastVisualAnalysis = visionReport; // Store for audit
+
+                    if (visionReport.anomaliesDetected) {
+                        const highSeveiry = visionReport.anomalies.some(a => a.severity === 'high');
+                        if (highSeveiry) {
+                            console.warn(`[GRISHA] 🛑 BLOCKING ${action} due to Visual Threat`);
+                            this.sendResponse(packet, false, `Visual Threat Detected: ${visionReport.anomalies[0].description}`);
+                            return;
+                        }
+                    }
+                }
+            } catch (e: any) {
+                console.warn(`[GRISHA] ⚠️ Visual Check Failed: ${e.message}. Proceeding with caution.`);
+            }
+        }
+
+        // 1. Policy Audit
+        const result = await this.audit({ action, params: args });
+
+        // 2. Respond
+        this.sendResponse(packet, result.allowed, result.reason);
+    }
+
+    private sendResponse(originalPacket: KPP_Packet, allowed: boolean, reason?: string) {
+        if (this.core) {
+            const response = createPacket(
+                'kontur://organ/grisha',
+                originalPacket.route.from,
+                PacketIntent.RESPONSE,
+                {
+                    allowed,
+                    reason,
+                    stepNum: originalPacket.payload.stepNum
+                }
+            );
+            response.route.reply_to = originalPacket.route.reply_to;
+            this.core.ingest(response);
+            console.log(`[GRISHA] 🛡️ Verdict Sent: ${allowed ? 'APPROVED' : 'DENIED'} for ${originalPacket.payload.action}`);
+        }
+    }
+
+    /**
+     * Helper to execute tool via Core (similar to Tetyana)
+     */
+    private async executeTool(urn: string, tool: string, args: any): Promise<any> {
+        return new Promise((resolve, reject) => {
+            if (!this.core) return reject(new Error("No Core"));
+
+            const cmdId = `grisha-cmd-${Date.now()}`;
+            const handler = (packet: KPP_Packet) => {
+                if (packet.route.reply_to === cmdId) {
+                    this.core!.removeListener('ingest_response', handler); // Hypothetical event
+                    // In reality we need to hook into the stream properly.
+                    // For now, assuming we can catch it or using a timeout if architecture doesn't support easy req/res
+                    if (packet.instruction.intent === PacketIntent.ERROR) reject(new Error(packet.payload.error));
+                    else resolve(packet.payload);
+                }
+            };
+
+            // Using a temporary listener hack similar to Tetyana
+            // Note: In real system, we'd use a proper Dispatcher subscription
+            const wrapper = (p: KPP_Packet) => {
+                if (p.route.to === 'kontur://organ/grisha' && p.route.reply_to === cmdId) {
+                    this.core?.removeListener('ingest', wrapper);
+                    resolve(p.payload);
+                }
+            };
+            this.core.on('ingest', wrapper);
+
+            const packet = createPacket('kontur://organ/grisha', urn, PacketIntent.CMD, args);
+            packet.instruction.op_code = tool;
+            packet.route.reply_to = cmdId;
+
+            this.core.ingest(packet);
+
+            setTimeout(() => {
+                this.core?.removeListener('ingest', wrapper);
+                reject(new Error("Tool Timeout"));
+            }, 5000);
+        });
     }
 
     async observe(): Promise<SafetyReport> {
@@ -73,9 +187,9 @@ export class GrishaCapsule implements GrishaAPI {
         }
 
         if (report.level !== 'low') {
-            synapse.emit('grisha', 'threat_detected', { 
-                level: report.level, 
-                description: report.threats.join(', ') 
+            synapse.emit('grisha', 'threat_detected', {
+                level: report.level,
+                description: report.threats.join(', ')
             });
         }
 
@@ -122,9 +236,9 @@ export class GrishaCapsule implements GrishaAPI {
             console.log(`🛡️ GRISHA: ALLOWED - ${args.action}`);
         }
 
-        return { 
-            allowed: validation.allowed, 
-            reason: validation.reason 
+        return {
+            allowed: validation.allowed,
+            reason: validation.reason
         };
     }
 
@@ -134,14 +248,14 @@ export class GrishaCapsule implements GrishaAPI {
     async analyzeScreenshot(screenshotBase64: string): Promise<VisualAnomalyReport> {
         console.log("🛡️ GRISHA: Analyzing screenshot for visual threats...");
         this.lastVisualAnalysis = await this.vision.analyzeScreenshot(screenshotBase64);
-        
+
         if (this.lastVisualAnalysis.anomaliesDetected) {
             synapse.emit('grisha', 'visual_anomaly', {
                 anomalies: this.lastVisualAnalysis.anomalies,
                 confidence: this.lastVisualAnalysis.confidence
             });
         }
-        
+
         return this.lastVisualAnalysis;
     }
 

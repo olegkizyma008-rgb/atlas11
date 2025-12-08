@@ -2,25 +2,63 @@ import { TetyanaAPI } from './contract';
 import { ForgeAPI } from '../forge/contract';
 import { VoiceAPI } from '../voice/contract';
 import { BrainAPI } from '../brain/contract';
+import { TetyanaExecutor } from './executor';
+import { Core } from '../../kontur/core/dispatcher';
+import { KPP_Packet, PacketIntent } from '../../kontur/protocol/nexus';
+import { Plan } from '../atlas/contract';
 
 export class TetyanaCapsule implements TetyanaAPI {
     private forge: ForgeAPI;
     private voice: VoiceAPI;
     private brain: BrainAPI;
+    public executor: TetyanaExecutor; // Public for deep integration wiring
 
-    constructor(forge: ForgeAPI, voice: VoiceAPI, brain: BrainAPI) {
+    constructor(forge: ForgeAPI, voice: VoiceAPI, brain: BrainAPI, core?: Core) {
         this.forge = forge;
         this.voice = voice;
         this.brain = brain;
+
+        if (core) {
+            this.executor = new TetyanaExecutor(core);
+        } else {
+            // Fallback for tests or legacy init without core
+            // We generally expect Core to be injected or attached later
+            console.warn("TETYANA: Core not provided in constructor. Executor detached.");
+            this.executor = new TetyanaExecutor({ ingest: () => { } } as any);
+        }
     }
 
+    /**
+     * Handle incoming KPP Packet (The Nervous Handshake)
+     */
+    public processPacket(packet: KPP_Packet) {
+        // 1. If it's a Plan -> Start Execution
+        if (packet.instruction.intent === PacketIntent.AI_PLAN && packet.payload.steps) {
+            console.log('[TETYANA] 📜 Received Plan via Packet');
+            const plan: Plan = {
+                id: packet.nexus.uid,
+                goal: packet.payload.goal || 'Execution',
+                steps: packet.payload.steps,
+                user_response_ua: packet.payload.user_response_ua,
+                status: 'pending'
+            };
+            this.executor.execute(plan);
+            return;
+        }
+
+        // 2. If it's a Response/Event -> Feed to Executor (for step confirmation)
+        if (packet.instruction.intent === PacketIntent.RESPONSE || packet.instruction.intent === PacketIntent.ERROR) {
+            this.executor.handleIncomingPacket(packet);
+        }
+    }
+
+    // --- Legacy API Methods (kept for contract compliance, but wrapping executor logic where possible) ---
+
     async execute(args: { tool: string; args: Record<string, any> }) {
-        console.log(`TETYANA: Executing ${args.tool}`);
+        console.log(`TETYANA: Direct Execute Call ${args.tool}`);
+        // This bypasses the executor loop - used for single-shot tools?
+        // Ideally we wrap this in a mini-plan 
         await this.voice.speak({ text: `Executing ${args.tool}`, voice: 'tetyana' });
-
-        // Ask Brain if this is a safe/valid execution (simplified)
-        // or ask Brain to generate the code if the tool is "generate_code"
-
         const output = await this.forge.execute({ tool_name: args.tool, args: args.args });
         return { success: true, output };
     }

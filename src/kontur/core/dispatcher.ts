@@ -33,6 +33,16 @@ export class Core extends EventEmitter {
     ['kontur://organ/ag/sim', SecurityScope.SYSTEM],
     ['kontur://cortex/ai/main', SecurityScope.ROOT],
     ['kontur://core/system', SecurityScope.ROOT],
+    // Whitelist for internal Atlas/Grisha components
+    ['kontur://atlas/system', SecurityScope.SYSTEM],
+    ['kontur://atlas/GRISHA', SecurityScope.SYSTEM],
+    ['kontur://organ/tetyana', SecurityScope.SYSTEM],
+    ['kontur://organ/grisha', SecurityScope.SYSTEM],
+    ['kontur://organ/mcp/filesystem', SecurityScope.SYSTEM],
+    ['kontur://organ/mcp/os', SecurityScope.SYSTEM],
+    ['kontur://organ/atlas', SecurityScope.ROOT],
+    ['kontur://cortex/core', SecurityScope.ROOT],
+    ['kontur://atlas/ATLAS', SecurityScope.SYSTEM],
   ]);
 
   private limiter = new Bottleneck({
@@ -233,8 +243,6 @@ export class Core extends EventEmitter {
     // DEBUG: Bypass integrity for UI packets if check fails, but log it
     if (!verifyPacket(packet)) {
       console.warn(`[INTEGRITY FAIL] calculated hash mismatch for ${packet.nexus.uid}`);
-      console.warn(`[INTEGRITY DEBUG] Integrity: ${packet.nexus.integrity}`);
-      console.warn(`[INTEGRITY DEBUG] Payload: ${JSON.stringify(packet.payload)}`);
       return;
     }
 
@@ -258,7 +266,7 @@ export class Core extends EventEmitter {
           return;
         }
 
-        if (packet.instruction.intent === PacketIntent.AI_PLAN && senderScope === SecurityScope.ROOT) {
+        if (packet.instruction.intent === PacketIntent.AI_PLAN && packet.route.to === 'kontur://core/system' && senderScope === SecurityScope.ROOT) {
           this.executePlan(packet.payload);
           return;
         }
@@ -310,133 +318,44 @@ export class Core extends EventEmitter {
 
   /**
    * Execute AI-generated plan steps
-   */
-  /**
-   * Execute AI-generated plan steps (Sequentially & Verified)
+   * Execute or Route an AI Plan
+   * DEPRECATED LOGIC: Previously Core executed steps.
+   * NEW ARCHITECTURE: Core routes plan to Tetyana (The Hand).
    */
   private async executePlan(payload: any) {
-    const steps = payload.steps || [];
-    const userResponse = payload.user_response;
+    console.log(`[CORE] 🧠 Routing AI Plan to Tetyana for execution`);
 
-    console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps) with SEQUENTIAL verification`);
+    // Create a packet to transport the plan to Tetyana
+    // Note: In a real scenario, the Brain might have addressed it to Tetyana directly.
+    // But if it came here via 'AI_PLAN' intent on the bus, we route it.
 
-    // --- Start Grisha Observation ---
-    const grishaObserver = (global as any).grishaObserver;
-    if (grishaObserver && steps.length > 0) {
-      // Start observation - system prompt should trigger "Ready" or "Monitoring"
-      await grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
-    }
+    // We construct a valid KPP packet if we don't have one, or just forward the payload
+    // assuming Tetyana's endpoint expects the payload format.
 
-    // SEQUENTIAL EXECUTION LOOP
-    for (let i = 0; i < steps.length; i++) {
-      const step = steps[i];
-      console.log(`[CORE] ▶️ Step ${i + 1}/${steps.length}: ${step.action}`);
+    const packet = createPacket(
+      'kontur://cortex/core',
+      'kontur://organ/tetyana',
+      PacketIntent.AI_PLAN,
+      payload
+    );
 
-      // 1. Execute the Action
-      const stepPacket = createPacket(
-        'kontur://core/system',
-        step.target || 'kontur://organ/worker',
-        PacketIntent.CMD,
-        {
-          tool: step.tool,       // MCP tool name
-          action: step.action,   // Action/operation
-          args: step.args || {}  // Tool arguments
-        },
-        {
-          quantum_state: { amp1: 0.7, amp2: 0.3 },
-        }
-      );
-      stepPacket.instruction.op_code = step.action || 'EXECUTE';
-      this.ingest(stepPacket);
-
-      // 2. WAIT for Verification (Gatekeeping)
-      if (grishaObserver && grishaObserver.isActive) {
-        try {
-          // Prompt Grisha to verify this specific action
-          grishaObserver.notifyAction(step.action, JSON.stringify(step.args || {}));
-
-          console.log(`[CORE] ⏳ Waiting for Grisha confirmation...`);
-          await this.waitForGrishaConfirmation(grishaObserver);
-          console.log(`[CORE] ✅ Grisha confirmed step ${i + 1}`);
-
-          // BUFFER: Wait 4s for client-side audio playback to finish
-          // This prevents Grisha's "Виконано" from being cut off by the next step
-          await new Promise(resolve => setTimeout(resolve, 4000));
-        } catch (error: any) {
-          console.error(`[CORE] 🛑 Grisha HALTED execution:`, error.message);
-
-          // Stop everything
-          grishaObserver.stopObservation();
-
-          // Inform User
-          const errorChat = createPacket(
-            'kontur://cortex/ai/main',
-            'kontur://organ/ui/shell',
-            PacketIntent.EVENT,
-            { msg: `Зупинено Грішою: ${error.message}`, type: 'error' }
-          );
-          this.ingest(errorChat);
-          return; // ABORT PLAN
-        }
-      } else {
-        // Fallback delay if Grisha is offline
-        await new Promise(resolve => setTimeout(resolve, 1500));
-      }
-    }
-
-    // 3. Finish Up
-    if (grishaObserver) {
-      grishaObserver.stopObservation();
-    }
-
-    // 4. Speak/Show final user response
-    if (userResponse) {
-      // Small delay to let the last "Confirmed" finish speaking
-      await new Promise(resolve => setTimeout(resolve, 2000));
-
-      const chatPacket = createPacket(
-        'kontur://cortex/ai/main',  // Source as ATLAS for proper UI identification
+    // Initial User Feedback (Immediate)
+    if (payload.user_response_ua) {
+      // Send chat message first
+      this.ingest(createPacket(
+        'kontur://cortex/ai/main',
         'kontur://organ/ui/shell',
         PacketIntent.EVENT,
-        { msg: userResponse, type: 'chat' }
-      );
-      this.ingest(chatPacket);
+        { type: 'chat', msg: payload.user_response_ua }
+      ));
     }
-  }
 
-  /**
-   * Helper: Wait for Grisha to say "Confirmed" or "Alert"
-   */
-  private waitForGrishaConfirmation(observer: any): Promise<void> {
-    return new Promise((resolve, reject) => {
-      // Timeout (15s should be enough for quick verification)
-      const timeout = setTimeout(() => {
-        cleanup();
-        // Warn but proceed to avoid getting stuck if TTS fails
-        console.warn("[CORE] ⚠️ Grisha Confirmation Timeout - Proceeding anyway");
-        resolve();
-        // reject(new Error("Timeout waiting for Grisha")); // Strict mode would reject
-      }, 15000);
-
-      const handler = (result: any) => {
-        // result is { type: 'confirmation'|'alert'|'observation', message: string }
-        if (result.type === 'confirmation') {
-          cleanup();
-          resolve();
-        } else if (result.type === 'alert') {
-          cleanup();
-          reject(new Error(result.message));
-        }
-        // Ignore 'observation' type which might just be intermediate chatter
-      };
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        observer.off('observation', handler);
-      };
-
-      observer.on('observation', handler);
-    });
+    // Dispatch to Tetyana (Outside the if block so all plans run)
+    try {
+      this.ingest(packet);
+    } catch (e: any) {
+      console.error(`[CORE] Failed to route plan to Tetyana: ${e.message}`);
+    }
   }
 
   /**

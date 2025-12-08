@@ -33,12 +33,21 @@ Return a JSON object with:
 TOOLS AVAILABLE:
 - File Ops: "kontur://organ/mcp/filesystem" (actions: write_file, read_file, list_directory)
 - System Ops: "kontur://organ/system" (actions: run_command, open_app)
-- GUI Automation: "kontur://organ/mcp/os" (actions: open_application, keyboard_type, keyboard_press, mouse_click, execute_applescript, get_screen_size)
+- GUI Automation: "kontur://organ/mcp/os" (actions: ui_tree, ui_find, ui_action, open_application, keyboard_type, keyboard_press, mouse_click, execute_applescript)
+  - ui_tree: { appName } - Get UI hierarchy (use for exploration)
+  - ui_find: { appName, role, title } - Find element ID
+  - ui_action: { appName, role, title, action: "AXPress" } - Click/Interact semantic element
   - open_application: { appName: string } - Opens and activates an app
   - keyboard_type: { text: string } - Types text as keystrokes
   - keyboard_press: { key: string, modifiers?: ["command down", "shift down"] } - Press key combo
   - mouse_click: { x: number, y: number } - Click at coordinates
+  - get_screenshot: { action: "screen" } - Capture screen as image (base64) for visual analysis
   - execute_applescript: { script: string } - Run AppleScript for complex UI automation
+- Developer Ops: "kontur://organ/mcp/os" (actions: dev_grep, dev_find, git_ops)
+  - dev_grep: { pattern, path, recursive? } - Search code
+  - dev_find: { pattern, path } - Find files
+  - git_ops: { op: "status"|"commit"|"diff", args?: [] } - Git operations
+  - project_scaffold: { projectName, type: "vite"|"node"|"python", path } - Create new project
 - Memory: "kontur://organ/mcp/memory" (actions: store, recall)
 
 LANGUAGE RULES:
