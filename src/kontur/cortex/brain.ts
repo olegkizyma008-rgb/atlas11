@@ -99,7 +99,7 @@ export class CortexBrain extends EventEmitter {
       const osBridge = new McpBridge(
         'os',
         '1.0.0',
-        './node_modules/.bin/ts-node',
+        './node_modules/.bin/tsx',
         ['src/kontur/mcp/servers/os.ts']
       );
 

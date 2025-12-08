@@ -51,6 +51,17 @@ export const ChatPanel = ({
         endRef.current?.scrollIntoView({ behavior: 'smooth' })
     }, [messages])
 
+    // Audio Context - Persistent
+    const audioCtxRef = useRef<AudioContext | null>(null);
+
+    // Initialize AudioContext lazily
+    const getAudioContext = () => {
+        if (!audioCtxRef.current) {
+            audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        return audioCtxRef.current;
+    };
+
     // TTS: Speak ATLAS messages when speakerEnabled
     useEffect(() => {
         if (!speakerEnabled) {
@@ -77,7 +88,7 @@ export const ChatPanel = ({
                     })
 
                     if (result.success && result.audioBuffer) {
-                        console.log('[CHAT] � Received TTS audio');
+                        console.log(`[CHAT] 🎧 Received TTS audio (${result.audioBuffer.byteLength || result.audioBuffer.length} bytes)`);
                         await playAudioBuffer(result.audioBuffer);
                     } else {
                         console.warn('[CHAT] ⚠️ TTS failed:', result.error);
@@ -105,12 +116,18 @@ export const ChatPanel = ({
         try {
             if (!bufferData) return;
 
-            const audioContext = new AudioContext();
+            const ctx = getAudioContext();
+
+            // Resume if suspended (browser autoplay policy)
+            if (ctx.state === 'suspended') {
+                await ctx.resume();
+            }
 
             // Handle different buffer types (Node Buffer vs ArrayBuffer)
             let arrayBuffer: ArrayBuffer;
             if (bufferData.buffer) {
                 // It's likely a Node Buffer or Uint8Array
+                // IMPORTANT: Use slice to copy underlying buffer section
                 arrayBuffer = bufferData.buffer.slice(
                     bufferData.byteOffset,
                     bufferData.byteOffset + bufferData.byteLength
@@ -119,22 +136,39 @@ export const ChatPanel = ({
                 arrayBuffer = bufferData;
             }
 
+            // Try decodeAudioData first (Robust for MP3/WAV)
+            try {
+                // clone buffer because decodeAudioData detaches it
+                const bufferCopy = arrayBuffer.slice(0);
+                const audioBuffer = await ctx.decodeAudioData(bufferCopy);
+
+                const source = ctx.createBufferSource();
+                source.buffer = audioBuffer;
+                source.connect(ctx.destination);
+                source.start(0);
+                console.log('[CHAT] 🔊 Playing TTS audio via decodeAudioData');
+                return;
+            } catch (decodeErr) {
+                console.warn('[CHAT] decodeAudioData failed, trying PCM fallback...', decodeErr);
+            }
+
+            // Fallback: Assume Raw PCM 16-bit 24kHz (Gemini Native)
+            console.log('[CHAT] ℹ️ Using Raw PCM 24kHz Fallback');
             const sampleRate = 24000;
             const int16Array = new Int16Array(arrayBuffer);
-
-            const audioBuffer = audioContext.createBuffer(1, int16Array.length, sampleRate);
+            const audioBuffer = ctx.createBuffer(1, int16Array.length, sampleRate);
             const channelData = audioBuffer.getChannelData(0);
 
             for (let i = 0; i < int16Array.length; i++) {
                 channelData[i] = int16Array[i] / 32768.0;
             }
 
-            const source = audioContext.createBufferSource();
+            const source = ctx.createBufferSource();
             source.buffer = audioBuffer;
-            source.connect(audioContext.destination);
+            source.connect(ctx.destination);
             source.start(0);
+            console.log('[CHAT] 🔊 Playing TTS audio via PCM fallback');
 
-            console.log('[CHAT] 🔊 Playing Gemini TTS audio');
         } catch (error) {
             console.error('[CHAT] ❌ Playback helper error:', error);
         }

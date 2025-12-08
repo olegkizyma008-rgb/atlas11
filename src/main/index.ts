@@ -236,6 +236,7 @@ function createWindow(): void {
             const { GeminiLiveService } = await import('../kontur/vision/GeminiLiveService');
             // Use GEMINI_LIVE_API_KEY as requested
             const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
+            console.log('[MAIN] Grisha Key Source:', process.env.GEMINI_LIVE_API_KEY ? 'GEMINI_LIVE_API_KEY' : 'GOOGLE_API_KEY');
 
             if (apiKey) {
                 const geminiLive = new GeminiLiveService(apiKey);
@@ -243,10 +244,17 @@ function createWindow(): void {
                 // Connect automatically
                 geminiLive.connect().catch(e => console.error("Gemini Connect Fail", e));
 
-                // Forward Grisha's voice/text to UI
-                geminiLive.on('text', (text) => {
-                    synapse.emit('GRISHA', 'INFO', text);
+                // Handle critical errors to prevent crash
+                geminiLive.on('error', (err) => {
+                    console.error('[MAIN] Gemini Live Error:', err.message);
+                    // Optionally notify UI
+                    synapse.emit('GRISHA', 'ALERT', `Помилка доступу до зору: ${err.message}`);
                 });
+
+                // Forward Grisha's voice/text to UI is handled by GrishaObserver below
+                // geminiLive.on('text', (text) => {
+                //    synapse.emit('GRISHA', 'INFO', text);
+                // });
 
                 // IPC: Receive Video Stream from Client
                 ipcMain.removeHandler('vision:stream_frame');
@@ -263,6 +271,13 @@ function createWindow(): void {
                 // Forward Grisha's observations to UI
                 grishaObserver.on('observation', (result: any) => {
                     synapse.emit('GRISHA', result.type.toUpperCase(), result.message);
+                });
+
+                // Forward Grisha's AUDIO to UI for playback
+                grishaObserver.on('audio', (audioChunk: string) => {
+                    // audioChunk is base64 PCM 24kHz (usually from Gemini Live output)
+                    // We emit it to Synapse so the frontend can receive and play it
+                    synapse.emit('GRISHA', 'AUDIO_CHUNK', { chunk: audioChunk });
                 });
 
                 // Expose observer for dispatcher to control

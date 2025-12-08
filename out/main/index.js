@@ -587,21 +587,66 @@ class Core extends events.EventEmitter {
   /**
    * Execute AI-generated plan steps
    */
-  executePlan(payload) {
+  /**
+   * Execute AI-generated plan steps (Sequentially & Verified)
+   */
+  async executePlan(payload) {
     const steps = payload.steps || [];
     const userResponse = payload.user_response;
-    console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
+    console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps) with SEQUENTIAL verification`);
     const grishaObserver = global.grishaObserver;
     if (grishaObserver && steps.length > 0) {
-      grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
-      const totalTime = steps.length * 1e3 + 2e3;
-      setTimeout(() => {
-        if (grishaObserver.isActive) {
-          grishaObserver.stopObservation();
+      await grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
+    }
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      console.log(`[CORE] ▶️ Step ${i + 1}/${steps.length}: ${step.action}`);
+      const stepPacket = createPacket(
+        "kontur://core/system",
+        step.target || "kontur://organ/worker",
+        PacketIntent.CMD,
+        {
+          tool: step.tool,
+          // MCP tool name
+          action: step.action,
+          // Action/operation
+          args: step.args || {}
+          // Tool arguments
+        },
+        {
+          quantum_state: { amp1: 0.7, amp2: 0.3 }
         }
-      }, totalTime);
+      );
+      stepPacket.instruction.op_code = step.action || "EXECUTE";
+      this.ingest(stepPacket);
+      if (grishaObserver && grishaObserver.isActive) {
+        try {
+          grishaObserver.notifyAction(step.action, JSON.stringify(step.args || {}));
+          console.log(`[CORE] ⏳ Waiting for Grisha confirmation...`);
+          await this.waitForGrishaConfirmation(grishaObserver);
+          console.log(`[CORE] ✅ Grisha confirmed step ${i + 1}`);
+          await new Promise((resolve) => setTimeout(resolve, 3e3));
+        } catch (error) {
+          console.error(`[CORE] 🛑 Grisha HALTED execution:`, error.message);
+          grishaObserver.stopObservation();
+          const errorChat = createPacket(
+            "kontur://cortex/ai/main",
+            "kontur://organ/ui/shell",
+            PacketIntent.EVENT,
+            { msg: `Зупинено Грішою: ${error.message}`, type: "error" }
+          );
+          this.ingest(errorChat);
+          return;
+        }
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+      }
+    }
+    if (grishaObserver) {
+      grishaObserver.stopObservation();
     }
     if (userResponse) {
+      await new Promise((resolve) => setTimeout(resolve, 2e3));
       const chatPacket = createPacket(
         "kontur://cortex/ai/main",
         // Source as ATLAS for proper UI identification
@@ -611,30 +656,31 @@ class Core extends events.EventEmitter {
       );
       this.ingest(chatPacket);
     }
-    steps.forEach((step, idx) => {
-      setTimeout(() => {
-        const stepPacket = createPacket(
-          "kontur://core/system",
-          step.target || "kontur://organ/worker",
-          PacketIntent.CMD,
-          {
-            tool: step.tool,
-            // MCP tool name
-            action: step.action,
-            // Action/operation
-            args: step.args || {}
-            // Tool arguments
-          },
-          {
-            quantum_state: {
-              amp1: 0.7,
-              amp2: 0.3
-            }
-          }
-        );
-        stepPacket.instruction.op_code = step.action || "EXECUTE";
-        this.ingest(stepPacket);
-      }, idx * 1e3);
+  }
+  /**
+   * Helper: Wait for Grisha to say "Confirmed" or "Alert"
+   */
+  waitForGrishaConfirmation(observer) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        cleanup();
+        console.warn("[CORE] ⚠️ Grisha Confirmation Timeout - Proceeding anyway");
+        resolve();
+      }, 15e3);
+      const handler = (result) => {
+        if (result.type === "confirmation") {
+          cleanup();
+          resolve();
+        } else if (result.type === "alert") {
+          cleanup();
+          reject(new Error(result.message));
+        }
+      };
+      const cleanup = () => {
+        clearTimeout(timeout);
+        observer.off("observation", handler);
+      };
+      observer.on("observation", handler);
     });
   }
   /**
@@ -822,7 +868,7 @@ class CortexBrain extends events.EventEmitter {
       const osBridge = new McpBridge(
         "os",
         "1.0.0",
-        "./node_modules/.bin/ts-node",
+        "./node_modules/.bin/tsx",
         ["src/kontur/mcp/servers/os.ts"]
       );
       await fsBridge.connect();
@@ -1175,24 +1221,29 @@ function createWindow() {
   });
   (async () => {
     try {
-      const { GeminiLiveService } = await Promise.resolve().then(() => require("./GeminiLiveService-1fe1bb25.js"));
+      const { GeminiLiveService } = await Promise.resolve().then(() => require("./GeminiLiveService-13027cdb.js"));
       const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
+      console.log("[MAIN] Grisha Key Source:", process.env.GEMINI_LIVE_API_KEY ? "GEMINI_LIVE_API_KEY" : "GOOGLE_API_KEY");
       if (apiKey) {
         const geminiLive = new GeminiLiveService(apiKey);
         geminiLive.connect().catch((e) => console.error("Gemini Connect Fail", e));
-        geminiLive.on("text", (text) => {
-          synapse.emit("GRISHA", "INFO", text);
+        geminiLive.on("error", (err) => {
+          console.error("[MAIN] Gemini Live Error:", err.message);
+          synapse.emit("GRISHA", "ALERT", `Помилка доступу до зору: ${err.message}`);
         });
         electron.ipcMain.removeHandler("vision:stream_frame");
         electron.ipcMain.handle("vision:stream_frame", (_, { image }) => {
           geminiLive.sendVideoFrame(image);
           return true;
         });
-        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-a81ba3fe.js"));
+        const { GrishaObserver } = await Promise.resolve().then(() => require("./GrishaObserver-5611a3c7.js"));
         const grishaObserver = new GrishaObserver();
         grishaObserver.setGeminiLive(geminiLive);
         grishaObserver.on("observation", (result) => {
           synapse.emit("GRISHA", result.type.toUpperCase(), result.message);
+        });
+        grishaObserver.on("audio", (audioChunk) => {
+          synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
         });
         global.grishaObserver = grishaObserver;
         console.log("[MAIN] 👁️ Grisha Vision Service Bridge Active");

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { Background } from './components/Background'
 import { VoiceOrb } from './components/VoiceOrb'
 import { ChatPanel } from './components/ChatPanel'
@@ -68,49 +68,123 @@ function App(): JSX.Element {
     const [speakerEnabled, setSpeakerEnabled] = useState(true)
     const [grishaVisionStatus, setGrishaVisionStatus] = useState<'stable' | 'analyzing' | 'alert'>('stable')
 
-    // Real-time connection to KONTUR Synapse
-    trpc.synapse.useSubscription(undefined, {
-        onData(signal: any) {
-            const source = signal.source?.toUpperCase() || 'UNKNOWN'
-            const newLog: Log = {
-                id: Math.random().toString(36),
-                source,
-                message: typeof signal.payload === 'string'
-                    ? signal.payload
-                    : JSON.stringify(signal.payload),
-                timestamp: Date.now(),
-                type: source === 'GRISHA' && signal.payload?.includes?.('ALERT') ? 'warning' : 'info'
-            }
-            setLogs(prev => [...prev, newLog].slice(-100))
+    // Refs for stable access inside callback
+    const speakerEnabledRef = useRef(speakerEnabled);
+    const audioContextRef = useRef<AudioContext | null>(null);
 
-            // Update active agent and status based on signal
-            if (['ATLAS', 'TETYANA', 'GRISHA'].includes(source)) {
-                setActiveAgent(source)
+    // Update ref when state changes
+    useEffect(() => {
+        speakerEnabledRef.current = speakerEnabled;
+    }, [speakerEnabled]);
+
+    // Stable Audio Context getter
+    const getAudioContext = () => {
+        if (!audioContextRef.current) {
+            audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+        }
+        return audioContextRef.current;
+    };
+
+    const playAudioChunk = async (base64Chunk: string) => {
+        try {
+            const ctx = getAudioContext();
+            if (ctx.state === 'suspended') {
+                await ctx.resume();
+            }
+
+            // Convert base64 to ArrayBuffer
+            const binaryString = window.atob(base64Chunk);
+            const len = binaryString.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+
+            // Create Int16Array from the bytes (16-bit PCM)
+            const int16Array = new Int16Array(bytes.buffer);
+
+            // Create AudioBuffer (Gemini Live Native uses 24kHz sample rate)
+            const audioBuffer = ctx.createBuffer(1, int16Array.length, 24000);
+            const channelData = audioBuffer.getChannelData(0);
+
+            // Convert Int16 to Float32 [-1.0, 1.0]
+            for (let i = 0; i < int16Array.length; i++) {
+                channelData[i] = int16Array[i] / 32768.0;
+            }
+
+            const source = ctx.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(ctx.destination);
+            source.start(0);
+
+            // Debug log every 4th chunk to avoid spam, or just log generally
+            console.log('[AUDIO] 🎧 Playing chunk', int16Array.length, 'samples');
+        } catch (e) {
+            console.error('[AUDIO] Playback error:', e);
+        }
+    };
+
+    // Stable callback for TRPC subscription
+    const handleSignal = useCallback((signal: any) => {
+        const source = signal.source?.toUpperCase() || 'UNKNOWN'
+
+        // Handle Audio Stream
+        if (source === 'GRISHA' && signal.type === 'AUDIO_CHUNK') {
+            // Access ref instead of state to avoid dependency change
+            if (speakerEnabledRef.current) {
+                if (signal.payload?.chunk) {
+                    playAudioChunk(signal.payload.chunk);
+                }
+            }
+            return; // Audio chunks don't need logging
+        }
+
+        const newLog: Log = {
+            id: Math.random().toString(36),
+            source,
+            message: typeof signal.payload === 'string'
+                ? signal.payload
+                : JSON.stringify(signal.payload),
+            timestamp: Date.now(),
+            type: source === 'GRISHA' && signal.payload?.includes?.('ALERT') ? 'warning' : 'info'
+        }
+
+        // Use functional update to avoid dependency on 'logs'
+        setLogs(prev => [...prev, newLog].slice(-100))
+
+
+        // Update active agent and status based on signal
+        if (['ATLAS', 'TETYANA', 'GRISHA'].includes(source)) {
+            setActiveAgent(source)
+            setAgentStatuses(prev => ({
+                ...prev,
+                [source]: 'working'
+            }))
+
+            // Update GRISHA vision status if needed
+            if (source === 'GRISHA') {
+                if (signal.payload?.includes?.('THREAT') || signal.payload?.includes?.('ALERT')) {
+                    setGrishaVisionStatus('alert')
+                } else if (signal.payload?.includes?.('analyzing') || signal.payload?.includes?.('scanning')) {
+                    setGrishaVisionStatus('analyzing')
+                } else {
+                    setGrishaVisionStatus('stable')
+                }
+            }
+
+            // Reset to idle after a delay
+            setTimeout(() => {
                 setAgentStatuses(prev => ({
                     ...prev,
-                    [source]: 'working'
+                    [source]: 'idle'
                 }))
+            }, 3000)
+        }
+    }, []); // Empty dependency array = STABLE CALLBACK
 
-                // Update GRISHA vision status if needed
-                if (source === 'GRISHA') {
-                    if (signal.payload?.includes?.('THREAT') || signal.payload?.includes?.('ALERT')) {
-                        setGrishaVisionStatus('alert')
-                    } else if (signal.payload?.includes?.('analyzing') || signal.payload?.includes?.('scanning')) {
-                        setGrishaVisionStatus('analyzing')
-                    } else {
-                        setGrishaVisionStatus('stable')
-                    }
-                }
-
-                // Reset to idle after a delay
-                setTimeout(() => {
-                    setAgentStatuses(prev => ({
-                        ...prev,
-                        [source]: 'idle'
-                    }))
-                }, 3000)
-            }
-        },
+    // Real-time connection to KONTUR Synapse
+    trpc.synapse.useSubscription(undefined, {
+        onData: handleSignal,
         onError(err) {
             console.warn('TRPC Synapse subscription error:', err)
         }

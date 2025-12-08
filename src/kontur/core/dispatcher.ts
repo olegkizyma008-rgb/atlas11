@@ -311,28 +311,89 @@ export class Core extends EventEmitter {
   /**
    * Execute AI-generated plan steps
    */
-  private executePlan(payload: any) {
+  /**
+   * Execute AI-generated plan steps (Sequentially & Verified)
+   */
+  private async executePlan(payload: any) {
     const steps = payload.steps || [];
     const userResponse = payload.user_response;
 
-    console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps)`);
+    console.log(`[CORE] 🤖 Executing AI Plan (${steps.length} steps) with SEQUENTIAL verification`);
 
     // --- Start Grisha Observation ---
     const grishaObserver = (global as any).grishaObserver;
     if (grishaObserver && steps.length > 0) {
-      grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
-
-      // Schedule observation stop after all steps complete
-      const totalTime = steps.length * 1000 + 2000; // 1s per step + 2s buffer
-      setTimeout(() => {
-        if (grishaObserver.isActive) {
-          grishaObserver.stopObservation();
-        }
-      }, totalTime);
+      // Start observation - system prompt should trigger "Ready" or "Monitoring"
+      await grishaObserver.startObservation(`Моніторю виконання ${steps.length} кроків...`);
     }
 
-    // 1. Speak/Show response to User immediately (from ATLAS)
+    // SEQUENTIAL EXECUTION LOOP
+    for (let i = 0; i < steps.length; i++) {
+      const step = steps[i];
+      console.log(`[CORE] ▶️ Step ${i + 1}/${steps.length}: ${step.action}`);
+
+      // 1. Execute the Action
+      const stepPacket = createPacket(
+        'kontur://core/system',
+        step.target || 'kontur://organ/worker',
+        PacketIntent.CMD,
+        {
+          tool: step.tool,       // MCP tool name
+          action: step.action,   // Action/operation
+          args: step.args || {}  // Tool arguments
+        },
+        {
+          quantum_state: { amp1: 0.7, amp2: 0.3 },
+        }
+      );
+      stepPacket.instruction.op_code = step.action || 'EXECUTE';
+      this.ingest(stepPacket);
+
+      // 2. WAIT for Verification (Gatekeeping)
+      if (grishaObserver && grishaObserver.isActive) {
+        try {
+          // Prompt Grisha to verify this specific action
+          grishaObserver.notifyAction(step.action, JSON.stringify(step.args || {}));
+
+          console.log(`[CORE] ⏳ Waiting for Grisha confirmation...`);
+          await this.waitForGrishaConfirmation(grishaObserver);
+          console.log(`[CORE] ✅ Grisha confirmed step ${i + 1}`);
+
+          // BUFFER: Wait 4s for client-side audio playback to finish
+          // This prevents Grisha's "Виконано" from being cut off by the next step
+          await new Promise(resolve => setTimeout(resolve, 4000));
+        } catch (error: any) {
+          console.error(`[CORE] 🛑 Grisha HALTED execution:`, error.message);
+
+          // Stop everything
+          grishaObserver.stopObservation();
+
+          // Inform User
+          const errorChat = createPacket(
+            'kontur://cortex/ai/main',
+            'kontur://organ/ui/shell',
+            PacketIntent.EVENT,
+            { msg: `Зупинено Грішою: ${error.message}`, type: 'error' }
+          );
+          this.ingest(errorChat);
+          return; // ABORT PLAN
+        }
+      } else {
+        // Fallback delay if Grisha is offline
+        await new Promise(resolve => setTimeout(resolve, 1500));
+      }
+    }
+
+    // 3. Finish Up
+    if (grishaObserver) {
+      grishaObserver.stopObservation();
+    }
+
+    // 4. Speak/Show final user response
     if (userResponse) {
+      // Small delay to let the last "Confirmed" finish speaking
+      await new Promise(resolve => setTimeout(resolve, 2000));
+
       const chatPacket = createPacket(
         'kontur://cortex/ai/main',  // Source as ATLAS for proper UI identification
         'kontur://organ/ui/shell',
@@ -341,31 +402,40 @@ export class Core extends EventEmitter {
       );
       this.ingest(chatPacket);
     }
+  }
 
+  /**
+   * Helper: Wait for Grisha to say "Confirmed" or "Alert"
+   */
+  private waitForGrishaConfirmation(observer: any): Promise<void> {
+    return new Promise((resolve, reject) => {
+      // Timeout (15s should be enough for quick verification)
+      const timeout = setTimeout(() => {
+        cleanup();
+        // Warn but proceed to avoid getting stuck if TTS fails
+        console.warn("[CORE] ⚠️ Grisha Confirmation Timeout - Proceeding anyway");
+        resolve();
+        // reject(new Error("Timeout waiting for Grisha")); // Strict mode would reject
+      }, 15000);
 
-    steps.forEach((step, idx) => {
-      // Use 1000ms delay between steps to ensure apps have time to open and gain focus
-      setTimeout(() => {
-        const stepPacket = createPacket(
-          'kontur://core/system',
-          step.target || 'kontur://organ/worker',
-          PacketIntent.CMD,
-          {
-            tool: step.tool,       // MCP tool name
-            action: step.action,   // Action/operation
-            args: step.args || {}  // Tool arguments
-          },
-          {
-            quantum_state: {
-              amp1: 0.7,
-              amp2: 0.3,
-            },
-          }
-        );
+      const handler = (result: any) => {
+        // result is { type: 'confirmation'|'alert'|'observation', message: string }
+        if (result.type === 'confirmation') {
+          cleanup();
+          resolve();
+        } else if (result.type === 'alert') {
+          cleanup();
+          reject(new Error(result.message));
+        }
+        // Ignore 'observation' type which might just be intermediate chatter
+      };
 
-        stepPacket.instruction.op_code = step.action || 'EXECUTE';
-        this.ingest(stepPacket);
-      }, idx * 1000);
+      const cleanup = () => {
+        clearTimeout(timeout);
+        observer.off('observation', handler);
+      };
+
+      observer.on('observation', handler);
     });
   }
 

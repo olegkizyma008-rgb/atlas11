@@ -19,6 +19,7 @@ export class GrishaObserver extends EventEmitter {
     private captureInterval: NodeJS.Timeout | null = null;
     private geminiLive: any = null;
     private frameCount: number = 0;
+    private isSpeaking: boolean = false; // Lock to prevent frame capture during response
 
     constructor() {
         super();
@@ -37,7 +38,31 @@ export class GrishaObserver extends EventEmitter {
             });
 
             geminiLive.on('audio', (audio: any) => {
+                // When audio starts, we're speaking
+                if (!this.isSpeaking) {
+                    this.isSpeaking = true;
+                    console.log('[GRISHA OBSERVER] 🔇 Audio started - pausing frame capture');
+
+                    // Safety timeout: reset after 5 seconds if turnComplete isn't received
+                    setTimeout(() => {
+                        if (this.isSpeaking) {
+                            console.log('[GRISHA OBSERVER] ⏱️ Audio timeout - resuming frame capture');
+                            this.isSpeaking = false;
+                        }
+                    }, 5000);
+                }
                 this.emit('audio', audio);
+            });
+
+            // Listen for turn completion (Grisha finished speaking)
+            // Since Gemini Live doesn't return text transcripts, we use this as auto-confirmation
+            geminiLive.on('turnComplete', () => {
+                console.log('[GRISHA OBSERVER] 🎤 Turn complete - resuming frame capture');
+                this.isSpeaking = false;
+                this.emit('observation', {
+                    type: 'confirmation',
+                    message: 'Grisha finished speaking (auto-confirmed via turnComplete)'
+                });
             });
         }
     }
@@ -64,12 +89,21 @@ export class GrishaObserver extends EventEmitter {
             }
         }
 
+        // Trigger initial greeting/status
+        if (this.geminiLive && typeof this.geminiLive.sendText === 'function') {
+            this.geminiLive.sendText("Система: Починаємо спостереження. Опиши що бачиш на екрані.");
+        }
+
         // Send FIRST FRAME IMMEDIATELY to keep session alive
         await this.captureAndSendFrame();
         console.log(`[GRISHA OBSERVER] 📸 First frame sent`);
 
-        // Continue capturing screen at 2 FPS
+        // Continue capturing screen at 2 FPS (but skip while speaking)
         this.captureInterval = setInterval(async () => {
+            if (this.isSpeaking) {
+                // Skip frame capture while Grisha is speaking to prevent overlapping
+                return;
+            }
             await this.captureAndSendFrame();
         }, 500);
 
@@ -140,6 +174,17 @@ export class GrishaObserver extends EventEmitter {
     }
 
     /**
+     * Notify Grisha about an action performed by the system
+     * This prompts Grisha to verify the action specifically.
+     */
+    notifyAction(action: string, details: string) {
+        if (this.geminiLive && typeof this.geminiLive.sendText === 'function') {
+            console.log(`[GRISHA OBSERVER] 🗣️ Prompting verification for: ${action}`);
+            this.geminiLive.sendText(`Система: Виконано дію "${action}" (${details}). Підтвердь словом "Виконано" або повідом про помилку.`);
+        }
+    }
+
+    /**
      * Process Grisha's response from Gemini Live
      */
     private processGrishaResponse(text: string) {
@@ -147,9 +192,9 @@ export class GrishaObserver extends EventEmitter {
 
         let resultType: 'confirmation' | 'alert' | 'observation' = 'observation';
 
-        if (lowerText.includes('alert') || lowerText.includes('помилка') || lowerText.includes('error')) {
+        if (lowerText.includes('alert') || lowerText.includes('помилка') || lowerText.includes('error') || lowerText.includes('не виконано') || lowerText.includes('not done')) {
             resultType = 'alert';
-        } else if (lowerText.includes('ok') || lowerText.includes('виконано') || lowerText.includes('stable')) {
+        } else if (lowerText.includes('ok') || lowerText.includes('виконано') || lowerText.includes('stable') || lowerText.includes('done')) {
             resultType = 'confirmation';
         }
 
