@@ -8,6 +8,7 @@ import { KPP_Packet, SecurityScope, createPacket, PacketIntent } from '../protoc
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { AGENT_PERSONAS } from './agentPersonas';
 import * as crypto from 'crypto';
+import * as path from 'path';
 import type { McpBridge } from '../mcp/McpBridge';
 
 interface AIProvider {
@@ -99,7 +100,7 @@ export class CortexBrain extends EventEmitter {
       const osBridge = new McpBridge(
         'os',
         '1.0.0',
-        './node_modules/.bin/tsx',
+        path.resolve(process.cwd(), 'node_modules', '.bin', 'tsx'),
         ['src/kontur/mcp/servers/os.ts']
       );
 
