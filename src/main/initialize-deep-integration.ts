@@ -144,8 +144,8 @@ export class DeepIntegrationSystem {
   private async initVisionSystem(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Initializing Vision System...');
     console.log('[DEEP-INTEGRATION] Initializing Vision System...');
-    // User Request: GEMINI_API_KEY is for Grisha
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    // User Request (Corrected): GEMINI_LIVE_API_KEY is for Grisha (Live)
+    const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
 
     if (apiKey) {
       try {

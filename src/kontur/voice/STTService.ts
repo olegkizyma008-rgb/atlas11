@@ -10,8 +10,8 @@ export class STTService {
     private model = 'gemini-2.5-flash';
 
     constructor(apiKey?: string) {
-        // User Request: GEMINI_LIVE_API_KEY is for "Others TTS/STT"
-        const key = apiKey || process.env.GEMINI_LIVE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+        // User Request (Corrected): GEMINI_API_KEY is for "Others TTS/STT" (Standard)
+        const key = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY || '';
         if (!key) {
             console.error('[STT Service] ❌ No API key found');
         }

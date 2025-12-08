@@ -24,8 +24,8 @@ export class VoiceCapsule {
     private apiKey: string;
 
     constructor(apiKey?: string) {
-        // User Request: GEMINI_LIVE_API_KEY is for "Others TTS/STT"
-        this.apiKey = apiKey || process.env.GEMINI_LIVE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+        // User Request (Corrected): GEMINI_API_KEY is for "Others TTS/STT" (Standard)
+        this.apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY || '';
 
         if (this.apiKey) {
             this.genAI = new GoogleGenAI({ apiKey: this.apiKey });
