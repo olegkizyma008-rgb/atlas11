@@ -62,6 +62,75 @@ export const ChatPanel = ({
         return audioCtxRef.current;
     };
 
+    // --- STT Logic ---
+    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+    const chunksRef = useRef<Blob[]>([]);
+
+    useEffect(() => {
+        if (micEnabled) {
+            startRecording();
+        } else {
+            stopRecording();
+        }
+    }, [micEnabled]);
+
+    const startRecording = async () => {
+        try {
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            const mediaRecorder = new MediaRecorder(stream);
+            mediaRecorderRef.current = mediaRecorder;
+            chunksRef.current = [];
+
+            mediaRecorder.ondataavailable = (e) => {
+                if (e.data.size > 0) chunksRef.current.push(e.data);
+            };
+
+            mediaRecorder.onstop = async () => {
+                const blob = new Blob(chunksRef.current, { type: 'audio/webm' }); // Chrome records webm
+                // Convert to Base64
+                const reader = new FileReader();
+                reader.onloadend = async () => {
+                    const base64data = (reader.result as string).split(',')[1];
+                    try {
+                        console.log('[CHAT] 🎤 Sending audio for transcription...');
+                        // @ts-ignore
+                        const result = await window.electron.ipcRenderer.invoke('voice:transcribe', {
+                            audio: base64data,
+                            mimeType: 'audio/webm'
+                        });
+
+                        if (result.success && result.text) {
+                            console.log('[CHAT] 📝 Transcript:', result.text);
+                            // Append to input instead of replacing, for multi-sentence
+                            setInputText(prev => (prev ? prev + ' ' : '') + result.text);
+                        }
+                    } catch (e) {
+                        console.error('[CHAT] STT Error:', e);
+                    }
+                };
+                reader.readAsDataURL(blob);
+
+                // Stop tracks
+                stream.getTracks().forEach(track => track.stop());
+            };
+
+            mediaRecorder.start();
+            console.log('[CHAT] 🎙️ Recording started...');
+
+        } catch (e) {
+            console.error('[CHAT] Failed to access microphone:', e);
+            onMicToggle?.(false); // Reset toggle if failed
+        }
+    };
+
+    const stopRecording = () => {
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+            mediaRecorderRef.current.stop();
+            console.log('[CHAT] 🛑 Recording stopped, processing...');
+        }
+    };
+
+
     // TTS: Speak ATLAS messages when speakerEnabled
     useEffect(() => {
         if (!speakerEnabled) {

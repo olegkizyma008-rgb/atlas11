@@ -21,7 +21,7 @@ export class GeminiLiveService extends EventEmitter {
         this.config = {
             model: "models/gemini-2.5-flash-native-audio-preview-09-2025", // Adding models/ prefix back
             generationConfig: {
-                responseModalities: [Modality.AUDIO, Modality.TEXT],
+                responseModalities: [Modality.AUDIO],
                 // mediaResolution removed for debug
                 speechConfig: {
                     voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Zephyr' } } // Official voice from docs

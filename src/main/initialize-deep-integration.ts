@@ -279,6 +279,20 @@ export class DeepIntegrationSystem {
       return true;
     });
 
+    // Voice STT (Transcription)
+    ipcMain.removeHandler('voice:transcribe');
+    ipcMain.handle('voice:transcribe', async (_, { audio, mimeType }) => {
+      try {
+        const { getSTTService } = await import('../kontur/voice/STTService');
+        const stt = getSTTService();
+        const text = await stt.transcribe(audio, mimeType);
+        return { success: true, text };
+      } catch (err: any) {
+        console.error('[IPC BRIDGE] STT Error:', err);
+        return { success: false, error: err.message };
+      }
+    });
+
     // Screen Sources for Vision
     ipcMain.removeHandler('vision:get_sources');
     ipcMain.handle('vision:get_sources', async () => {
