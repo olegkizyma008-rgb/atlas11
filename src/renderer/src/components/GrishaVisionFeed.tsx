@@ -164,31 +164,37 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp, activ
     }, [isActive, targetApp])
 
     // Auto-switch to activeSource from backend
+    // Auto-switch to activeSource from backend
     useEffect(() => {
-        if (isActive && activeSource) {
-            console.log("Switching to active source from backend:", activeSource);
-            // We need to fetch full source info (thumbnail etc) to get stream
-            // Check if we already have sources loaded, if not load them
-            const switchSource = async () => {
-                let currentSources = sources;
-                if (currentSources.length === 0) {
-                    currentSources = await loadSources();
-                }
+        if (isActive && activeSource && activeSource.id) {
+            console.log("🔄 [FEED] Auto-switching requested:", activeSource);
 
-                const match = currentSources.find((s: any) => s.id === activeSource.id || s.name === activeSource.name);
-                if (match) {
-                    startWindowStream(match);
-                } else {
-                    console.warn("Source not found for auto-switch:", activeSource);
-                    // Try to reload one more time if missing
+            const switchSource = async () => {
+                // 1. Stop current stream if any
+                stopStream();
+
+                // 2. Load sources to find match
+                let currentSources = await loadSources();
+                // Simple retry loop (3 attempts)
+                for (let i = 0; i < 3; i++) {
+                    const match = currentSources.find((s: any) => s.id === activeSource.id || s.name === activeSource.name);
+
+                    if (match) {
+                        console.log("✅ [FEED] Source match found:", match.name);
+                        await startWindowStream(match);
+                        return;
+                    }
+
+                    console.warn(`⚠️ [FEED] Source not found (attempt ${i + 1}), retrying...`);
+                    await new Promise(r => setTimeout(r, 1000));
                     currentSources = await loadSources();
-                    const retryMatch = currentSources.find((s: any) => s.id === activeSource.id || s.name === activeSource.name);
-                    if (retryMatch) startWindowStream(retryMatch);
                 }
+                console.error("❌ [FEED] Failed to find source after retries:", activeSource);
             };
+
             switchSource();
         }
-    }, [isActive, activeSource]);
+    }, [activeSource]); // Removed isActive dependency to force switch even if re-rendering
 
     // Send frames to Grisha Brain
     useEffect(() => {
