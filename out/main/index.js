@@ -2381,9 +2381,6 @@ class UnifiedBrain extends CortexBrain {
     try {
       const cortexResponse = await this.thinkWithCortex(request);
       if (cortexResponse.text) {
-        if (request.mode === "planning") {
-          return await this.enrichWithAtlasContext(cortexResponse, request);
-        }
         return cortexResponse;
       }
       return await this.thinkWithAtlas(request);
