@@ -8,7 +8,29 @@ import { getVisionConfig, getProviderConfig } from '../../kontur/providers/confi
 // Assuming standard posix paths for macOS as per setup
 const HOME = process.env.HOME || '/Users/dev';
 const PYTHON_PATH = path.join(HOME, 'mac_assistant/venv/bin/python3');
-const AGENT_SCRIPT_PATH = path.join(HOME, 'mac_assistant/mac_master_agent.py');
+const AGENT_SCRIPT_PATH = path.join(HOME, 'mac_assistant/mac_master_agent_v2.py');
+const ENV_FILE_PATH = path.join(HOME, 'Documents/GitHub/atlas/.env');
+
+// Load environment variables from .env file
+function loadEnvFile(): Record<string, string> {
+    const envVars: Record<string, string> = {};
+    try {
+        if (fs.existsSync(ENV_FILE_PATH)) {
+            const envContent = fs.readFileSync(ENV_FILE_PATH, 'utf-8');
+            envContent.split('\n').forEach(line => {
+                const trimmed = line.trim();
+                if (trimmed && !trimmed.startsWith('#') && trimmed.includes('=')) {
+                    const [key, ...valueParts] = trimmed.split('=');
+                    const value = valueParts.join('=').trim();
+                    envVars[key.trim()] = value;
+                }
+            });
+        }
+    } catch (error) {
+        console.warn(`[OpenInterpreter] Could not load .env file: ${error}`);
+    }
+    return envVars;
+}
 
 export class OpenInterpreterBridge {
     private process: ChildProcess | null = null;
@@ -23,6 +45,9 @@ export class OpenInterpreterBridge {
         return new Promise((resolve, reject) => {
             console.log(`[OpenInterpreter] Starting task: ${prompt}`);
 
+            // Load environment variables from .env file
+            const envFileVars = loadEnvFile();
+
             // Gather Environment Variables
             const visionConfig = getVisionConfig();
 
@@ -32,9 +57,10 @@ export class OpenInterpreterBridge {
 
             const env = {
                 ...process.env,
-                GEMINI_API_KEY: process.env.GEMINI_API_KEY || '',
-                COPILOT_API_KEY: process.env.COPILOT_API_KEY || '',
-                OPENAI_API_KEY: process.env.OPENAI_API_KEY || '',
+                ...envFileVars, // Load from .env file
+                GEMINI_API_KEY: process.env.GEMINI_API_KEY || envFileVars['GEMINI_API_KEY'] || envFileVars['VISION_API_KEY'] || envFileVars['TTS_API_KEY'] || '',
+                COPILOT_API_KEY: process.env.COPILOT_API_KEY || envFileVars['COPILOT_API_KEY'] || envFileVars['BRAIN_API_KEY'] || '',
+                OPENAI_API_KEY: process.env.OPENAI_API_KEY || envFileVars['OPENAI_API_KEY'] || '',
                 // Ensure Python uses unbuffered output
                 PYTHONUNBUFFERED: '1'
             };

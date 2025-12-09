@@ -783,20 +783,29 @@ function getVisionConfig() {
     onDemand
   };
 }
+function getExecutionConfig() {
+  return {
+    engine: process.env.EXECUTION_ENGINE || "native"
+  };
+}
 function getAllConfigs() {
   return {
     brain: getProviderConfig("brain"),
     tts: getProviderConfig("tts"),
     stt: getProviderConfig("stt"),
     vision: getVisionConfig(),
-    reasoning: getProviderConfig("reasoning")
+    reasoning: getProviderConfig("reasoning"),
+    execution: getExecutionConfig()
   };
 }
 function logProviderConfig() {
   const configs = getAllConfigs();
   console.log("[PROVIDER CONFIG] Current configuration:");
   for (const [service, config2] of Object.entries(configs)) {
-    if (service === "vision") {
+    if (service === "execution") {
+      const execConfig = config2;
+      console.log(`  execution: engine=${execConfig.engine}`);
+    } else if (service === "vision") {
       const visionConfig = config2;
       console.log(`  vision [mode: ${visionConfig.mode}]:`);
       console.log(`    live: ${visionConfig.live.provider} (${visionConfig.live.model})${visionConfig.live.fallbackProvider ? ` -> fallback: ${visionConfig.live.fallbackProvider}` : ""}`);
@@ -814,6 +823,7 @@ function logProviderConfig() {
 const config = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
   __proto__: null,
   getAllConfigs,
+  getExecutionConfig,
   getProviderConfig,
   getVisionConfig,
   logProviderConfig
@@ -3119,6 +3129,90 @@ LANGUAGE RULES:
     }
   }
 }
+const HOME = process.env.HOME || "/Users/dev";
+const PYTHON_PATH = path.join(HOME, "mac_assistant/venv/bin/python3");
+const AGENT_SCRIPT_PATH = path.join(HOME, "mac_assistant/mac_master_agent_v2.py");
+const ENV_FILE_PATH = path.join(HOME, "Documents/GitHub/atlas/.env");
+function loadEnvFile() {
+  const envVars = {};
+  try {
+    if (fs.existsSync(ENV_FILE_PATH)) {
+      const envContent = fs.readFileSync(ENV_FILE_PATH, "utf-8");
+      envContent.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+          const [key, ...valueParts] = trimmed.split("=");
+          const value = valueParts.join("=").trim();
+          envVars[key.trim()] = value;
+        }
+      });
+    }
+  } catch (error) {
+    console.warn(`[OpenInterpreter] Could not load .env file: ${error}`);
+  }
+  return envVars;
+}
+class OpenInterpreterBridge {
+  process = null;
+  isRunning = false;
+  /**
+   * Executes a task using the Python Open Interpreter Agent.
+   * @param prompt The natural language prompt/task for the agent.
+   * @returns A promise that resolves when the agent completes (for single-shot tasks)
+   */
+  async execute(prompt) {
+    return new Promise((resolve, reject) => {
+      console.log(`[OpenInterpreter] Starting task: ${prompt}`);
+      const envFileVars = loadEnvFile();
+      getVisionConfig();
+      const env = {
+        ...process.env,
+        ...envFileVars,
+        // Load from .env file
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || envFileVars["GEMINI_API_KEY"] || envFileVars["VISION_API_KEY"] || envFileVars["TTS_API_KEY"] || "",
+        COPILOT_API_KEY: process.env.COPILOT_API_KEY || envFileVars["COPILOT_API_KEY"] || envFileVars["BRAIN_API_KEY"] || "",
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY || envFileVars["OPENAI_API_KEY"] || "",
+        // Ensure Python uses unbuffered output
+        PYTHONUNBUFFERED: "1"
+      };
+      this.process = child_process.spawn(PYTHON_PATH, [AGENT_SCRIPT_PATH, prompt], {
+        env,
+        cwd: HOME
+      });
+      let fullOutput = "";
+      this.process.stdout?.on("data", (data) => {
+        const output = data.toString();
+        console.log(`[OpenInterpreter:STDOUT] ${output}`);
+        fullOutput += output;
+      });
+      this.process.stderr?.on("data", (data) => {
+        const output = data.toString();
+        console.error(`[OpenInterpreter:STDERR] ${output}`);
+      });
+      this.process.on("close", (code) => {
+        console.log(`[OpenInterpreter] Process exited with code ${code}`);
+        if (code === 0) {
+          resolve(fullOutput);
+        } else {
+          reject(new Error(`Open Interpreter execution failed with code ${code}`));
+        }
+        this.isRunning = false;
+        this.process = null;
+      });
+      this.process.on("error", (err) => {
+        console.error(`[OpenInterpreter] Failed to start process:`, err);
+        reject(err);
+      });
+      this.isRunning = true;
+    });
+  }
+  /**
+   * Checks if the python environment seems valid
+   */
+  static checkEnvironment() {
+    return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
+  }
+}
 class GrishaVisionService extends events.EventEmitter {
   isObserving = false;
   isPaused = false;
@@ -3482,7 +3576,34 @@ class TetyanaExecutor extends events.EventEmitter {
   /**
    * Start executing a plan
    */
-  async execute(plan) {
+  async execute(plan, inputPacket) {
+    const executionConfig = getExecutionConfig();
+    const usePythonBridge = executionConfig.engine === "python-bridge";
+    if (usePythonBridge) {
+      try {
+        const prompt = plan.goal;
+        const bridge = new OpenInterpreterBridge();
+        if (OpenInterpreterBridge.checkEnvironment()) {
+          this.core.emit("tetyana:log", { message: "[Bridge] Handing over to Open Interpreter..." });
+          const result = await bridge.execute(prompt);
+          this.core.emit("tetyana:log", { message: `[Bridge] Result: ${result}` });
+          this.core.emit("tetyana:done", {
+            correlation_id: inputPacket.nexus.correlation_id,
+            // Accessing via nexus
+            source: "tetyana",
+            target: inputPacket.route.from,
+            // Accessing via route
+            data: { result }
+          });
+          return;
+        } else {
+          this.core.emit("tetyana:error", { message: "[Bridge] Python environment not found!" });
+        }
+      } catch (err) {
+        this.core.emit("tetyana:error", { message: `[Bridge] Execution Failed: ${err.message}` });
+        return;
+      }
+    }
     if (this.active) {
       console.warn("[TETYANA] Already executing a plan. Queuing not implemented yet.");
       return;
@@ -3570,7 +3691,7 @@ class TetyanaExecutor extends events.EventEmitter {
   async startVisionObservation(goal) {
     const vision = this.visionService || getGrishaVisionService();
     const config2 = getVisionConfig();
-    console.log(`[TETYANA] 👁️ Starting Vision observation [${config2.mode.toUpperCase()}]`);
+    console.log(`[TETYANA] 👁️ Starting Vision observation[${config2.mode.toUpperCase()}]`);
     try {
       await vision.startObservation(goal);
     } catch (e) {
@@ -5187,8 +5308,8 @@ class DeepIntegrationSystem {
     console.log("[DEEP-INTEGRATION] Initializing MCP Handlers...");
     this.core.register("kontur://organ/mcp/filesystem", {
       send: async (packet) => {
-        const tool = packet.payload.tool || packet.payload.action;
-        const args = packet.payload.args;
+        const tool = packet.instruction.op_code || packet.payload.tool || packet.payload.action;
+        const args = packet.payload.args || packet.payload;
         try {
           const result = await this.unifiedBrain.executeTool(tool, args);
           if (packet.route.reply_to) {
@@ -5217,8 +5338,8 @@ class DeepIntegrationSystem {
     });
     this.core.register("kontur://organ/mcp/os", {
       send: async (packet) => {
-        const tool = packet.payload.tool || packet.payload.action;
-        const args = packet.payload.args;
+        const tool = packet.instruction.op_code || packet.payload.tool || packet.payload.action;
+        const args = packet.payload.args || packet.payload;
         try {
           const result = await this.unifiedBrain.executeTool(tool, args);
           if (packet.route.reply_to) {
