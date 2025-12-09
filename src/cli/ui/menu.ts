@@ -7,6 +7,9 @@
 import chalk from 'chalk';
 import inquirer from 'inquirer';
 import ora from 'ora';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { execSync } from 'child_process';
 import { select, input, confirm, secret } from './prompts.js';
 import { configManager } from '../managers/config-manager.js';
@@ -28,7 +31,7 @@ const VISION_MODES = [
 ];
 
 // Available providers
-const PROVIDERS = ['gemini', 'copilot', 'openai', 'anthropic', 'mistral'];
+const PROVIDERS = ['gemini', 'copilot', 'openai', 'anthropic', 'mistral', 'web', 'ukrainian'];
 
 // Provider-specific API key names
 const PROVIDER_API_KEYS: Record<string, string> = {
@@ -128,6 +131,12 @@ async function configureService(service: string): Promise<void> {
         return;
     }
 
+    // TTS/STT now use Vision-style "Primary/Fallback + Details" menu
+    if (service === 'tts' || service === 'stt') {
+        await configureVoiceService(service, serviceName, serviceInfo?.desc);
+        return;
+    }
+
     while (true) {
         showHeader(`Configure ${serviceName}`);
         console.log(chalk.gray(`  ${serviceInfo?.desc || ''}\n`));
@@ -148,8 +157,12 @@ async function configureService(service: string): Promise<void> {
 
         const choices: { name: string; value: string; disabled?: boolean | string }[] = [
             { name: `Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
-            { name: `Model            ${fmtVal(currentModel)}`, value: 'model' },
-            { name: `API Key          ${fmtKey(currentApiKey)}${!currentApiKey && effectiveApiKey ? chalk.gray(' (using global)') : ''}`, value: 'apikey' },
+            { name: `Model            ${fmtVal(currentModel)}`, value: 'model', disabled: currentProvider === 'web' ? 'Not applicable' : undefined },
+            {
+                name: `API Key          ${currentProvider === 'web' ? chalk.gray('not needed') : (fmtKey(currentApiKey) + (!currentApiKey && effectiveApiKey ? chalk.gray(' (using global)') : ''))}`,
+                value: 'apikey',
+                disabled: currentProvider === 'web' ? 'Not needed for Web provider' : undefined
+            },
             { name: `Fallback         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
             { name: '─'.repeat(35), value: '_sep', disabled: true },
             { name: 'Back', value: 'back' }
@@ -167,12 +180,221 @@ async function configureService(service: string): Promise<void> {
                 await selectModel(providerKey, modelKey);
                 break;
             case 'apikey':
-                await editApiKey(apiKeyKey, `${serviceName} API Key`);
+                await editApiKey(apiKeyKey, `${serviceName} API Key`, config[providerKey]);
                 break;
             case 'fallback':
                 await selectFallback(fallbackKey, config[providerKey]);
                 break;
         }
+    }
+}
+
+/**
+ * Configure Voice Services (TTS/STT) - Vision-style menu
+ */
+async function configureVoiceService(service: string, label: string, desc?: string): Promise<void> {
+    const serviceUpper = service.toUpperCase();
+
+    while (true) {
+        showHeader(`Configure ${label}`);
+        if (desc) console.log(chalk.gray(`  ${desc}\n`));
+
+        const config = configManager.getAll();
+        const providerKey = `${serviceUpper}_PROVIDER`;
+        const fallbackKey = `${serviceUpper}_FALLBACK_PROVIDER`;
+        const fallback2Key = `${serviceUpper}_FALLBACK2_PROVIDER`;
+
+        const currentProvider = config[providerKey] || 'not set';
+        const currentFallback = config[fallbackKey];
+        const currentFallback2 = config[fallback2Key];
+
+        // 1. Primary / Fallback Section
+        const choices = [
+            { name: `Primary Provider   ${fmtVal(currentProvider)}`, value: 'provider' },
+            { name: `Fallback 1         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
+            { name: `Fallback 2         ${currentFallback2 ? fmtVal(currentFallback2) : chalk.gray('none')}`, value: 'fallback2' },
+            { name: '─'.repeat(40), value: '_sep1', disabled: true },
+        ];
+
+        // 2. Provider Settings Section
+        const providersToShow = new Set<string>([currentProvider, currentFallback || '', currentFallback2 || ''].filter(p => p && p !== 'not set'));
+        if (service === 'tts') providersToShow.add('ukrainian');
+
+        if (providersToShow.size > 0) {
+            choices.push({ name: chalk.gray('Provider Settings:'), value: '_label', disabled: true });
+
+            if (providersToShow.has('gemini')) {
+                const modelKey = `${serviceUpper}_MODEL`;
+                const model = config[modelKey] || 'default';
+                const key = config[`${serviceUpper}_API_KEY`] || config['GEMINI_API_KEY'];
+                choices.push({ name: `Gemini             ${chalk.cyan(model)} ${!key ? chalk.yellow('(No Key)') : ''}`, value: 'cfg_gemini' });
+            }
+
+            if (providersToShow.has('ukrainian') && service === 'tts') {
+                choices.push({ name: `Ukrainian TTS      ${chalk.gray('Configure')}`, value: 'cfg_ukrainian' });
+            }
+
+            if (providersToShow.has('web')) {
+                choices.push({ name: `Web (Native)       ${chalk.green('Ready')}`, value: 'cfg_web' });
+            }
+        }
+
+        choices.push({ name: '─'.repeat(35), value: '_sep2', disabled: true });
+        choices.push({ name: 'Back', value: 'back' });
+
+        const action = await select('', choices);
+
+        if (action === 'back') return;
+
+        switch (action) {
+            case 'provider':
+                await selectProvider(providerKey);
+                break;
+            case 'fallback':
+                await selectFallback(fallbackKey, config[providerKey]);
+                break;
+            case 'fallback2':
+                await selectFallback(fallback2Key, config[providerKey], config[fallbackKey]);
+                break;
+            case 'cfg_gemini':
+                await configureGenericProvider(service, 'gemini', 'Gemini');
+                break;
+            case 'cfg_ukrainian':
+                await configureUkrainianTTS();
+                break;
+            case 'cfg_web':
+                console.log(chalk.green('\n  Web provider uses browser native capabilities. No configuration needed.\n'));
+                await new Promise(r => setTimeout(r, 1500));
+                break;
+        }
+    }
+}
+
+/**
+ * Configure settings for a specific provider
+ */
+async function configureGenericProvider(service: string, provider: string, label: string): Promise<void> {
+    const serviceUpper = service.toUpperCase();
+    const modelKey = `${serviceUpper}_MODEL`;
+    const apiKeyKey = `${serviceUpper}_API_KEY`;
+
+    while (true) {
+        showHeader(`${label} Settings (${service.toUpperCase()})`);
+        const config = configManager.getAll();
+
+        const currentModel = config[modelKey];
+        const currentApiKey = config[apiKeyKey];
+        const globalKey = config[PROVIDER_API_KEYS[provider] || ''];
+
+        const choices = [
+            { name: `Model            ${fmtVal(currentModel)}`, value: 'model' },
+            { name: `API Key          ${fmtKey(currentApiKey)}${!currentApiKey && globalKey ? chalk.gray(' (using global)') : ''}`, value: 'apikey' },
+            { name: '─'.repeat(35), value: '_sep', disabled: true },
+            { name: 'Back', value: 'back' }
+        ];
+
+        const action = await select('', choices);
+        if (action === 'back') return;
+
+        if (action === 'model') {
+            await selectModelForProvider(provider, modelKey);
+        } else if (action === 'apikey') {
+            await editApiKey(apiKeyKey, `${label} API Key`, provider);
+        }
+    }
+}
+
+/**
+ * Configure Ukrainian TTS voice
+ */
+async function configureUkrainianTTS(): Promise<void> {
+    const UKRAINIAN_VOICES = [
+        { value: 'tetiana', label: 'Tetiana', desc: 'Female voice' },
+        { value: 'lada', label: 'Lada', desc: 'Female voice' },
+        { value: 'mykyta', label: 'Mykyta', desc: 'Male voice' },
+        { value: 'dmytro', label: 'Dmytro', desc: 'Male voice' },
+        { value: 'oleksa', label: 'Oleksa', desc: 'Male voice' }
+    ];
+
+    const AGENTS = [
+        { key: 'ATLAS', label: 'ATLAS', desc: 'Architect - Male', default: 'dmytro' },
+        { key: 'TETYANA', label: 'TETYANA', desc: 'Executor - Female', default: 'tetiana' },
+        { key: 'GRISHA', label: 'GRISHA', desc: 'Guardian - Male', default: 'oleksa' }
+    ];
+
+    while (true) {
+        showHeader('Ukrainian TTS Settings');
+        console.log(chalk.gray('  Offline Ukrainian Text-to-Speech (robinhad/ukrainian-tts)\n'));
+
+        const config = configManager.getAll();
+
+        const choices: { name: string; value: string; disabled?: boolean }[] = [];
+
+        // Per-agent voice settings
+        for (const agent of AGENTS) {
+            const voiceKey = `UKRAINIAN_VOICE_${agent.key}`;
+            const currentVoice = config[voiceKey] || agent.default;
+            choices.push({
+                name: `${agent.label.padEnd(12)} ${fmtVal(currentVoice)} ${chalk.gray(`(${agent.desc})`)}`,
+                value: `voice_${agent.key}`
+            });
+        }
+
+        choices.push({ name: '─'.repeat(40), value: '_sep', disabled: true });
+        choices.push({ name: 'Back', value: 'back' });
+
+        const action = await select('', choices);
+        if (action === 'back') return;
+
+        if (action.startsWith('voice_')) {
+            const agentKey = action.replace('voice_', '');
+            const agent = AGENTS.find(a => a.key === agentKey);
+
+            const voiceChoices = UKRAINIAN_VOICES.map(v => ({
+                name: `${v.label.padEnd(12)} ${chalk.gray(v.desc)}`,
+                value: v.value
+            }));
+            voiceChoices.push({ name: 'Back', value: 'back' });
+
+            const selected = await select(`Voice for ${agent?.label}`, voiceChoices);
+            if (selected !== 'back') {
+                configManager.set(`UKRAINIAN_VOICE_${agentKey}`, selected);
+                console.log(chalk.green(`\n  ${agent?.label} voice set to ${selected}`));
+                await new Promise(r => setTimeout(r, 800));
+            }
+        }
+    }
+}
+
+/**
+ * Select model for a specific provider
+ */
+async function selectModelForProvider(provider: string, modelKey: string): Promise<void> {
+    const spinner = ora('Fetching models...').start();
+    try {
+        const apiKey = getEffectiveApiKey(provider);
+        const models = await modelRegistry.fetchModels(provider, apiKey);
+        spinner.stop();
+
+        if (models.length === 0) {
+            console.log(chalk.yellow('\n  No models available for this provider.\n'));
+            await new Promise(r => setTimeout(r, 1500));
+            return;
+        }
+
+        const choices = models.map(m => ({
+            name: `${m.name}${m.id !== m.name ? chalk.gray(` (${m.id})`) : ''}`,
+            value: m.id
+        }));
+        choices.push({ name: 'Back', value: 'back' });
+
+        const selected = await select('Model', choices, { pageSize: 20 });
+        if (selected !== 'back') {
+            configManager.set(modelKey, selected);
+        }
+    } catch (e: any) {
+        spinner.fail(`Failed to fetch models: ${e.message}`);
+        await new Promise(r => setTimeout(r, 2000));
     }
 }
 
@@ -280,7 +502,7 @@ async function configureVisionMode(label: string, prefix: string): Promise<void>
                 await selectFallback(fallbackKey, config[providerKey]);
                 break;
             case 'apikey':
-                await editApiKey(apiKeyKey, `${label} API Key`);
+                await editApiKey(apiKeyKey, `${label} API Key`, currentProvider);
                 break;
         }
     }
@@ -343,9 +565,34 @@ async function selectModel(providerKey: string, modelKey: string): Promise<void>
 /**
  * Edit API key for a service
  */
-async function editApiKey(keyName: string, label: string): Promise<void> {
+/**
+ * Edit API key for a service
+ */
+async function editApiKey(keyName: string, label: string, provider?: string): Promise<void> {
     const current = configManager.get(keyName);
     console.log(chalk.gray(`\n  Current: ${current ? current.substring(0, 15) + '...' : 'not set'}`));
+
+    // Special handling for Copilot
+    if (provider === 'copilot') {
+        const method = await select('Method', [
+            { name: 'Enter Manually', value: 'manual' },
+            { name: 'Import from GitHub CLI', value: 'gh' },
+            { name: 'Cancel', value: 'cancel' }
+        ]);
+
+        if (method === 'cancel') return;
+
+        if (method === 'gh') {
+            const token = await importCopilotTokenFromGh(keyName);
+            // If token returned (string), save it
+            if (typeof token === 'string' && token) {
+                configManager.set(keyName, token);
+                console.log(chalk.green('\n  Saved!'));
+                await new Promise(r => setTimeout(r, 800));
+            }
+            return;
+        }
+    }
 
     const value = await input(`${label}`, current);
     if (value && value !== current) {
@@ -412,8 +659,9 @@ async function selectVisionFallbackMode(modeKey: string, currentMode: string): P
 /**
  * Select fallback provider
  */
-async function selectFallback(fallbackKey: string, primaryProvider?: string): Promise<void> {
-    const availableProviders = PROVIDERS.filter(p => p !== primaryProvider);
+async function selectFallback(fallbackKey: string, primaryProvider?: string, ...excludeProviders: (string | undefined)[]): Promise<void> {
+    const excludeSet = new Set([primaryProvider, ...excludeProviders].filter(Boolean));
+    const availableProviders = PROVIDERS.filter(p => !excludeSet.has(p));
     const choices = [
         { name: 'None', value: '' },
         ...availableProviders.map(p => ({ name: p, value: p })),
@@ -671,6 +919,10 @@ async function runHealthCheck(): Promise<void> {
                 statusSymbol = chalk.red('✕');
                 errorCount++;
             }
+        } else if (provider === 'web') {
+            status = chalk.green('Frontend Native');
+            statusSymbol = chalk.green('●');
+            okCount++;
         } else {
             status = chalk.blue('Configured');
             statusSymbol = chalk.blue('●');
@@ -747,3 +999,149 @@ async function runHealthCheck(): Promise<void> {
     await input('Press Enter to return...');
 }
 
+
+/**
+ * Import GitHub Copilot token
+ * Scans both gh CLI and VS Code configs (apps.json, hosts.json)
+ */
+async function importCopilotTokenFromGh(targetKey?: string): Promise<string | null | void> {
+    const spinner = ora('Scanning for GitHub accounts...').start();
+    const candidates: { name: string; value: string; source: 'gh' | 'vscode'; token: string }[] = [];
+
+    try {
+        // 1. Scan gh CLI
+        try {
+            const output = execSync('gh auth status 2>&1 || true', { encoding: 'utf-8' });
+            const regex = /Logged in to github\.com account ([a-zA-Z0-9_-]+)/g;
+            let match;
+            while ((match = regex.exec(output)) !== null) {
+                const username = match[1];
+                // Resolve token for this user
+                try {
+                    const token = execSync(`gh auth token --user ${username}`, { encoding: 'utf-8' }).trim();
+                    if (token) {
+                        candidates.push({
+                            name: `${username} ${chalk.gray('(gh CLI)')}`,
+                            value: `gh:${username}`,
+                            source: 'gh',
+                            token
+                        });
+                    }
+                } catch (e) { /* ignore */ }
+            }
+        } catch (e) { /* ignore gh missing */ }
+
+        // 2. Scan apps.json (VS Code)
+        try {
+            const fs = await import('fs');
+            const path = await import('path');
+            const os = await import('os');
+            const appsPath = path.join(os.homedir(), '.config', 'github-copilot', 'apps.json');
+            // console.log(chalk.gray(`  Checking: ${appsPath}`)); // Debug
+
+            if (fs.existsSync(appsPath)) {
+                const content = JSON.parse(fs.readFileSync(appsPath, 'utf-8'));
+                for (const key in content) {
+                    const entry = content[key];
+                    if (entry.user && entry.oauth_token) {
+                        // Check if duplicate
+                        const existing = candidates.find(c => c.name.startsWith(entry.user));
+                        if (!existing) {
+                            candidates.push({
+                                name: `${entry.user} ${chalk.green('(VS Code / Copilot)')}`,
+                                value: `vscode:${entry.user}`,
+                                source: 'vscode',
+                                token: entry.oauth_token
+                            });
+                        } else {
+                            // Upgrade existing gh entry to vscode (better token)
+                            existing.name = `${entry.user} ${chalk.green('(gh + VS Code)')}`;
+                            existing.source = 'vscode';
+                            existing.token = entry.oauth_token;
+                        }
+                    }
+                }
+            }
+        } catch (e: any) {
+            console.log(chalk.gray(`  Error reading apps.json: ${e.message}`));
+        }
+
+        // 3. Scan hosts.json (Goose/Other)
+        try {
+            const hostsPath = path.join(os.homedir(), '.config', 'github-copilot', 'hosts.json');
+            // console.log(chalk.gray(`  Checking: ${hostsPath}`)); // Debug
+            if (fs.existsSync(hostsPath)) {
+                const content = JSON.parse(fs.readFileSync(hostsPath, 'utf-8'));
+                const entry = content['github.com'];
+                if (entry && entry.user && entry.oauth_token) {
+                    const existing = candidates.find(c => c.name.startsWith(entry.user));
+                    if (!existing) {
+                        candidates.push({
+                            name: `${entry.user} ${chalk.cyan('(hosts.json)')}`,
+                            value: `hosts:${entry.user}`,
+                            source: 'vscode',
+                            token: entry.oauth_token
+                        });
+                    } else if (existing.source === 'gh') {
+                        existing.name = `${entry.user} ${chalk.cyan('(gh + hosts.json)')}`;
+                        existing.source = 'vscode';
+                        existing.token = entry.oauth_token;
+                    }
+                }
+            }
+        } catch (e: any) {
+            console.log(chalk.gray(`  Error reading hosts.json: ${e.message}`));
+        }
+
+        spinner.stop();
+
+        if (candidates.length === 0) {
+            console.log(chalk.yellow('\n  No accounts found in gh CLI or VS Code configs.\n'));
+            await input('Press Enter to return...');
+            return null;
+        }
+
+        const selectedValue = await select('Select Account', [
+            ...candidates.map(c => ({ name: c.name, value: c.value })),
+            { name: 'Cancel', value: 'cancel' }
+        ]);
+
+        if (selectedValue === 'cancel') return null;
+
+        const selectedCandidate = candidates.find(c => c.value === selectedValue);
+        if (!selectedCandidate) return null;
+
+        const token = selectedCandidate.token;
+
+        console.log(chalk.green(`\n  Successfully selected token for ${selectedCandidate.name}!`));
+        console.log(chalk.gray(`  Token: ${token.substring(0, 8)}...`));
+
+        if (targetKey) {
+            return token;
+        }
+
+        const target = await select('Where to save this token?', [
+            { name: 'Global Copilot Key (COPILOT_API_KEY)', value: 'global' },
+            { name: 'Vision On-Demand Only (VISION_ONDEMAND_API_KEY)', value: 'vision' },
+            { name: 'Both', value: 'both' },
+            { name: 'Cancel', value: 'cancel' }
+        ]);
+
+        if (target === 'cancel') return null;
+
+        if (target === 'global' || target === 'both') {
+            configManager.set('COPILOT_API_KEY', token);
+        }
+        if (target === 'vision' || target === 'both') {
+            configManager.set('VISION_ONDEMAND_API_KEY', token);
+        }
+
+        console.log(chalk.green('\n  Token saved to .env\n'));
+        await new Promise(r => setTimeout(r, 1000));
+
+    } catch (e: any) {
+        spinner.fail(`Error: ${e.message}`);
+        await input('Press Enter to return...');
+        return null;
+    }
+}

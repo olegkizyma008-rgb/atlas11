@@ -407,6 +407,13 @@ export class DeepIntegrationSystem {
       }
     });
 
+    // Get full system config (services, providers, etc) for UI
+    ipcMain.removeHandler('config:get_all');
+    ipcMain.handle('config:get_all', () => {
+      const { getAllConfigs } = require('../kontur/providers/config');
+      return getAllConfigs();
+    });
+
     console.log('[DEEP-INTEGRATION] ✅ IPC Bridge established');
   }
 

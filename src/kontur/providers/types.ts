@@ -11,7 +11,9 @@ export type ProviderName =
     | 'openai'
     | 'anthropic'
     | 'elevenlabs'
-    | 'whisper';
+    | 'whisper'
+    | 'web'
+    | 'ukrainian';
 
 // ============ Service Types ============
 export type ServiceType = 'brain' | 'tts' | 'stt' | 'vision' | 'reasoning';

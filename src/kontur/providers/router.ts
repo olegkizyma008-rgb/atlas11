@@ -28,6 +28,9 @@ import { AnthropicProvider } from './anthropic';
 import { MistralProvider } from './mistral';
 import { VSCodeCopilotProvider } from './copilot';
 import { CopilotVisionProvider } from './copilot-vision';
+import { WebTTSProvider } from './web-tts';
+import { WebSTTProvider } from './web-stt';
+import { UkrainianTTSProvider } from './ukrainian-tts';
 
 export class ProviderRouter {
     private llmProviders: Map<ProviderName, ILLMProvider> = new Map();
@@ -86,7 +89,26 @@ export class ProviderRouter {
             this.ttsProviders.set('gemini', geminiTTS);
         }
 
+        // Web (always available)
+        this.ttsProviders.set('web', new WebTTSProvider());
+
+        // === STT Providers ===
+        const sttConfig = getProviderConfig('stt'); // Ensure we read config for STT if needed
+
+        // Web STT (always available)
+        // Web STT (always available)
+        this.sttProviders.set('web', new WebSTTProvider());
+
+        // Register Ukrainian TTS
+        this.ttsProviders.set('ukrainian', new UkrainianTTSProvider());
+
+        // Gemini STT (via API if implemented, or just placeholder for now)
+        // Note: For now we only have Gemini Live (in Vision) or Web STT.
+        // We could add Gemini generic STT here if we had a provider for it.
+
         // === Vision Providers ===
+
+
         const visionConfig = getVisionConfig();
 
         // Copilot Vision (GPT-4o) - works for on-demand mode
