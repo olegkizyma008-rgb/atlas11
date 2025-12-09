@@ -5,6 +5,7 @@ import { Core } from '../../kontur/core/dispatcher';
 import { EventEmitter } from 'events';
 import { getGrishaVisionService, GrishaVisionService, VisionObservationResult } from '../../kontur/vision/GrishaVisionService';
 import { getVisionConfig } from '../../kontur/providers/config';
+import { getToolRegistry } from '../../kontur/core/ToolRegistry';
 
 export class TetyanaExecutor extends EventEmitter {
     private core: Core;
@@ -43,6 +44,28 @@ export class TetyanaExecutor extends EventEmitter {
 
         // Start Vision observation
         await this.startVisionObservation(plan.goal);
+
+        // 🛡️ VALIDATE ALL TOOLS BEFORE EXECUTION
+        const registry = getToolRegistry();
+        if (registry.isInitialized()) {
+            const validation = registry.validatePlanTools(plan.steps);
+            if (!validation.valid) {
+                const errorDetail = validation.errors.map(err => {
+                    const toolName = err.replace("Unknown tool: '", "").replace("'", "");
+                    const similar = registry.findSimilarTools(toolName);
+                    return similar.length > 0
+                        ? `${err}. Did you mean: ${similar.join(', ')}?`
+                        : err;
+                }).join('; ');
+
+                console.error(`[TETYANA] ❌ Plan validation failed: ${errorDetail}`);
+                this.emitStatus("error", `Невідомі інструменти: ${errorDetail}`);
+                throw new Error(`Plan validation failed: ${errorDetail}`);
+            }
+            console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
+        } else {
+            console.warn('[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation');
+        }
 
         try {
             for (let i = 0; i < plan.steps.length; i++) {

@@ -7,6 +7,7 @@ import { EventEmitter } from 'events';
 import { KPP_Packet, SecurityScope, createPacket, PacketIntent } from '../protocol/nexus';
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { AGENT_PERSONAS } from './agentPersonas';
+import { getToolRegistry } from '../core/ToolRegistry';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import type { McpBridge } from '../mcp/McpBridge';
@@ -123,12 +124,18 @@ export class CortexBrain extends EventEmitter {
       this.mcpBridges['filesystem'] = fsBridge;
       this.mcpBridges['os'] = osBridge;
 
-      // Register generic tool mapping
+      // Register tools in centralized ToolRegistry
+      const registry = getToolRegistry();
+      registry.registerMCPTools(fsTools, 'filesystem', 'kontur://organ/mcp/filesystem');
+      registry.registerMCPTools(osTools, 'os', 'kontur://organ/mcp/os');
+      registry.setInitialized();
+
+      // Also keep local toolsMap for backward compat
       fsTools.forEach(tool => this.toolsMap[tool.name] = 'kontur://organ/mcp/filesystem');
       osTools.forEach(tool => this.toolsMap[tool.name] = 'kontur://organ/mcp/os');
 
-      // Update System Prompt with Tool Definitions
-      const toolDesc = allTools.map((t: any) => `- ${t.name}: ${t.description} (Args: ${JSON.stringify(t.inputSchema)})`).join('\n');
+      // Update System Prompt with Tool Definitions from Registry
+      const toolDesc = registry.generateToolPrompt();
       const systemContext = `
 ## SYSTEM CONTEXT:
 - User Home Directory: ${homeDir}
