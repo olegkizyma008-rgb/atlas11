@@ -35,45 +35,6 @@ export class TetyanaExecutor extends EventEmitter {
         const executionConfig = getExecutionConfig();
         const usePythonBridge = executionConfig.engine === 'python-bridge';
 
-        if (usePythonBridge) {
-            // Experimental Open Interpreter Bridge Execution
-            try {
-                // Build rich prompt with user goal and steps for context
-                const stepsDescription = plan.steps
-                    .map((s, i) => `${i + 1}. ${s.action}${s.args ? `: ${JSON.stringify(s.args)}` : ''}`)
-                    .join('\n');
-
-                const prompt = `User Request: ${plan.goal}
-
-Execution Plan:
-${stepsDescription}
-
-Execute this plan step by step. Use available tools to complete each action.`;
-
-                const bridge = new OpenInterpreterBridge();
-
-                if (OpenInterpreterBridge.checkEnvironment()) {
-                    this.core.emit('tetyana:log', { message: '[Bridge] Handing over to Open Interpreter...' });
-                    const result = await bridge.execute(prompt);
-                    this.core.emit('tetyana:log', { message: `[Bridge] Result: ${result}` });
-
-                    // Emit a success packet artificially
-                    this.core.emit('tetyana:done', {
-                        correlation_id: inputPacket.nexus.correlation_id, // Accessing via nexus
-                        source: 'tetyana',
-                        target: inputPacket.route.from, // Accessing via route
-                        data: { result }
-                    });
-                    return;
-                } else {
-                    this.core.emit('tetyana:error', { message: '[Bridge] Python environment not found!' });
-                }
-            } catch (err: any) {
-                this.core.emit('tetyana:error', { message: `[Bridge] Execution Failed: ${err.message}` });
-                return;
-            }
-        }
-
         if (this.active) {
             console.warn('[TETYANA] Already executing a plan. Queuing not implemented yet.');
             return;
@@ -81,7 +42,7 @@ Execute this plan step by step. Use available tools to complete each action.`;
 
         this.active = true;
         this.currentPlan = plan;
-        console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
+        console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps) [Engine: ${usePythonBridge ? 'HYBRID (Python+Native)' : 'NATIVE'}]`);
 
         // Notify UI of start
         this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
@@ -91,7 +52,8 @@ Execute this plan step by step. Use available tools to complete each action.`;
 
         // 🛡️ VALIDATE ALL TOOLS BEFORE EXECUTION
         const registry = getToolRegistry();
-        if (registry.isInitialized()) {
+        // Skip validation for Python Bridge as it handles tools dynamically
+        if (!usePythonBridge && registry.isInitialized()) {
             const validation = registry.validatePlanTools(plan.steps);
             if (!validation.valid) {
                 const errorDetail = validation.errors.map(err => {
@@ -107,9 +69,10 @@ Execute this plan step by step. Use available tools to complete each action.`;
                 throw new Error(`Plan validation failed: ${errorDetail}`);
             }
             console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
-        } else {
+        } else if (!usePythonBridge) { // Only warn if not using Python bridge and registry isn't initialized
             console.warn('[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation');
         }
+
 
         try {
             for (let i = 0; i < plan.steps.length; i++) {
@@ -139,8 +102,15 @@ Execute this plan step by step. Use available tools to complete each action.`;
                 // 1. Validate with Grisha (security check)
                 await this.validateStep(step, stepNum);
 
-                // 2. Execute Step
-                const result = await this.executeStep(step, stepNum);
+                // 2. Execute Step (HYBRID LOGIC)
+                let result;
+                if (usePythonBridge) {
+                    // Execute SINGLE step via Python Bridge
+                    result = await this.executeStepViaBridge(step, stepNum);
+                } else {
+                    // Execute via Native MCP
+                    result = await this.executeStep(step, stepNum);
+                }
 
                 // 👁️ VISION OPTIMIZATION: Resume for verification
                 vision.resumeCapture();
@@ -437,6 +407,40 @@ Execute this plan step by step. Use available tools to complete each action.`;
             { type, msg }
         );
         this.core.ingest(packet);
+    }
+
+
+    /**
+     * Execute a SINGLE step via Python Bridge
+     */
+    private async executeStepViaBridge(step: PlanStep, stepNum: number): Promise<any> {
+        return new Promise(async (resolve, reject) => {
+            console.log(`[TETYANA] 🐍 Executing Step ${stepNum} via Python Bridge: ${step.action}`);
+
+            const bridge = new OpenInterpreterBridge();
+            if (!OpenInterpreterBridge.checkEnvironment()) {
+                reject(new Error("Python environment not found"));
+                return;
+            }
+
+            // Construct specific prompt for this step
+            const stepPrompt = `Review this entire plan context, but ONLY execute Step ${stepNum}.
+            
+Task: ${step.action}
+Arguments: ${JSON.stringify(step.args)}
+
+Do not execute previous or future steps. Do not ask for confirmation.
+Write and run the python code to perform this specific action immediately.`;
+
+            try {
+                this.core.emit('tetyana:log', { message: `[Bridge] Executing Step ${stepNum}...` });
+                const result = await bridge.execute(stepPrompt);
+                this.core.emit('tetyana:log', { message: `[Bridge] Step ${stepNum} Done.` });
+                resolve(result);
+            } catch (e: any) {
+                reject(e);
+            }
+        });
     }
 
     private speak(text: string) {

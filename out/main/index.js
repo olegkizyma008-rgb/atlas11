@@ -2599,8 +2599,10 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
           "kontur://core/system",
           PacketIntent.AI_PLAN,
           {
+            goal: prompt,
+            // Original user request - critical for OpenInterpreter context
             reasoning: decision.thought,
-            user_response: decision.response,
+            user_response_ua: decision.response,
             steps: decision.plan.map((step) => ({
               tool: step.tool,
               action: step.action,
@@ -3579,42 +3581,17 @@ class TetyanaExecutor extends events.EventEmitter {
   async execute(plan, inputPacket) {
     const executionConfig = getExecutionConfig();
     const usePythonBridge = executionConfig.engine === "python-bridge";
-    if (usePythonBridge) {
-      try {
-        const prompt = plan.goal;
-        const bridge = new OpenInterpreterBridge();
-        if (OpenInterpreterBridge.checkEnvironment()) {
-          this.core.emit("tetyana:log", { message: "[Bridge] Handing over to Open Interpreter..." });
-          const result = await bridge.execute(prompt);
-          this.core.emit("tetyana:log", { message: `[Bridge] Result: ${result}` });
-          this.core.emit("tetyana:done", {
-            correlation_id: inputPacket.nexus.correlation_id,
-            // Accessing via nexus
-            source: "tetyana",
-            target: inputPacket.route.from,
-            // Accessing via route
-            data: { result }
-          });
-          return;
-        } else {
-          this.core.emit("tetyana:error", { message: "[Bridge] Python environment not found!" });
-        }
-      } catch (err) {
-        this.core.emit("tetyana:error", { message: `[Bridge] Execution Failed: ${err.message}` });
-        return;
-      }
-    }
     if (this.active) {
       console.warn("[TETYANA] Already executing a plan. Queuing not implemented yet.");
       return;
     }
     this.active = true;
     this.currentPlan = plan;
-    console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
+    console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps) [Engine: ${usePythonBridge ? "HYBRID (Python+Native)" : "NATIVE"}]`);
     this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
     await this.startVisionObservation(plan.goal);
     const registry = getToolRegistry();
-    if (registry.isInitialized()) {
+    if (!usePythonBridge && registry.isInitialized()) {
       const validation = registry.validatePlanTools(plan.steps);
       if (!validation.valid) {
         const errorDetail = validation.errors.map((err) => {
@@ -3627,7 +3604,7 @@ class TetyanaExecutor extends events.EventEmitter {
         throw new Error(`Plan validation failed: ${errorDetail}`);
       }
       console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
-    } else {
+    } else if (!usePythonBridge) {
       console.warn("[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation");
     }
     try {
@@ -3649,7 +3626,12 @@ class TetyanaExecutor extends events.EventEmitter {
           await vision.autoSelectSource(appName);
         }
         await this.validateStep(step, stepNum);
-        const result = await this.executeStep(step, stepNum);
+        let result;
+        if (usePythonBridge) {
+          result = await this.executeStepViaBridge(step, stepNum);
+        } else {
+          result = await this.executeStep(step, stepNum);
+        }
         vision.resumeCapture();
         const visionResult = await this.verifyStepWithVision(step, stepNum);
         if (visionResult && !visionResult.verified && visionResult.type === "alert") {
@@ -3872,6 +3854,34 @@ class TetyanaExecutor extends events.EventEmitter {
       { type, msg }
     );
     this.core.ingest(packet);
+  }
+  /**
+   * Execute a SINGLE step via Python Bridge
+   */
+  async executeStepViaBridge(step, stepNum) {
+    return new Promise(async (resolve, reject) => {
+      console.log(`[TETYANA] 🐍 Executing Step ${stepNum} via Python Bridge: ${step.action}`);
+      const bridge = new OpenInterpreterBridge();
+      if (!OpenInterpreterBridge.checkEnvironment()) {
+        reject(new Error("Python environment not found"));
+        return;
+      }
+      const stepPrompt = `Review this entire plan context, but ONLY execute Step ${stepNum}.
+            
+Task: ${step.action}
+Arguments: ${JSON.stringify(step.args)}
+
+Do not execute previous or future steps. Do not ask for confirmation.
+Write and run the python code to perform this specific action immediately.`;
+      try {
+        this.core.emit("tetyana:log", { message: `[Bridge] Executing Step ${stepNum}...` });
+        const result = await bridge.execute(stepPrompt);
+        this.core.emit("tetyana:log", { message: `[Bridge] Step ${stepNum} Done.` });
+        resolve(result);
+      } catch (e) {
+        reject(e);
+      }
+    });
   }
   speak(text) {
     const packet = createPacket(
