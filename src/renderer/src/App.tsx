@@ -262,7 +262,7 @@ function App(): JSX.Element {
 
             {/* Right Panel - Chat with Controls */}
             <ChatPanel
-                messages={logs}
+                messages={logs.filter(l => ['USER', 'ATLAS', 'TETYANA', 'GRISHA', 'SYSTEM'].includes(l.source))}
                 onSendMessage={handleSendMessage}
                 onMicToggle={setMicEnabled}
                 onSpeakerToggle={setSpeakerEnabled}
