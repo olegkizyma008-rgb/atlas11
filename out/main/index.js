@@ -1959,6 +1959,9 @@ const AGENT_PERSONAS = {
   TETYANA,
   GRISHA
 };
+function getPersona(agentName) {
+  return AGENT_PERSONAS[agentName.toUpperCase()] || ATLAS;
+}
 class ToolRegistry {
   tools = /* @__PURE__ */ new Map();
   initialized = false;
@@ -2546,74 +2549,69 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
    * Process packet with unified reasoning
    */
   /**
-   * Process packet with unified reasoning
-   * OVERRIDES CortexBrain.process to ensure we use the new 'think' logic
+   * Process packet with unified reasoning - PURE INTELLIGENCE approach
+   * Always uses ATLAS persona with JSON output
+   * LLM decides whether to create a plan or just respond
    */
   async process(packet) {
     const prompt = packet.payload.prompt || packet.instruction.op_code;
     console.log(`[UNIFIED-BRAIN] 🧠 Processing: "${prompt}"`);
     try {
-      const mode = this.detectMode(prompt, packet);
+      const atlasPersona = getPersona("ATLAS");
       const response = await this.think({
-        system_prompt: "You are KONTUR Unified Brain (Gemini 2.0).",
+        system_prompt: atlasPersona.systemPrompt,
         user_prompt: prompt,
-        mode,
+        mode: "planning",
+        // Always request JSON format
         tools: []
-        // We could inject tools here if we had them in request
       });
       if (!response.text)
         throw new Error("No response text from Brain");
-      if (mode === "chat") {
-        const chatPacket = createPacket(
+      let decision;
+      try {
+        const cleanText = response.text.replace(/```json\n?|```/g, "").trim();
+        decision = JSON.parse(cleanText);
+      } catch (e) {
+        console.warn("[UNIFIED-BRAIN] ⚠️ Non-JSON response, treating as chat");
+        decision = { thought: "Plain text response", plan: [], response: response.text };
+      }
+      console.log(`[UNIFIED-BRAIN] 📋 Decision: plan=${decision.plan?.length || 0} steps, response="${decision.response?.slice(0, 50) || "none"}..."`);
+      if (decision.plan && decision.plan.length > 0) {
+        console.log(`[UNIFIED-BRAIN] ⚡ Action Mode: ${decision.plan.length} steps to execute`);
+        const systemPacket = createPacket(
           "kontur://cortex/ai/main",
-          "kontur://organ/ui/shell",
-          PacketIntent.EVENT,
-          { msg: response.text, type: "chat" }
-        );
-        this.emit("decision", chatPacket);
-      } else {
-        let decision;
-        try {
-          decision = JSON.parse(response.text);
-        } catch (e) {
-          decision = { response: response.text, thought: "Raw output", plan: [] };
-        }
-        if (decision.plan && decision.plan.length > 0) {
-          const systemPacket = createPacket(
-            "kontur://cortex/ai/main",
-            "kontur://core/system",
-            PacketIntent.AI_PLAN,
-            {
-              reasoning: decision.thought,
-              user_response: decision.response,
-              steps: decision.plan.map((step) => ({
-                tool: step.tool,
-                action: step.action,
-                args: step.args,
-                target: step.target || "kontur://organ/worker"
-                // Default, router handles optimization
-              }))
-            }
-          );
-          this.emit("decision", systemPacket);
-          if (decision.response) {
-            const chatPacket = createPacket(
-              "kontur://cortex/ai/main",
-              "kontur://organ/ui/shell",
-              PacketIntent.EVENT,
-              { msg: decision.response, type: "chat", reasoning: decision.thought }
-            );
-            this.emit("decision", chatPacket);
+          "kontur://core/system",
+          PacketIntent.AI_PLAN,
+          {
+            reasoning: decision.thought,
+            user_response: decision.response,
+            steps: decision.plan.map((step) => ({
+              tool: step.tool,
+              action: step.action,
+              args: step.args,
+              target: step.target || "kontur://organ/worker"
+            }))
           }
-        } else {
+        );
+        this.emit("decision", systemPacket);
+        if (decision.response) {
           const chatPacket = createPacket(
             "kontur://cortex/ai/main",
             "kontur://organ/ui/shell",
             PacketIntent.EVENT,
-            { msg: decision.response || response.text, type: "chat", reasoning: decision.thought }
+            { msg: decision.response, type: "chat", reasoning: decision.thought }
           );
           this.emit("decision", chatPacket);
         }
+      } else {
+        console.log(`[UNIFIED-BRAIN] 💬 Chat Mode: no action needed`);
+        const chatPacket = createPacket(
+          "kontur://cortex/ai/main",
+          "kontur://organ/ui/shell",
+          PacketIntent.EVENT,
+          { msg: decision.response || response.text, type: "chat" }
+        );
+        this.emit("decision", chatPacket);
       }
     } catch (error) {
       console.error("[UNIFIED-BRAIN] ❌ Process Error:", error);
@@ -2621,20 +2619,60 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
         "kontur://cortex/ai/main",
         "kontur://organ/ui/shell",
         PacketIntent.ERROR,
-        { error: error.message, msg: "Brain Failure: " + error.message }
+        { error: error.message, msg: "Помилка обробки: " + error.message }
       );
       this.emit("decision", errorPacket);
     }
   }
   /**
-   * Detect whether request should use chat or planning mode
+   * @deprecated No longer used - mode is now determined by LLM via plan presence (Pure Intelligence approach)
+   * Kept for reference only. Will be removed in future version.
    */
   detectMode(prompt, packet) {
     if (packet.instruction.intent === PacketIntent.AI_PLAN) {
       console.log(`[UNIFIED-BRAIN] 🔍 Mode: planning (intent=${packet.instruction.intent})`);
       return "planning";
     }
-    const planningKeywords = ["plan", "execute", "task", "do", "create", "build", "make", "develop", "implement"];
+    const planningKeywords = [
+      // English
+      "plan",
+      "execute",
+      "task",
+      "do",
+      "create",
+      "build",
+      "make",
+      "develop",
+      "implement",
+      "open",
+      "run",
+      "save",
+      "write",
+      "multiply",
+      "calculate",
+      // Ukrainian imperatives (дієслова наказового способу)
+      "відкрий",
+      "запусти",
+      "створи",
+      "зроби",
+      "напиши",
+      "збережи",
+      "видали",
+      "перемнож",
+      "підрахуй",
+      "порахуй",
+      "обчисли",
+      "знайди",
+      "покажи",
+      "встанови",
+      "налаштуй",
+      "скопіюй",
+      "перемісти",
+      "виконай",
+      "додай",
+      "введи",
+      "набери"
+    ];
     const lowerPrompt = prompt.toLowerCase();
     const matchedKeyword = planningKeywords.find((kw) => lowerPrompt.includes(kw));
     if (matchedKeyword) {
@@ -2645,8 +2683,9 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
     return "chat";
   }
   async processUnified(packet) {
+    const atlasPersona = getPersona("ATLAS");
     const response = await this.think({
-      system_prompt: "You are KONTUR Unified Brain",
+      system_prompt: atlasPersona.systemPrompt,
       user_prompt: packet.payload.prompt || JSON.stringify(packet.payload)
     });
     const resultPacket = createPacket(
@@ -3076,7 +3115,10 @@ LANGUAGE RULES:
 }
 class GrishaVisionService extends events.EventEmitter {
   isObserving = false;
+  isPaused = false;
   captureInterval = null;
+  captureIntervalMs = 2e3;
+  // 2s = 0.5 FPS (optimized for API)
   geminiLive = null;
   frameCount = 0;
   isSpeaking = false;
@@ -3196,11 +3238,33 @@ class GrishaVisionService extends events.EventEmitter {
     console.log(`[GRISHA VISION] 👁️ Observation stopped after ${this.frameCount} frames`);
     this.isObserving = false;
     this.isSpeaking = false;
+    this.isPaused = false;
     if (this.captureInterval) {
       clearInterval(this.captureInterval);
       this.captureInterval = null;
     }
     this.emitResult("confirmation", `Спостереження завершено. Перевірено ${this.frameCount} кадрів.`);
+  }
+  /**
+   * Pause capture (during step execution)
+   */
+  pauseCapture() {
+    if (!this.isPaused) {
+      this.isPaused = true;
+      console.log("[GRISHA VISION] ⏸️ Capture paused");
+    }
+  }
+  /**
+   * Resume capture (for step verification)
+   */
+  resumeCapture() {
+    if (this.isPaused) {
+      this.isPaused = false;
+      console.log("[GRISHA VISION] ▶️ Capture resumed");
+      if (this.mode === "live") {
+        this.captureAndSendLiveFrame();
+      }
+    }
   }
   /**
    * Verify a step was executed (On-Demand mode)
@@ -3302,11 +3366,11 @@ class GrishaVisionService extends events.EventEmitter {
     }
     await this.captureAndSendLiveFrame();
     this.captureInterval = setInterval(async () => {
-      if (this.isSpeaking)
+      if (this.isSpeaking || this.isPaused)
         return;
       await this.captureAndSendLiveFrame();
-    }, 500);
-    this.emitResult("observation", `Live спостереження розпочато. ${taskDescription || "Моніторю виконання..."}`);
+    }, this.captureIntervalMs);
+    this.emitResult("observation", `Live спостереження розпочато (${this.captureIntervalMs}ms). ${taskDescription || "Моніторю виконання..."}`);
   }
   /**
    * Capture and send frame to Gemini Live
@@ -3450,8 +3514,16 @@ class TetyanaExecutor extends events.EventEmitter {
           this.emitStatus("thinking", "🤔 Аналізую план дій (Gemini 3)...");
           await this.consultReasoning(plan);
         }
+        const vision = this.visionService || getGrishaVisionService();
+        vision.pauseCapture();
+        const appName = step.args?.appName || step.args?.app;
+        if (appName) {
+          console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
+          await vision.autoSelectSource(appName);
+        }
         await this.validateStep(step, stepNum);
         const result = await this.executeStep(step, stepNum);
+        vision.resumeCapture();
         const visionResult = await this.verifyStepWithVision(step, stepNum);
         if (visionResult && !visionResult.verified && visionResult.type === "alert") {
           console.warn(`[TETYANA] ⚠️ Vision alert: ${visionResult.message}`);
@@ -3722,8 +3794,11 @@ class TetyanaCapsule {
   }
   async forge_tool(args) {
     console.log(`TETYANA: Forging tool ${args.name}...`);
+    const persona = getPersona("TETYANA");
     const response = await this.brain.think({
-      system_prompt: `You are TETYANA, the Builder. Generate a TypeScript tool named "${args.name}". Return ONLY the code.`,
+      system_prompt: `${persona.systemPrompt}
+
+Generate a TypeScript tool named "${args.name}". Return ONLY the code.`,
       user_prompt: `Spec: ${args.spec}`
     });
     const result = await this.forge.synthesize({
@@ -4272,8 +4347,11 @@ class GrishaCapsule {
     const allThreats = [...recentThreats, ...visualThreats];
     const threatLevel = allThreats.length > 3 ? "high" : allThreats.length > 0 ? "medium" : "low";
     const context = `Audit log: ${this.auditLog.length} ops. Recent threats: ${allThreats.join("; ") || "None detected"}`;
+    const persona = getPersona("GRISHA");
     const response = await this.brain.think({
-      system_prompt: "You are GRISHA, the Sentinel. Assess system security threats. Return JSON: { threats: string[], level: 'low'|'medium'|'high' }.",
+      system_prompt: `${persona.systemPrompt}
+
+Assess system security threats. Return JSON: { threats: string[], level: 'low'|'medium'|'high' }.`,
       user_prompt: `Context: ${context}`
     });
     let report = {

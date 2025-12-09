@@ -37,7 +37,9 @@ export interface ScreenSource {
 
 export class GrishaVisionService extends EventEmitter {
     private isObserving: boolean = false;
+    private isPaused: boolean = false;
     private captureInterval: NodeJS.Timeout | null = null;
+    private captureIntervalMs: number = 2000; // 2s = 0.5 FPS (optimized for API)
     private geminiLive: any = null;
     private frameCount: number = 0;
     private isSpeaking: boolean = false;
@@ -174,6 +176,7 @@ export class GrishaVisionService extends EventEmitter {
         console.log(`[GRISHA VISION] 👁️ Observation stopped after ${this.frameCount} frames`);
         this.isObserving = false;
         this.isSpeaking = false;
+        this.isPaused = false;
 
         if (this.captureInterval) {
             clearInterval(this.captureInterval);
@@ -181,6 +184,30 @@ export class GrishaVisionService extends EventEmitter {
         }
 
         this.emitResult('confirmation', `Спостереження завершено. Перевірено ${this.frameCount} кадрів.`);
+    }
+
+    /**
+     * Pause capture (during step execution)
+     */
+    pauseCapture() {
+        if (!this.isPaused) {
+            this.isPaused = true;
+            console.log('[GRISHA VISION] ⏸️ Capture paused');
+        }
+    }
+
+    /**
+     * Resume capture (for step verification)
+     */
+    resumeCapture() {
+        if (this.isPaused) {
+            this.isPaused = false;
+            console.log('[GRISHA VISION] ▶️ Capture resumed');
+            // Send immediate frame on resume for verification
+            if (this.mode === 'live') {
+                this.captureAndSendLiveFrame();
+            }
+        }
     }
 
     /**
@@ -302,11 +329,11 @@ export class GrishaVisionService extends EventEmitter {
         await this.captureAndSendLiveFrame();
 
         this.captureInterval = setInterval(async () => {
-            if (this.isSpeaking) return;
+            if (this.isSpeaking || this.isPaused) return;
             await this.captureAndSendLiveFrame();
-        }, 500);
+        }, this.captureIntervalMs);
 
-        this.emitResult('observation', `Live спостереження розпочато. ${taskDescription || 'Моніторю виконання...'}`);
+        this.emitResult('observation', `Live спостереження розпочато (${this.captureIntervalMs}ms). ${taskDescription || 'Моніторю виконання...'}`);
     }
 
     /**

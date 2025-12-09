@@ -82,12 +82,25 @@ export class TetyanaExecutor extends EventEmitter {
                     await this.consultReasoning(plan);
                 }
 
+                // 👁️ VISION OPTIMIZATION: Pause during step execution
+                const vision = this.visionService || getGrishaVisionService();
+                vision.pauseCapture();
+
+                // 🎯 Auto-select window if step targets an app
+                const appName = step.args?.appName || step.args?.app;
+                if (appName) {
+                    console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
+                    await vision.autoSelectSource(appName);
+                }
 
                 // 1. Validate with Grisha (security check)
                 await this.validateStep(step, stepNum);
 
                 // 2. Execute Step
                 const result = await this.executeStep(step, stepNum);
+
+                // 👁️ VISION OPTIMIZATION: Resume for verification
+                vision.resumeCapture();
 
                 // 3. Vision Verification (verify step was executed correctly)
                 const visionResult = await this.verifyStepWithVision(step, stepNum);
