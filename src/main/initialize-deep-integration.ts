@@ -319,6 +319,18 @@ export class DeepIntegrationSystem {
       }
     });
 
+    // Model Status for UI Indicator
+    ipcMain.removeHandler('vision:get_model_status');
+    ipcMain.handle('vision:get_model_status', () => {
+      if (!this.geminiLive) {
+        return { status: 'disconnected', error: null };
+      }
+      return {
+        status: this.geminiLive.modelStatus,
+        error: this.geminiLive.errorType
+      };
+    });
+
     console.log('[DEEP-INTEGRATION] ✅ IPC Bridge established');
   }
 

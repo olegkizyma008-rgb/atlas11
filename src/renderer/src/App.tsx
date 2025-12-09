@@ -212,7 +212,8 @@ function App(): JSX.Element {
         // Send to backend via IPC
         try {
             const payload = { prompt: text, task: text }; // task/prompt for flexibility
-            const packet = createPacket('AI_PLAN', payload);
+            // EVENT for chat messages, AI_PLAN would be for explicit planning requests
+            const packet = createPacket('EVENT', payload);
             packet.nexus.integrity = await computeIntegrity(payload);
 
             // @ts-ignore

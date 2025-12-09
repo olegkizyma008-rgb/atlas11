@@ -20,6 +20,7 @@ interface ThinkRequest {
   user_prompt: string;
   model?: string;
   tools?: any[];
+  mode?: 'chat' | 'planning'; // Determines response format: text for chat, JSON for planning
 }
 
 interface ThinkResponse {
@@ -103,23 +104,30 @@ export class UnifiedBrain extends CortexBrain {
 
     try {
       const genAI = new GoogleGenAI({ apiKey });
-      // User requested 'gemini-2.5-flash'
       const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName})...`);
+      const mode = request.mode || 'chat'; // Default to chat mode
+
+      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName}) in ${mode} mode...`);
 
       const systemPrompt = `${request.system_prompt}\n\nIMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
+
+      // Build config based on mode
+      const config: any = {
+        systemInstruction: systemPrompt,
+        temperature: 0.7,
+      };
+
+      // Only force JSON for planning mode
+      if (mode === 'planning') {
+        config.responseMimeType = 'application/json';
+      }
 
       const response = await genAI.models.generateContent({
         model: modelName,
         contents: [
           { role: 'user', parts: [{ text: request.user_prompt }] }
         ],
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.7, // Balance between creativity and precision
-          responseMimeType: 'application/json', // Force JSON structure
-          // safetySettings: ... (Configure as needed)
-        }
+        config
       });
 
       const content = response.candidates?.[0]?.content?.parts?.[0]?.text;
@@ -128,31 +136,43 @@ export class UnifiedBrain extends CortexBrain {
         throw new Error('Empty response from Cortex');
       }
 
-      // Parse JSON response safely
-      let parsed: any;
-      try {
-        parsed = JSON.parse(content);
-      } catch (e) {
-        // Fallback if model didn't return pure JSON (sometimes adds markdown blocks)
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error('Failed to parse JSON from Cortex response');
+      // Handle response based on mode
+      if (mode === 'chat') {
+        // Simple text response for chat
+        return {
+          text: content,
+          usage: {
+            input_tokens: response.usageMetadata?.promptTokenCount || 0,
+            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+          }
+        };
+      } else {
+        // JSON parsing for planning mode
+        let parsed: any;
+        try {
+          parsed = JSON.parse(content);
+        } catch (e) {
+          // Fallback if model didn't return pure JSON (sometimes adds markdown blocks)
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error('Failed to parse JSON from Cortex response');
+          }
         }
-      }
 
-      return {
-        text: JSON.stringify(parsed), // Keep consistent format for internal passing
-        tool_calls: parsed.plan?.map((step: any) => ({
-          name: step.tool,
-          args: step.args
-        })) || [],
-        usage: {
-          input_tokens: response.usageMetadata?.promptTokenCount || 0,
-          output_tokens: response.usageMetadata?.candidatesTokenCount || 0
-        }
-      };
+        return {
+          text: JSON.stringify(parsed), // Keep consistent format for internal passing
+          tool_calls: parsed.plan?.map((step: any) => ({
+            name: step.tool,
+            args: step.args
+          })) || [],
+          usage: {
+            input_tokens: response.usageMetadata?.promptTokenCount || 0,
+            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+          }
+        };
+      }
 
     } catch (error: any) {
       console.error('[UNIFIED-BRAIN] ❌ Cortex Reasoning Failed:', error.message);
@@ -285,66 +305,78 @@ export class UnifiedBrain extends CortexBrain {
     console.log(`[UNIFIED-BRAIN] 🧠 Processing: "${prompt}"`);
 
     try {
-      // 1. Think using the new architecture
+      // 1. Detect mode based on packet intent and prompt content
+      const mode = this.detectMode(prompt, packet);
+
+      // 2. Think using the new architecture with detected mode
       const response = await this.think({
         system_prompt: 'You are KONTUR Unified Brain (Gemini 2.0).',
         user_prompt: prompt,
+        mode,
         tools: [], // We could inject tools here if we had them in request
       });
 
-      // 2. Parse the result (The 'think' method returns text which is JSON string)
+      // 3. Handle response based on mode
       if (!response.text) throw new Error("No response text from Brain");
 
-      let decision: any;
-      try {
-        decision = JSON.parse(response.text);
-      } catch (e) {
-        // Fallback if already parsed or malformed
-        decision = { response: response.text, thought: "Raw output", plan: [] };
-      }
-
-      // 3. Emit Decision (Standard Cortex Protocol)
-      // We construct a similar structure to CortexBrain.handlePlan/handleChat
-
-      // If there is a plan
-      if (decision.plan && decision.plan.length > 0) {
-        const systemPacket = createPacket(
-          'kontur://cortex/ai/main',
-          'kontur://core/system',
-          PacketIntent.AI_PLAN,
-          {
-            reasoning: decision.thought,
-            user_response: decision.response,
-            steps: decision.plan.map((step: any) => ({
-              tool: step.tool,
-              action: step.action,
-              args: step.args,
-              target: 'kontur://organ/worker' // Default, router handles optimization
-            }))
-          }
-        );
-        this.emit('decision', systemPacket);
-
-        // Also emit chat if present
-        if (decision.response) {
-          const chatPacket = createPacket(
-            'kontur://cortex/ai/main',
-            'kontur://organ/ui/shell',
-            PacketIntent.EVENT,
-            { msg: decision.response, type: 'chat', reasoning: decision.thought }
-          );
-          this.emit('decision', chatPacket);
-        }
-
-      } else {
-        // Just Chat
+      if (mode === 'chat') {
+        // Simple chat - emit text directly without JSON parsing
         const chatPacket = createPacket(
           'kontur://cortex/ai/main',
           'kontur://organ/ui/shell',
           PacketIntent.EVENT,
-          { msg: decision.response, type: 'chat', reasoning: decision.thought }
+          { msg: response.text, type: 'chat' }
         );
         this.emit('decision', chatPacket);
+      } else {
+        // Planning mode - parse JSON and emit structured plan
+        let decision: any;
+        try {
+          decision = JSON.parse(response.text);
+        } catch (e) {
+          // Fallback if already parsed or malformed
+          decision = { response: response.text, thought: "Raw output", plan: [] };
+        }
+
+        // If there is a plan
+        if (decision.plan && decision.plan.length > 0) {
+          const systemPacket = createPacket(
+            'kontur://cortex/ai/main',
+            'kontur://core/system',
+            PacketIntent.AI_PLAN,
+            {
+              reasoning: decision.thought,
+              user_response: decision.response,
+              steps: decision.plan.map((step: any) => ({
+                tool: step.tool,
+                action: step.action,
+                args: step.args,
+                target: 'kontur://organ/worker' // Default, router handles optimization
+              }))
+            }
+          );
+          this.emit('decision', systemPacket);
+
+          // Also emit chat if present
+          if (decision.response) {
+            const chatPacket = createPacket(
+              'kontur://cortex/ai/main',
+              'kontur://organ/ui/shell',
+              PacketIntent.EVENT,
+              { msg: decision.response, type: 'chat', reasoning: decision.thought }
+            );
+            this.emit('decision', chatPacket);
+          }
+        } else {
+          // Just Chat from planning response
+          const chatPacket = createPacket(
+            'kontur://cortex/ai/main',
+            'kontur://organ/ui/shell',
+            PacketIntent.EVENT,
+            { msg: decision.response || response.text, type: 'chat', reasoning: decision.thought }
+          );
+          this.emit('decision', chatPacket);
+        }
       }
 
     } catch (error: any) {
@@ -357,6 +389,31 @@ export class UnifiedBrain extends CortexBrain {
       );
       this.emit('decision', errorPacket);
     }
+  }
+
+  /**
+   * Detect whether request should use chat or planning mode
+   */
+  private detectMode(prompt: string, packet: KPP_Packet): 'chat' | 'planning' {
+    // If intent is already AI_PLAN - this is planning
+    if (packet.instruction.intent === PacketIntent.AI_PLAN) {
+      console.log(`[UNIFIED-BRAIN] 🔍 Mode: planning (intent=${packet.instruction.intent})`);
+      return 'planning';
+    }
+
+    // Check for planning keywords in prompt
+    const planningKeywords = ['plan', 'execute', 'task', 'do', 'create', 'build', 'make', 'develop', 'implement'];
+    const lowerPrompt = prompt.toLowerCase();
+
+    const matchedKeyword = planningKeywords.find(kw => lowerPrompt.includes(kw));
+    if (matchedKeyword) {
+      console.log(`[UNIFIED-BRAIN] 🔍 Mode: planning (keyword="${matchedKeyword}" in "${prompt}")`);
+      return 'planning';
+    }
+
+    // Default to chat for greetings and questions
+    console.log(`[UNIFIED-BRAIN] 🔍 Mode: chat (default for "${prompt}")`);
+    return 'chat';
   }
 
   async processUnified(packet: KPP_Packet): Promise<KPP_Packet> {

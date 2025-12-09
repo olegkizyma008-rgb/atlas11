@@ -10,9 +10,15 @@ import WebSocket from 'ws';
 // Polyfill WebSocket for Node.js environment if needed by SDK
 global.WebSocket = WebSocket as any;
 
+// Model status types for UI indicator
+export type ModelStatus = 'connected' | 'connecting' | 'disconnected' | 'error';
+export type ModelError = 'API_KEY_EXPIRED' | 'QUOTA_EXCEEDED' | 'RATE_LIMIT' | 'MODEL_ACCESS_DENIED' | 'INVALID_CONFIG' | null;
+
 export class GeminiLiveService extends EventEmitter {
     private session: Session | null = null;
-    private isConnected: boolean = false;
+    private _isConnected: boolean = false;
+    private _status: ModelStatus = 'disconnected';
+    private _lastError: ModelError = null;
     private config: any;
 
     constructor(private apiKey: string) {
@@ -49,9 +55,11 @@ export class GeminiLiveService extends EventEmitter {
      * Connect to Gemini Live Session
      */
     async connect() {
-        if (this.isConnected) return;
+        if (this._isConnected) return;
 
         try {
+            this._status = 'connecting';
+            this._lastError = null;
             console.log('[GEMINI LIVE] 🔌 Connecting...');
             const genAI = new GoogleGenAI({ apiKey: this.apiKey });
 
@@ -90,37 +98,45 @@ export class GeminiLiveService extends EventEmitter {
                             console.error('\n\n[CRITICAL ERROR] 🛑 GEMINI API KEY EXPIRED');
                             console.error('Please renew your API key in the .env file immediately.');
                             console.error('Visit: https://aistudio.google.com/app/apikey\n\n');
+                            this._lastError = 'API_KEY_EXPIRED';
                             this.emit('error', new Error('API_KEY_EXPIRED'));
                         } else if (code === 1011 || reason.toLowerCase().includes('quota')) {
                             console.error('\n\n[CRITICAL ERROR] 🛑 GEMINI QUOTA EXCEEDED');
                             console.error('You have hit the usage limits for your API Key.');
                             console.error('Please check billing/quota at: https://aistudio.google.com/app/apikey\n\n');
+                            this._lastError = 'QUOTA_EXCEEDED';
                             this.emit('error', new Error('QUOTA_EXCEEDED'));
                         } else if (code === 1008 || reason.toLowerCase().includes('model')) {
                             console.error('\n\n[CRITICAL ERROR] 🛑 MODEL NOT FOUND OR ACCESS DENIED');
                             console.error(`Model: ${this.config.model}`);
                             console.error('The preview model may require special access.\n\n');
+                            this._lastError = 'MODEL_ACCESS_DENIED';
                             this.emit('error', new Error('MODEL_ACCESS_DENIED'));
                         } else if (code === 1007) {
                             console.error('\n\n[CRITICAL ERROR] 🛑 INVALID ARGUMENT / CONFIGURATION');
                             console.error('The configuration sent to Gemini Live API is invalid (Code 1007).');
                             console.error('Checking model compatibility...\n\n');
+                            this._lastError = 'INVALID_CONFIG';
                             this.emit('error', new Error('INVALID_CONFIG'));
                         } else if (reason) {
                             console.warn(`[GEMINI LIVE] ⚠️ Closed with reason: ${reason}`);
                         }
 
-                        this.isConnected = false;
+                        this._isConnected = false;
+                        this._status = 'error';
                         this.emit('disconnected');
                     }
                 }
             });
 
-            this.isConnected = true;
+            this._isConnected = true;
+            this._status = 'connected';
+            this._lastError = null;
             console.log('[GEMINI LIVE] ✅ Connected!');
             this.emit('connected');
 
         } catch (error) {
+            this._status = 'error';
             console.error('[GEMINI LIVE] ❌ Connection failed:', error);
             this.emit('error', error);
         }
@@ -160,7 +176,8 @@ export class GeminiLiveService extends EventEmitter {
                 await this.session.close();
             }
             this.session = null;
-            this.isConnected = false;
+            this._isConnected = false;
+            this._status = 'disconnected';
             console.log('[GEMINI LIVE] 🔌 Disconnected');
             this.emit('disconnected');
         }
@@ -170,7 +187,7 @@ export class GeminiLiveService extends EventEmitter {
      * Trigger generation with text (useful for starting conversation)
      */
     sendText(text: string) {
-        if (!this.isConnected || !this.session) return;
+        if (!this._isConnected || !this.session) return;
         this.session.sendClientContent({
             turns: [{ parts: [{ text }] }]
         });
@@ -180,7 +197,7 @@ export class GeminiLiveService extends EventEmitter {
      * Stream Audio Input (PCM 16kHz)
      */
     sendAudioChunk(base64Audio: string) {
-        if (!this.isConnected || !this.session) return;
+        if (!this._isConnected || !this.session) return;
 
         // Fix: Payload structure
         this.session.sendRealtimeInput({
@@ -195,7 +212,7 @@ export class GeminiLiveService extends EventEmitter {
      * Stream Video Frame (JPEG/PNG Base64)
      */
     sendVideoFrame(base64Image: string) {
-        if (!this.isConnected || !this.session) return;
+        if (!this._isConnected || !this.session) return;
 
         // Fix: Payload structure
         this.session.sendRealtimeInput({
@@ -204,5 +221,28 @@ export class GeminiLiveService extends EventEmitter {
                 data: base64Image
             }
         });
+    }
+
+    // ============ PUBLIC GETTERS FOR UI INDICATOR ============
+
+    /**
+     * Get current model connection status
+     */
+    get modelStatus(): ModelStatus {
+        return this._status;
+    }
+
+    /**
+     * Get last error type if any
+     */
+    get errorType(): ModelError {
+        return this._lastError;
+    }
+
+    /**
+     * Check if connected (backwards compatible)
+     */
+    get isConnected(): boolean {
+        return this._isConnected;
     }
 }

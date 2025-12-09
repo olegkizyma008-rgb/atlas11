@@ -27,6 +27,10 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
     const [showSourcePicker, setShowSourcePicker] = useState(false)
     const [selectedSource, setSelectedSource] = useState<SourceInfo | null>(null)
 
+    // Model status for indicator
+    const [modelStatus, setModelStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'error'>('disconnected')
+    const [modelError, setModelError] = useState<string | null>(null)
+
     const statusColors = {
         stable: { bg: 'rgba(16, 185, 129, 0.1)', border: '#10b981', text: 'text-emerald-400' },
         analyzing: { bg: 'rgba(234, 179, 8, 0.1)', border: '#eab308', text: 'text-yellow-400' },
@@ -35,6 +39,24 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
 
     const currentStatus = statusColors[status]
     const electron = (window as any).electron
+
+    // Poll model status every 2 seconds
+    useEffect(() => {
+        const pollModelStatus = async () => {
+            try {
+                const result = await electron.ipcRenderer.invoke('vision:get_model_status')
+                setModelStatus(result.status)
+                setModelError(result.error)
+            } catch (err) {
+                setModelStatus('error')
+                setModelError('IPC Error')
+            }
+        }
+
+        pollModelStatus() // Initial check
+        const interval = setInterval(pollModelStatus, 2000)
+        return () => clearInterval(interval)
+    }, [electron])
 
     // Load available sources
     const loadSources = async () => {
@@ -174,6 +196,14 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
                         borderColor: `${currentStatus.border}30`
                     }}
                 >
+                    {/* Model Status Indicator */}
+                    <div
+                        className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${modelStatus === 'connected' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]' :
+                                modelStatus === 'connecting' ? 'bg-yellow-400 animate-pulse shadow-[0_0_8px_rgba(250,204,21,0.6)]' :
+                                    'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]'
+                            }`}
+                        title={modelError ? `Помилка: ${modelError}` : `Gemini: ${modelStatus}`}
+                    />
                     <span className="text-rose-400 text-sm">◎</span>
                     <span className="text-[10px] font-bold text-rose-300 tracking-wider uppercase flex-1">
                         GRISHA: Live Vision Feed

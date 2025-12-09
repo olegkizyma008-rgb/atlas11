@@ -1072,51 +1072,62 @@ class UnifiedBrain extends CortexBrain {
     try {
       const genAI = new genai.GoogleGenAI({ apiKey });
       const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName})...`);
+      const mode = request.mode || "chat";
+      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName}) in ${mode} mode...`);
       const systemPrompt = `${request.system_prompt}
 
 IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
+      const config = {
+        systemInstruction: systemPrompt,
+        temperature: 0.7
+      };
+      if (mode === "planning") {
+        config.responseMimeType = "application/json";
+      }
       const response = await genAI.models.generateContent({
         model: modelName,
         contents: [
           { role: "user", parts: [{ text: request.user_prompt }] }
         ],
-        config: {
-          systemInstruction: systemPrompt,
-          temperature: 0.7,
-          // Balance between creativity and precision
-          responseMimeType: "application/json"
-          // Force JSON structure
-          // safetySettings: ... (Configure as needed)
-        }
+        config
       });
       const content = response.candidates?.[0]?.content?.parts?.[0]?.text;
       if (!content) {
         throw new Error("Empty response from Cortex");
       }
-      let parsed;
-      try {
-        parsed = JSON.parse(content);
-      } catch (e) {
-        const jsonMatch = content.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-          parsed = JSON.parse(jsonMatch[0]);
-        } else {
-          throw new Error("Failed to parse JSON from Cortex response");
+      if (mode === "chat") {
+        return {
+          text: content,
+          usage: {
+            input_tokens: response.usageMetadata?.promptTokenCount || 0,
+            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+          }
+        };
+      } else {
+        let parsed;
+        try {
+          parsed = JSON.parse(content);
+        } catch (e) {
+          const jsonMatch = content.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            parsed = JSON.parse(jsonMatch[0]);
+          } else {
+            throw new Error("Failed to parse JSON from Cortex response");
+          }
         }
+        return {
+          text: JSON.stringify(parsed),
+          // Keep consistent format for internal passing
+          tool_calls: parsed.plan?.map((step) => ({
+            name: step.tool,
+            args: step.args
+          })) || [],
+          usage: {
+            input_tokens: response.usageMetadata?.promptTokenCount || 0,
+            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+          }
+        };
       }
-      return {
-        text: JSON.stringify(parsed),
-        // Keep consistent format for internal passing
-        tool_calls: parsed.plan?.map((step) => ({
-          name: step.tool,
-          args: step.args
-        })) || [],
-        usage: {
-          input_tokens: response.usageMetadata?.promptTokenCount || 0,
-          output_tokens: response.usageMetadata?.candidatesTokenCount || 0
-        }
-      };
     } catch (error) {
       console.error("[UNIFIED-BRAIN] ❌ Cortex Reasoning Failed:", error.message);
       throw error;
@@ -1221,55 +1232,67 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
     const prompt = packet.payload.prompt || packet.instruction.op_code;
     console.log(`[UNIFIED-BRAIN] 🧠 Processing: "${prompt}"`);
     try {
+      const mode = this.detectMode(prompt, packet);
       const response = await this.think({
         system_prompt: "You are KONTUR Unified Brain (Gemini 2.0).",
         user_prompt: prompt,
+        mode,
         tools: []
         // We could inject tools here if we had them in request
       });
       if (!response.text)
         throw new Error("No response text from Brain");
-      let decision;
-      try {
-        decision = JSON.parse(response.text);
-      } catch (e) {
-        decision = { response: response.text, thought: "Raw output", plan: [] };
-      }
-      if (decision.plan && decision.plan.length > 0) {
-        const systemPacket = createPacket(
-          "kontur://cortex/ai/main",
-          "kontur://core/system",
-          PacketIntent.AI_PLAN,
-          {
-            reasoning: decision.thought,
-            user_response: decision.response,
-            steps: decision.plan.map((step) => ({
-              tool: step.tool,
-              action: step.action,
-              args: step.args,
-              target: "kontur://organ/worker"
-              // Default, router handles optimization
-            }))
-          }
-        );
-        this.emit("decision", systemPacket);
-        if (decision.response) {
-          const chatPacket = createPacket(
-            "kontur://cortex/ai/main",
-            "kontur://organ/ui/shell",
-            PacketIntent.EVENT,
-            { msg: decision.response, type: "chat", reasoning: decision.thought }
-          );
-          this.emit("decision", chatPacket);
-        }
-      } else {
+      if (mode === "chat") {
         const chatPacket = createPacket(
           "kontur://cortex/ai/main",
           "kontur://organ/ui/shell",
           PacketIntent.EVENT,
-          { msg: decision.response, type: "chat", reasoning: decision.thought }
+          { msg: response.text, type: "chat" }
         );
         this.emit("decision", chatPacket);
+      } else {
+        let decision;
+        try {
+          decision = JSON.parse(response.text);
+        } catch (e) {
+          decision = { response: response.text, thought: "Raw output", plan: [] };
+        }
+        if (decision.plan && decision.plan.length > 0) {
+          const systemPacket = createPacket(
+            "kontur://cortex/ai/main",
+            "kontur://core/system",
+            PacketIntent.AI_PLAN,
+            {
+              reasoning: decision.thought,
+              user_response: decision.response,
+              steps: decision.plan.map((step) => ({
+                tool: step.tool,
+                action: step.action,
+                args: step.args,
+                target: "kontur://organ/worker"
+                // Default, router handles optimization
+              }))
+            }
+          );
+          this.emit("decision", systemPacket);
+          if (decision.response) {
+            const chatPacket = createPacket(
+              "kontur://cortex/ai/main",
+              "kontur://organ/ui/shell",
+              PacketIntent.EVENT,
+              { msg: decision.response, type: "chat", reasoning: decision.thought }
+            );
+            this.emit("decision", chatPacket);
+          }
+        } else {
+          const chatPacket = createPacket(
+            "kontur://cortex/ai/main",
+            "kontur://organ/ui/shell",
+            PacketIntent.EVENT,
+            { msg: decision.response || response.text, type: "chat", reasoning: decision.thought }
+          );
+          this.emit("decision", chatPacket);
+        }
       }
     } catch (error) {
       console.error("[UNIFIED-BRAIN] ❌ Process Error:", error);
@@ -1281,6 +1304,24 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
       );
       this.emit("decision", errorPacket);
     }
+  }
+  /**
+   * Detect whether request should use chat or planning mode
+   */
+  detectMode(prompt, packet) {
+    if (packet.instruction.intent === PacketIntent.AI_PLAN) {
+      console.log(`[UNIFIED-BRAIN] 🔍 Mode: planning (intent=${packet.instruction.intent})`);
+      return "planning";
+    }
+    const planningKeywords = ["plan", "execute", "task", "do", "create", "build", "make", "develop", "implement"];
+    const lowerPrompt = prompt.toLowerCase();
+    const matchedKeyword = planningKeywords.find((kw) => lowerPrompt.includes(kw));
+    if (matchedKeyword) {
+      console.log(`[UNIFIED-BRAIN] 🔍 Mode: planning (keyword="${matchedKeyword}" in "${prompt}")`);
+      return "planning";
+    }
+    console.log(`[UNIFIED-BRAIN] 🔍 Mode: chat (default for "${prompt}")`);
+    return "chat";
   }
   async processUnified(packet) {
     const response = await this.think({
@@ -1739,6 +1780,10 @@ class TetyanaExecutor extends events.EventEmitter {
         const step = plan.steps[i];
         const stepNum = i + 1;
         console.log(`[TETYANA] ▶️ Step ${stepNum}: ${step.action}`);
+        if (plan.steps.length > 3 && i === 0) {
+          this.emitStatus("thinking", "🤔 Аналізую план дій (Gemini 3)...");
+          await this.consultReasoning(plan);
+        }
         await this.validateStep(step, stepNum);
         const result = await this.executeStep(step, stepNum);
         this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
@@ -1766,6 +1811,41 @@ class TetyanaExecutor extends events.EventEmitter {
       this.active = false;
       this.emitStatus("stopped", "Виконання зупинено.");
     }
+  }
+  /**
+   * Consult the Reasoning Organ (Gemini 3)
+   */
+  async consultReasoning(plan) {
+    return new Promise((resolve, reject) => {
+      console.log(`[TETYANA] 🧠 Consulting Reasoning Organ...`);
+      const reqId = `reason-${Date.now()}`;
+      const handler = (packet2) => {
+        if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.route.reply_to === reqId) {
+          this.core.removeListener("ingest", handlerWrapper);
+          console.log(`[TETYANA] 🧠 Advice Received:`, packet2.payload.result);
+          resolve();
+        }
+      };
+      const handlerWrapper = (p) => handler(p);
+      this.core.on("ingest", handlerWrapper);
+      const packet = createPacket(
+        "kontur://organ/tetyana",
+        "kontur://organ/reasoning",
+        PacketIntent.CMD,
+        {
+          prompt: `Review this plan for safety and efficiency: ${JSON.stringify(plan.steps.map((s) => s.action))}`,
+          level: "high"
+        }
+      );
+      packet.instruction.op_code = "think";
+      packet.route.reply_to = reqId;
+      this.core.ingest(packet);
+      setTimeout(() => {
+        this.core.removeListener("ingest", handlerWrapper);
+        console.warn("[TETYANA] 🧠 Reasoning Timeout. Proceeding anyway.");
+        resolve();
+      }, 15e3);
+    });
   }
   /**
    * Ask Grisha for permission
@@ -2568,6 +2648,67 @@ class GrishaCapsule {
     }
   }
 }
+class ReasoningCapsule {
+  client;
+  core;
+  lastThoughtSignature;
+  constructor(apiKey) {
+    this.client = new genai.GoogleGenAI({ apiKey });
+    console.log("🧠 REASONING: ReasoningCapsule (Gemini 3) initialized.");
+  }
+  register(core) {
+    this.core = core;
+  }
+  /**
+   * Think deeply about a problem.
+   * @param prompt The complex query or code snippet
+   * @param level 'low' | 'high' (default 'high')
+   */
+  async think(prompt, level = "high") {
+    console.log(`🧠 REASONING: Thinking about "${prompt.substring(0, 50)}..." (Level: ${level})`);
+    try {
+      const model = "gemini-3-pro-preview";
+      const config = {
+        thinkingConfig: {
+          thinkingLevel: level
+        }
+      };
+      const result = await this.client.models.generateContent({
+        model,
+        contents: [{
+          parts: [{ text: prompt }]
+        }],
+        config
+      });
+      const text = result.text || "";
+      console.log(`🧠 REASONING: Thought complete. Length: ${text.length}`);
+      return text;
+    } catch (error) {
+      console.error("🧠 REASONING: Thinking failed", error);
+      return `Error thinking: ${error.message}`;
+    }
+  }
+  /**
+   * Handle incoming KPP packets (Acting as an Organ)
+   */
+  async handlePacket(packet) {
+    if (packet.instruction.intent === PacketIntent.CMD && packet.instruction.op_code === "think") {
+      const { prompt, level } = packet.payload;
+      const result = await this.think(prompt, level);
+      const response = createPacket(
+        "kontur://organ/reasoning",
+        packet.route.from,
+        PacketIntent.RESPONSE,
+        { result }
+      );
+      response.route.reply_to = packet.route.reply_to;
+      this.core?.ingest(response);
+    }
+  }
+}
+function createReasoningCapsule(apiKey) {
+  return new ReasoningCapsule(apiKey);
+}
 const memories = sqliteCore.sqliteTable("memories", {
   id: sqliteCore.text("id").primaryKey(),
   // UUID
@@ -2914,15 +3055,19 @@ class GeminiLiveService extends events.EventEmitter {
     };
   }
   session = null;
-  isConnected = false;
+  _isConnected = false;
+  _status = "disconnected";
+  _lastError = null;
   config;
   /**
    * Connect to Gemini Live Session
    */
   async connect() {
-    if (this.isConnected)
+    if (this._isConnected)
       return;
     try {
+      this._status = "connecting";
+      this._lastError = null;
       console.log("[GEMINI LIVE] 🔌 Connecting...");
       const genAI = new genai.GoogleGenAI({ apiKey: this.apiKey });
       const liveConfig = {
@@ -2953,34 +3098,42 @@ class GeminiLiveService extends events.EventEmitter {
               console.error("\n\n[CRITICAL ERROR] 🛑 GEMINI API KEY EXPIRED");
               console.error("Please renew your API key in the .env file immediately.");
               console.error("Visit: https://aistudio.google.com/app/apikey\n\n");
+              this._lastError = "API_KEY_EXPIRED";
               this.emit("error", new Error("API_KEY_EXPIRED"));
             } else if (code === 1011 || reason.toLowerCase().includes("quota")) {
               console.error("\n\n[CRITICAL ERROR] 🛑 GEMINI QUOTA EXCEEDED");
               console.error("You have hit the usage limits for your API Key.");
               console.error("Please check billing/quota at: https://aistudio.google.com/app/apikey\n\n");
+              this._lastError = "QUOTA_EXCEEDED";
               this.emit("error", new Error("QUOTA_EXCEEDED"));
             } else if (code === 1008 || reason.toLowerCase().includes("model")) {
               console.error("\n\n[CRITICAL ERROR] 🛑 MODEL NOT FOUND OR ACCESS DENIED");
               console.error(`Model: ${this.config.model}`);
               console.error("The preview model may require special access.\n\n");
+              this._lastError = "MODEL_ACCESS_DENIED";
               this.emit("error", new Error("MODEL_ACCESS_DENIED"));
             } else if (code === 1007) {
               console.error("\n\n[CRITICAL ERROR] 🛑 INVALID ARGUMENT / CONFIGURATION");
               console.error("The configuration sent to Gemini Live API is invalid (Code 1007).");
               console.error("Checking model compatibility...\n\n");
+              this._lastError = "INVALID_CONFIG";
               this.emit("error", new Error("INVALID_CONFIG"));
             } else if (reason) {
               console.warn(`[GEMINI LIVE] ⚠️ Closed with reason: ${reason}`);
             }
-            this.isConnected = false;
+            this._isConnected = false;
+            this._status = "error";
             this.emit("disconnected");
           }
         }
       });
-      this.isConnected = true;
+      this._isConnected = true;
+      this._status = "connected";
+      this._lastError = null;
       console.log("[GEMINI LIVE] ✅ Connected!");
       this.emit("connected");
     } catch (error) {
+      this._status = "error";
       console.error("[GEMINI LIVE] ❌ Connection failed:", error);
       this.emit("error", error);
     }
@@ -3013,7 +3166,8 @@ class GeminiLiveService extends events.EventEmitter {
         await this.session.close();
       }
       this.session = null;
-      this.isConnected = false;
+      this._isConnected = false;
+      this._status = "disconnected";
       console.log("[GEMINI LIVE] 🔌 Disconnected");
       this.emit("disconnected");
     }
@@ -3022,7 +3176,7 @@ class GeminiLiveService extends events.EventEmitter {
    * Trigger generation with text (useful for starting conversation)
    */
   sendText(text) {
-    if (!this.isConnected || !this.session)
+    if (!this._isConnected || !this.session)
       return;
     this.session.sendClientContent({
       turns: [{ parts: [{ text }] }]
@@ -3032,7 +3186,7 @@ class GeminiLiveService extends events.EventEmitter {
    * Stream Audio Input (PCM 16kHz)
    */
   sendAudioChunk(base64Audio) {
-    if (!this.isConnected || !this.session)
+    if (!this._isConnected || !this.session)
       return;
     this.session.sendRealtimeInput({
       audio: {
@@ -3045,7 +3199,7 @@ class GeminiLiveService extends events.EventEmitter {
    * Stream Video Frame (JPEG/PNG Base64)
    */
   sendVideoFrame(base64Image) {
-    if (!this.isConnected || !this.session)
+    if (!this._isConnected || !this.session)
       return;
     this.session.sendRealtimeInput({
       media: {
@@ -3053,6 +3207,25 @@ class GeminiLiveService extends events.EventEmitter {
         data: base64Image
       }
     });
+  }
+  // ============ PUBLIC GETTERS FOR UI INDICATOR ============
+  /**
+   * Get current model connection status
+   */
+  get modelStatus() {
+    return this._status;
+  }
+  /**
+   * Get last error type if any
+   */
+  get errorType() {
+    return this._lastError;
+  }
+  /**
+   * Check if connected (backwards compatible)
+   */
+  get isConnected() {
+    return this._isConnected;
   }
 }
 class GrishaObserver extends events.EventEmitter {
@@ -3272,6 +3445,8 @@ class DeepIntegrationSystem {
   atlas = null;
   tetyana = null;
   grisha = null;
+  reasoning = null;
+  // New Reasoning Organ
   memory = null;
   forge = null;
   voiceGhost = null;
@@ -3496,6 +3671,16 @@ class DeepIntegrationSystem {
         return [];
       }
     });
+    ipcMain.removeHandler("vision:get_model_status");
+    ipcMain.handle("vision:get_model_status", () => {
+      if (!this.geminiLive) {
+        return { status: "disconnected", error: null };
+      }
+      return {
+        status: this.geminiLive.modelStatus,
+        error: this.geminiLive.errorType
+      };
+    });
     console.log("[DEEP-INTEGRATION] ✅ IPC Bridge established");
   }
   /**
@@ -3511,6 +3696,8 @@ class DeepIntegrationSystem {
     this.atlas = new AtlasCapsule(this.memory, this.brain);
     this.tetyana = new TetyanaCapsule(this.forge, this.voiceGhost, this.brain, this.core);
     this.grisha = new GrishaCapsule(this.brain, this.core);
+    this.reasoning = createReasoningCapsule(deepThinkingKey);
+    console.log("[DEEP-INTEGRATION] 🧠 Reasoning Capsule (Gemini 3) created");
     this.unifiedBrain.setAtlasBrain(this.brain);
     this.unifiedBrain.setAtlasOrgan(this.atlas);
     console.log("[DEEP-INTEGRATION] ✅ Atlas Capsules initialized");
@@ -3558,6 +3745,14 @@ class DeepIntegrationSystem {
         }
       });
       console.log(`[DEEP-INTEGRATION] 🧠 Atlas Capsule registered as ${atlasUrn}`);
+    }
+    if (this.reasoning) {
+      const reasoningUrn = "kontur://organ/reasoning";
+      this.core.register(reasoningUrn, async (packet) => {
+        return this.reasoning?.handlePacket(packet);
+      });
+      this.reasoning.register(this.core);
+      console.log(`[DEEP-INTEGRATION] 🧠 Reasoning Capsule registered as ${reasoningUrn}`);
     }
     if (this.tetyana) {
       const tetyanaUrn = "kontur://organ/tetyana";
