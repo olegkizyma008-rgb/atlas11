@@ -141,6 +141,7 @@ export interface VisionModeConfig {
 
 export interface VisionConfig {
     mode: VisionMode; // Which mode is active
+    fallbackMode?: VisionMode; // Fallback mode if primary fails (undefined = no fallback)
     live: VisionModeConfig; // Settings for Live streaming (Gemini)
     onDemand: VisionModeConfig; // Settings for On-Demand screenshots (Copilot/GPT-4o)
 }

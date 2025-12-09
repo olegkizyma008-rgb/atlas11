@@ -184,7 +184,12 @@ async function configureVision(): Promise<void> {
 
         const config = configManager.getAll();
         const currentMode = config['VISION_MODE'] || 'live';
+        const fallbackMode = config['VISION_FALLBACK_MODE'];
+
         const modeLabel = currentMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand');
+        const fallbackLabel = fallbackMode === 'live' ? chalk.cyan('Live Stream') :
+            fallbackMode === 'on-demand' ? chalk.magenta('On-Demand') :
+                chalk.gray('none');
 
         // Live mode summary
         const liveProvider = config['VISION_LIVE_PROVIDER'] || 'gemini';
@@ -196,6 +201,7 @@ async function configureVision(): Promise<void> {
 
         const choices = [
             { name: `Active Mode      ${modeLabel}`, value: 'mode' },
+            { name: `Fallback Mode    ${fallbackLabel}`, value: 'fallback_mode' },
             { name: '─'.repeat(35), value: '_sep1', disabled: true },
             { name: `Live Stream      ${chalk.gray(liveProvider)} / ${chalk.cyan(liveModel.slice(0, 25))}...`, value: 'live' },
             { name: `On-Demand        ${chalk.gray(onDemandProvider)} / ${chalk.magenta(onDemandModel)}`, value: 'ondemand' },
@@ -210,6 +216,9 @@ async function configureVision(): Promise<void> {
         switch (action) {
             case 'mode':
                 await selectVisionMode('VISION_MODE');
+                break;
+            case 'fallback_mode':
+                await selectVisionFallbackMode('VISION_FALLBACK_MODE', currentMode);
                 break;
             case 'live':
                 await configureVisionMode('Live Stream', 'VISION_LIVE');
@@ -365,6 +374,34 @@ async function selectVisionMode(modeKey: string): Promise<void> {
             console.log(chalk.gray('\n  Tip: Live mode works best with Gemini as primary provider.'));
         } else if (selected === 'on-demand') {
             console.log(chalk.gray('\n  Tip: On-demand mode works with Copilot (GPT-4o) or Gemini.'));
+        }
+        await new Promise(r => setTimeout(r, 1200));
+    }
+}
+
+/**
+ * Select Vision fallback mode
+ */
+async function selectVisionFallbackMode(modeKey: string, currentMode: string): Promise<void> {
+    // Fallback can be the opposite mode or none
+    const choices = [
+        { name: `None             ${chalk.gray('No fallback - fail if primary unavailable')}`, value: '' },
+        ...VISION_MODES
+            .filter(m => m.value !== currentMode) // Exclude current active mode
+            .map(m => ({
+                name: `${m.label.padEnd(15)} ${chalk.gray(m.desc)}`,
+                value: m.value
+            })),
+        { name: 'Back', value: 'back' }
+    ];
+
+    const selected = await select('Fallback Mode', choices);
+    if (selected !== 'back') {
+        configManager.set(modeKey, selected);
+        if (selected === '') {
+            console.log(chalk.gray('\n  Fallback disabled. Vision will fail if primary mode is unavailable.'));
+        } else {
+            console.log(chalk.green(`\n  Fallback set to ${selected}. Will switch automatically if primary fails.`));
         }
         await new Promise(r => setTimeout(r, 1200));
     }

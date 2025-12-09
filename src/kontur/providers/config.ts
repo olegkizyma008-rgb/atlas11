@@ -84,6 +84,10 @@ export function getProviderConfig(service: ServiceType): ProviderConfig {
 export function getVisionConfig(): VisionConfig {
     const mode = (process.env.VISION_MODE as VisionMode) || 'live';
 
+    // Fallback mode: empty string = no fallback
+    const fallbackModeRaw = process.env.VISION_FALLBACK_MODE;
+    const fallbackMode = fallbackModeRaw === '' ? undefined : (fallbackModeRaw as VisionMode) || undefined;
+
     // === LIVE MODE CONFIG ===
     const liveProviderRaw = process.env.VISION_LIVE_PROVIDER;
     const liveFallbackRaw = process.env.VISION_LIVE_FALLBACK_PROVIDER;
@@ -113,6 +117,7 @@ export function getVisionConfig(): VisionConfig {
 
     return {
         mode,
+        fallbackMode,
         live,
         onDemand
     };
