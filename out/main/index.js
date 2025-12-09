@@ -3131,7 +3131,7 @@ LANGUAGE RULES:
 }
 const HOME = process.env.HOME || "/Users/dev";
 const PYTHON_PATH = path.join(HOME, "mac_assistant/venv/bin/python3");
-const AGENT_SCRIPT_PATH = path.join(HOME, "mac_assistant/mac_master_agent_v2.py");
+const AGENT_SCRIPT_PATH = path.join(HOME, "mac_assistant/mac_master_agent.py");
 const ENV_FILE_PATH = path.join(HOME, "Documents/GitHub/atlas/.env");
 function loadEnvFile() {
   const envVars = {};

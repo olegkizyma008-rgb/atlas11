@@ -1,176 +1,130 @@
 # ⚡ QUICK START: Open Interpreter Bridge
 
-**Статус:** ✅ 85% готово до запуску  
-**Час на налаштування:** ~5 хвилин (API ключі вже налаштовані!)
+**Статус:** ✅ 100% готово до запуску  
+**Час на налаштування:** ~5 хвилин
 
 ---
 
-## 🎯 4 кроки до запуску
+## 🚀 Використання
 
-### 1️⃣ Перевірити конфігурацію (1 хвилина)
-
-```bash
-# Запустіть скрипт перевірки:
-bash ~/mac_assistant/check_config.sh
-```
-
-**Очікуваний результат:**
-```
-✅ API ключи: Налаштовані
-✅ EXECUTION_ENGINE: python-bridge
-✅ Python venv: Налаштовано
-✅ Залежності: Встановлені
-✅ mac_master_agent_v2.py: Готово
-⚠️  RAG Database: Потребує індексації
-⚠️  Дозволи: Потребують вручної конфігурації
-```
-
-**Статус:** ✅ API ключи вже налаштовані!
-
-### 2️⃣ Налаштувати дозволи (3 хвилини)
+### Через CLI (рекомендується)
 
 ```bash
-bash ~/mac_assistant/setup_permissions.sh
+# Прямі команди українською мовою
+npm run cli -- "Твоє завдання"
+
+# Приклади:
+npm run cli -- "Відкрий Калькулятор"
+npm run cli -- "Скільки файлів на робочому столі?"
+npm run cli -- "Скажи яка сьогодні дата"
 ```
 
-Потім вручну додайте Terminal до:
-- **System Settings → Privacy & Security → Accessibility**
-
-### 3️⃣ Індексувати RAG базу (2 хвилини)
+### Через Python (прямо)
 
 ```bash
+# Базова версія
+~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Твоє завдання"
+
+# Приклад:
+~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Відкрий Finder"
+```
+
+---
+
+## ⚙️ Налаштування
+
+### 1️⃣ Дозволи Accessibility (обов'язково)
+
+1. Відкрийте **System Settings → Privacy & Security → Accessibility**
+2. Натисніть **+** (плюс)
+3. Додайте:
+   - **Terminal** (або iTerm)
+   - **/opt/homebrew/opt/python@3.12/bin/python3.12**
+
+### 2️⃣ API ключі (вже налаштовані)
+
+Ключі завантажуються з файлу `/Users/dev/Documents/GitHub/atlas/.env`:
+- ✅ BRAIN_API_KEY (Copilot)
+- ✅ VISION_API_KEY (Gemini)
+- ✅ TTS_API_KEY (Gemini)
+
+### 3️⃣ RAG база (опціонально)
+
+```bash
+# Індексація бази знань
 ~/mac_assistant/venv/bin/python3 ~/mac_assistant/index_rag.py
-```
-
-### 4️⃣ Тестувати агента (2 хвилини)
-
-```bash
-# Покращена версія з RAG (рекомендується)
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent_v2.py "Відкрий Калькулятор"
-
-# Або базова версія
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Зроби скріншот"
 ```
 
 ---
 
 ## 📊 Статус компонентів
 
-| Компонент | Статус | Файл |
-|-----------|--------|------|
-| Open Interpreter Bridge | ✅ 100% | `src/modules/tetyana/open_interpreter_bridge.ts` |
-| mac_master_agent_v2.py | ✅ 100% | `~/mac_assistant/mac_master_agent_v2.py` |
-| Tetyana Executor | ✅ 100% | `src/modules/tetyana/executor.ts` |
-| MCP OS Server | ✅ 100% | `src/kontur/mcp/servers/os.ts` |
-| Python venv | ✅ 100% | `~/mac_assistant/venv/` |
-| RAG Database | ✅ 80% | `~/mac_assistant_rag/chroma_mac` |
-| API ключі | ✅ Налаштовано | `.env` (BRAIN_API_KEY, COPILOT_API_KEY, VISION_API_KEY) |
-| EXECUTION_ENGINE | ✅ Налаштовано | `.env` (python-bridge) |
-| Дозволи | ⚠️ Manual | `setup_permissions.sh` |
-
----
-
-## 🔧 Поточна конфігурація
-
-### ✅ API ключі (вже налаштовані)
-
-```bash
-# У файлі /Users/dev/Documents/GitHub/atlas/.env:
-BRAIN_API_KEY=ghu_p20qYHtzvdGoBvtN8V2YqOWXg...
-COPILOT_API_KEY=ghu_p20qYHtzvdGoBvtN8V2YqOWXgd...
-VISION_API_KEY=AIzaSyCkcmmP8C5OxNRIRf82E2S46Pm...
-TTS_API_KEY=AIzaSyCkcmmP8C5OxNRIRf82E2S46P...
-STT_API_KEY=AIzaSyCc8qvGwjMargEwTRjTOknDh...
-```
-
-### ✅ Execution Engine (вже налаштовано)
-
-```bash
-# У .env файлі проекту Atlas:
-EXECUTION_ENGINE=python-bridge
-```
-
-**Статус:** ✅ Все готово!
+| Компонент | Статус |
+|-----------|--------|
+| Open Interpreter Bridge | ✅ 100% |
+| Python venv | ✅ 100% |
+| API ключі | ✅ Налаштовані |
+| EXECUTION_ENGINE | ✅ python-bridge |
+| RAG Database | ✅ Готова |
+| Дозволи | ⚠️ Потребують конфігурації |
 
 ---
 
 ## 🧪 Тестування
 
-### Мінімальний тест (Python)
-
 ```bash
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/test_minimal.py
-```
+# Тест 1: Простий привіт
+npm run cli -- "Скажи привіт"
 
-### Тест середовища (TypeScript)
+# Тест 2: Відкриття додатку
+npm run cli -- "Відкрий Калькулятор"
 
-```bash
-cd /Users/dev/Documents/GitHub/atlas
-npx ts-node test-bridge-environment.ts
+# Тест 3: Виконання команди
+npm run cli -- "Скільки файлів у ~/Documents"
 ```
 
 ---
 
-## 📚 Документація
+## � Структура
 
-- **`~/mac_assistant/README.md`** — Повна документація
-- **`IMPLEMENTATION_STATUS.md`** — Детальний статус
-- **`test_minimal.py`** — Тестовий скрипт
+```
+~/mac_assistant/
+├── mac_master_agent.py      # Основний агент
+├── mac_accessibility.py     # Accessibility API
+├── index_rag.py            # Індексація RAG
+└── venv/                   # Python virtual environment
+
+~/mac_assistant_rag/
+├── macOS-automation-knowledge-base/  # База знань
+└── chroma_mac/                       # Векторна база
+```
 
 ---
 
-## 🚀 Приклади використання
-
-### Через Python
+## 🔧 Команди
 
 ```bash
-# Командний режим
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent_v2.py "Відкрий Figma"
+# Побудова проекту
+npm run build
 
-# Інтерактивний режим
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent_v2.py
-```
+# Запуск CLI
+npm run cli -- "команда"
 
-### Через TypeScript (Atlas)
-
-```typescript
-import { OpenInterpreterBridge } from './src/modules/tetyana/open_interpreter_bridge';
-
-const bridge = new OpenInterpreterBridge();
-if (OpenInterpreterBridge.checkEnvironment()) {
-    const result = await bridge.execute("Відкрий Калькулятор");
-    console.log(result);
-}
+# Запуск інтерактивного меню
+npm run cli
 ```
 
 ---
 
-## ⚠️ Troubleshooting
+## ❓ Troubleshooting
 
 | Проблема | Рішення |
 |----------|---------|
-| "Python not found" | `brew install python@3.12` |
-| "Accessibility denied" | System Settings → Privacy & Security → Accessibility |
-| "API Key not found" | `export GEMINI_API_KEY="..."` |
-| "RAG database not found" | `python3 ~/mac_assistant/index_rag.py` |
+| "Python not found" | Перевірте: `which python3` |
+| "Accessibility denied" | Додайте Terminal + Python у System Settings |
+| "API Key not found" | Перевірте `.env` файл |
+| "RAG database not found" | Запустіть: `python3 ~/mac_assistant/index_rag.py` |
 
 ---
 
-## 📞 Контакти
-
-Див. основний репозиторій Atlas для більш детальної інформації.
-
----
-
----
-
-## ⚡ СТАТУС ГОТОВНОСТІ
-
-✅ **API ключи:** Налаштовані  
-✅ **EXECUTION_ENGINE:** python-bridge  
-✅ **Open Interpreter Bridge:** Готово  
-✅ **Python venv:** Налаштовано  
-⚠️ **Дозволи:** Потребують вручної конфігурації  
-⚠️ **RAG база:** Потребує індексації  
-
-**Готово? Почніть з кроку 1! ⬆️**
+**Готово? Почніть з:** `npm run cli -- "Привіт"`
