@@ -36,6 +36,11 @@ const crypto$1 = require("crypto");
 require("zlib");
 const Bottleneck = require("bottleneck");
 const genai = require("@google/genai");
+const OpenAI = require("openai");
+const Anthropic = require("@anthropic-ai/sdk");
+const mistralai = require("@mistralai/mistralai");
+const fs = require("fs");
+const os = require("os");
 const generativeAi = require("@google/generative-ai");
 const Database = require("better-sqlite3");
 const betterSqlite3 = require("drizzle-orm/better-sqlite3");
@@ -62,6 +67,8 @@ function _interopNamespaceDefault(e) {
 }
 const path__namespace = /* @__PURE__ */ _interopNamespaceDefault(path);
 const crypto__namespace = /* @__PURE__ */ _interopNamespaceDefault(crypto$1);
+const fs__namespace = /* @__PURE__ */ _interopNamespaceDefault(fs);
+const os__namespace = /* @__PURE__ */ _interopNamespaceDefault(os);
 const SignalSchema = zod.z.object({
   source: zod.z.string(),
   // e.g., 'atlas', 'system', 'voice'
@@ -470,8 +477,8 @@ class Core extends events.EventEmitter {
   /**
    * Load a plugin as a spawned process
    */
-  loadPlugin(urn, config) {
-    const synapse2 = new Synapse2(urn, config.cmd, config.args);
+  loadPlugin(urn, config2) {
+    const synapse2 = new Synapse2(urn, config2.cmd, config2.args);
     this.register(urn, synapse2);
     return synapse2;
   }
@@ -655,6 +662,989 @@ class Core extends events.EventEmitter {
       alive: component instanceof Synapse2 ? component.isAlive() : true
     }));
   }
+}
+const DEFAULTS = {
+  brain: {
+    provider: "gemini",
+    fallbackProvider: void 0,
+    model: "gemini-2.5-flash"
+  },
+  tts: {
+    provider: "gemini",
+    fallbackProvider: void 0,
+    model: "gemini-2.5-flash-preview-tts"
+  },
+  stt: {
+    provider: "gemini",
+    fallbackProvider: void 0,
+    model: "gemini-2.5-flash"
+  },
+  reasoning: {
+    provider: "gemini",
+    fallbackProvider: void 0,
+    model: "gemini-3-pro-preview"
+  }
+};
+const VISION_LIVE_DEFAULTS = {
+  provider: "gemini",
+  fallbackProvider: void 0,
+  // Live is Gemini-only for now
+  model: "gemini-2.5-flash-native-audio-preview-09-2025"
+};
+const VISION_ONDEMAND_DEFAULTS = {
+  provider: "copilot",
+  fallbackProvider: "gemini",
+  model: "gpt-4o"
+};
+function getProviderConfig(service) {
+  if (service === "vision") {
+    const visionConfig = getVisionConfig();
+    const activeConfig = visionConfig.mode === "live" ? visionConfig.live : visionConfig.onDemand;
+    return activeConfig;
+  }
+  const prefix = service.toUpperCase();
+  const serviceDefaults = DEFAULTS[service];
+  const provider = process.env[`${prefix}_PROVIDER`] || serviceDefaults.provider;
+  const fallbackProvider = process.env[`${prefix}_FALLBACK_PROVIDER`];
+  const model = process.env[`${prefix}_MODEL`] || serviceDefaults.model;
+  const apiKey = process.env[`${prefix}_API_KEY`] || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY || "";
+  return {
+    provider,
+    fallbackProvider: fallbackProvider || void 0,
+    model,
+    apiKey
+  };
+}
+function getVisionConfig() {
+  const mode = process.env.VISION_MODE || "live";
+  const liveProviderRaw = process.env.VISION_LIVE_PROVIDER;
+  const liveFallbackRaw = process.env.VISION_LIVE_FALLBACK_PROVIDER;
+  const live = {
+    provider: liveProviderRaw || VISION_LIVE_DEFAULTS.provider,
+    fallbackProvider: liveFallbackRaw === "" ? void 0 : liveFallbackRaw || VISION_LIVE_DEFAULTS.fallbackProvider,
+    model: process.env.VISION_LIVE_MODEL || VISION_LIVE_DEFAULTS.model,
+    apiKey: process.env.VISION_LIVE_API_KEY || process.env.GEMINI_LIVE_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || ""
+  };
+  const onDemandProviderRaw = process.env.VISION_ONDEMAND_PROVIDER;
+  const onDemandFallbackRaw = process.env.VISION_ONDEMAND_FALLBACK_PROVIDER;
+  const onDemand = {
+    provider: onDemandProviderRaw || VISION_ONDEMAND_DEFAULTS.provider,
+    fallbackProvider: onDemandFallbackRaw === "" ? void 0 : onDemandFallbackRaw || VISION_ONDEMAND_DEFAULTS.fallbackProvider,
+    model: process.env.VISION_ONDEMAND_MODEL || VISION_ONDEMAND_DEFAULTS.model,
+    apiKey: process.env.VISION_ONDEMAND_API_KEY || process.env.COPILOT_API_KEY || process.env.GEMINI_API_KEY || ""
+  };
+  return {
+    mode,
+    live,
+    onDemand
+  };
+}
+function getAllConfigs() {
+  return {
+    brain: getProviderConfig("brain"),
+    tts: getProviderConfig("tts"),
+    stt: getProviderConfig("stt"),
+    vision: getVisionConfig(),
+    reasoning: getProviderConfig("reasoning")
+  };
+}
+function logProviderConfig() {
+  const configs = getAllConfigs();
+  console.log("[PROVIDER CONFIG] Current configuration:");
+  for (const [service, config2] of Object.entries(configs)) {
+    if (service === "vision") {
+      const visionConfig = config2;
+      console.log(`  vision [mode: ${visionConfig.mode}]:`);
+      console.log(`    live: ${visionConfig.live.provider} (${visionConfig.live.model})${visionConfig.live.fallbackProvider ? ` -> fallback: ${visionConfig.live.fallbackProvider}` : ""}`);
+      console.log(`    on-demand: ${visionConfig.onDemand.provider} (${visionConfig.onDemand.model})${visionConfig.onDemand.fallbackProvider ? ` -> fallback: ${visionConfig.onDemand.fallbackProvider}` : ""}`);
+    } else {
+      const providerConfig = config2;
+      let line = `  ${service}: ${providerConfig.provider} (model: ${providerConfig.model})`;
+      if (providerConfig.fallbackProvider) {
+        line += ` -> fallback: ${providerConfig.fallbackProvider}`;
+      }
+      console.log(line);
+    }
+  }
+}
+const config = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  getAllConfigs,
+  getProviderConfig,
+  getVisionConfig,
+  logProviderConfig
+}, Symbol.toStringTag, { value: "Module" }));
+class GeminiProvider {
+  name = "gemini";
+  client = null;
+  apiKey;
+  defaultModel;
+  constructor(apiKey, defaultModel = "gemini-2.5-flash") {
+    this.apiKey = apiKey;
+    this.defaultModel = defaultModel;
+    if (apiKey) {
+      this.client = new genai.GoogleGenAI({ apiKey });
+      console.log(`[GEMINI PROVIDER] ✅ Initialized with model: ${defaultModel}`);
+    } else {
+      console.warn("[GEMINI PROVIDER] ⚠️ No API key provided");
+    }
+  }
+  isAvailable() {
+    return !!this.client && !!this.apiKey;
+  }
+  async fetchModels() {
+    if (!this.client)
+      return this.getModels();
+    try {
+      return this.getModels();
+    } catch (e) {
+      return this.getModels();
+    }
+  }
+  async generate(request) {
+    if (!this.client) {
+      throw new Error("Gemini provider not initialized - missing API key");
+    }
+    const model = request.model || this.defaultModel;
+    try {
+      const config2 = {
+        temperature: request.temperature ?? 0.7
+      };
+      if (request.responseFormat === "json") {
+        config2.responseMimeType = "application/json";
+      }
+      if (request.systemPrompt) {
+        config2.systemInstruction = request.systemPrompt;
+      }
+      const response = await this.client.models.generateContent({
+        model,
+        contents: [
+          {
+            role: "user",
+            parts: [{ text: request.prompt }]
+          }
+        ],
+        config: config2
+      });
+      const text = response.candidates?.[0]?.content?.parts?.[0]?.text || "";
+      const usage = response.usageMetadata;
+      return {
+        text,
+        usage: usage ? {
+          promptTokens: usage.promptTokenCount || 0,
+          completionTokens: usage.candidatesTokenCount || 0,
+          totalTokens: usage.totalTokenCount || 0
+        } : void 0,
+        model,
+        provider: this.name
+      };
+    } catch (error) {
+      console.error(`[GEMINI PROVIDER] ❌ Error:`, error.message);
+      throw error;
+    }
+  }
+  getModels() {
+    return [
+      "gemini-2.5-flash",
+      "gemini-2.5-pro",
+      "gemini-2.0-flash-exp",
+      "gemini-3-pro-preview"
+    ];
+  }
+}
+class GeminiTTSProvider {
+  name = "gemini";
+  client = null;
+  apiKey;
+  defaultModel;
+  constructor(apiKey, defaultModel = "gemini-2.5-flash-preview-tts") {
+    this.apiKey = apiKey;
+    this.defaultModel = defaultModel;
+    if (apiKey) {
+      this.client = new genai.GoogleGenAI({ apiKey });
+      console.log(`[GEMINI TTS] 🔊 Initialized with model: ${defaultModel}`);
+    } else {
+      console.warn("[GEMINI TTS] ⚠️ No API key provided");
+    }
+  }
+  isAvailable() {
+    return !!this.client && !!this.apiKey;
+  }
+  async speak(request) {
+    if (!this.client) {
+      throw new Error("Gemini TTS provider not initialized");
+    }
+    const voiceName = request.voice || "Kore";
+    const model = this.defaultModel;
+    try {
+      const response = await this.client.models.generateContent({
+        model,
+        contents: [{ parts: [{ text: request.text }] }],
+        config: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: {
+                voiceName
+              }
+            }
+          }
+        }
+      });
+      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!audioData) {
+        throw new Error("No audio data received from Gemini TTS");
+      }
+      const buffer = Buffer.from(audioData, "base64");
+      const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+      return {
+        audio: arrayBuffer,
+        mimeType: "audio/mp3",
+        // Gemini usually returns generic audio, wrapper handles format
+        provider: this.name
+      };
+    } catch (error) {
+      console.error("[GEMINI TTS] ❌ Speak Error:", error.message);
+      throw error;
+    }
+  }
+  getVoices() {
+    return ["Puck", "Charon", "Kore", "Fenrir", "Aoede"];
+  }
+  async speakMulti(request) {
+    if (!this.client) {
+      throw new Error("Gemini TTS provider not initialized");
+    }
+    try {
+      const speakerVoiceConfigs = request.speakers.map((s) => ({
+        speaker: s.name,
+        voiceConfig: {
+          prebuiltVoiceConfig: {
+            voiceName: s.voice
+          }
+        }
+      }));
+      const response = await this.client.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: request.text }] }],
+        config: {
+          responseModalities: ["AUDIO"],
+          speechConfig: {
+            multiSpeakerVoiceConfig: {
+              speakerVoiceConfigs
+            }
+          }
+        }
+      });
+      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      if (!audioData) {
+        throw new Error("No audio data received from Gemini TTS (Multi-speaker)");
+      }
+      const buffer = Buffer.from(audioData, "base64");
+      const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
+      return {
+        audio: arrayBuffer,
+        mimeType: "audio/mp3",
+        provider: this.name
+      };
+    } catch (error) {
+      console.error("[GEMINI TTS] ❌ Multi-speaker Speak Error:", error.message);
+      throw error;
+    }
+  }
+}
+class OpenAIProvider {
+  name = "openai";
+  client = null;
+  apiKey;
+  defaultModel;
+  constructor(apiKey, defaultModel = "gpt-4o") {
+    this.apiKey = apiKey;
+    this.defaultModel = defaultModel;
+    if (apiKey) {
+      this.client = new OpenAI({ apiKey });
+      console.log(`[OPENAI PROVIDER] ✅ Initialized with model: ${defaultModel}`);
+    } else {
+      console.warn("[OPENAI PROVIDER] ⚠️ No API key provided");
+    }
+  }
+  isAvailable() {
+    return !!this.client && !!this.apiKey;
+  }
+  getModels() {
+    return ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"];
+  }
+  async fetchModels() {
+    if (!this.client)
+      return this.getModels();
+    try {
+      const list = await this.client.models.list();
+      return list.data.map((m) => m.id).filter((id) => id.includes("gpt"));
+    } catch (e) {
+      console.warn("[OPENAI] Failed to fetch models:", e);
+      return this.getModels();
+    }
+  }
+  async generate(request) {
+    if (!this.client) {
+      throw new Error("OpenAI provider not initialized");
+    }
+    const model = request.model || this.defaultModel;
+    try {
+      const response = await this.client.chat.completions.create({
+        model,
+        messages: [
+          { role: "system", content: request.systemPrompt || "" },
+          { role: "user", content: request.prompt }
+        ],
+        temperature: request.temperature || 0.7,
+        response_format: request.responseFormat === "json" ? { type: "json_object" } : void 0
+      });
+      const text = response.choices[0]?.message?.content || "";
+      const usage = response.usage;
+      return {
+        text,
+        usage: usage ? {
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens
+        } : void 0,
+        model,
+        provider: this.name
+      };
+    } catch (error) {
+      console.error(`[OPENAI PROVIDER] ❌ Error:`, error.message);
+      throw error;
+    }
+  }
+}
+class AnthropicProvider {
+  name = "anthropic";
+  client = null;
+  apiKey;
+  defaultModel;
+  constructor(apiKey, defaultModel = "claude-3-5-sonnet-20241022") {
+    this.apiKey = apiKey;
+    this.defaultModel = defaultModel;
+    if (apiKey) {
+      this.client = new Anthropic({ apiKey });
+      console.log(`[ANTHROPIC PROVIDER] ✅ Initialized with model: ${defaultModel}`);
+    } else {
+      console.warn("[ANTHROPIC PROVIDER] ⚠️ No API key provided");
+    }
+  }
+  isAvailable() {
+    return !!this.client && !!this.apiKey;
+  }
+  getModels() {
+    return ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229", "claude-3-haiku-20240307"];
+  }
+  async fetchModels() {
+    return this.getModels();
+  }
+  async generate(request) {
+    if (!this.client) {
+      throw new Error("Anthropic provider not initialized");
+    }
+    const model = request.model || this.defaultModel;
+    try {
+      const response = await this.client.messages.create({
+        model,
+        max_tokens: request.maxTokens || 4096,
+        system: request.systemPrompt,
+        messages: [
+          { role: "user", content: request.prompt }
+        ],
+        temperature: request.temperature || 0.7
+      });
+      let text = "";
+      if (response.content && response.content.length > 0) {
+        const firstBlock = response.content[0];
+        if (firstBlock.type === "text") {
+          text = firstBlock.text;
+        }
+      }
+      const usage = response.usage;
+      return {
+        text,
+        usage: usage ? {
+          promptTokens: usage.input_tokens,
+          completionTokens: usage.output_tokens,
+          totalTokens: usage.input_tokens + usage.output_tokens
+        } : void 0,
+        model,
+        provider: this.name
+      };
+    } catch (error) {
+      console.error(`[ANTHROPIC PROVIDER] ❌ Error:`, error.message);
+      throw error;
+    }
+  }
+}
+class MistralProvider {
+  name = "mistral";
+  client = null;
+  apiKey;
+  defaultModel;
+  constructor(apiKey, defaultModel = "mistral-large-latest") {
+    this.apiKey = apiKey;
+    this.defaultModel = defaultModel;
+    if (apiKey) {
+      this.client = new mistralai.Mistral({ apiKey });
+      console.log(`[MISTRAL PROVIDER] ✅ Initialized with model: ${defaultModel}`);
+    } else {
+      console.warn("[MISTRAL PROVIDER] ⚠️ No API key provided");
+    }
+  }
+  isAvailable() {
+    return !!this.client && !!this.apiKey;
+  }
+  getModels() {
+    return ["mistral-large-latest", "mistral-medium", "mistral-small", "pixtral-12b"];
+  }
+  async fetchModels() {
+    if (!this.client)
+      return this.getModels();
+    try {
+      const list = await this.client.models.list();
+      return list.data.map((m) => m.id);
+    } catch (e) {
+      console.warn("[MISTRAL] Failed to fetch models:", e);
+      return this.getModels();
+    }
+  }
+  async generate(request) {
+    if (!this.client) {
+      throw new Error("Mistral provider not initialized");
+    }
+    const model = request.model || this.defaultModel;
+    try {
+      const response = await this.client.chat.complete({
+        model,
+        messages: [
+          { role: "system", content: request.systemPrompt || "" },
+          { role: "user", content: request.prompt }
+        ],
+        temperature: request.temperature || 0.7,
+        responseFormat: request.responseFormat === "json" ? { type: "json_object" } : void 0
+      });
+      const text = response.choices?.[0]?.message?.content || "";
+      const usage = response.usage;
+      return {
+        text: typeof text === "string" ? text : JSON.stringify(text),
+        usage: usage ? {
+          promptTokens: usage.promptTokens,
+          completionTokens: usage.completionTokens,
+          totalTokens: usage.totalTokens
+        } : void 0,
+        model,
+        provider: this.name
+      };
+    } catch (error) {
+      console.error(`[MISTRAL PROVIDER] ❌ Error:`, error.message);
+      throw error;
+    }
+  }
+}
+class VSCodeCopilotProvider {
+  name = "copilot";
+  token = null;
+  defaultModel = "gpt-4";
+  constructor(apiKey) {
+    if (apiKey) {
+      this.token = apiKey;
+      console.log("[COPILOT PROVIDER] ✅ Using manual API key");
+    } else {
+      this.initializeToken();
+    }
+  }
+  initializeToken() {
+    if (process.env.COPILOT_API_KEY) {
+      this.token = process.env.COPILOT_API_KEY;
+      console.log("[COPILOT PROVIDER] ✅ Found token in env (COPILOT_API_KEY)");
+      return;
+    }
+    const appsJsonPath = path.join(os.homedir(), ".config", "github-copilot", "apps.json");
+    if (fs.existsSync(appsJsonPath)) {
+      try {
+        const content = JSON.parse(fs.readFileSync(appsJsonPath, "utf-8"));
+        for (const key in content) {
+          if (content[key].oauth_token) {
+            this.token = content[key].oauth_token;
+            console.log("[COPILOT PROVIDER] ✅ Found token in apps.json");
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("[COPILOT PROVIDER] Failed to parse apps.json", e);
+      }
+    }
+    const hostsJsonPath = path.join(os.homedir(), ".config", "github-copilot", "hosts.json");
+    if (fs.existsSync(hostsJsonPath)) {
+      try {
+        const content = JSON.parse(fs.readFileSync(hostsJsonPath, "utf-8"));
+        if (content["github.com"]?.oauth_token) {
+          this.token = content["github.com"].oauth_token;
+          console.log("[COPILOT PROVIDER] ✅ Found token in hosts.json");
+          return;
+        }
+      } catch (e) {
+        console.warn("[COPILOT PROVIDER] Failed to parse hosts.json", e);
+      }
+    }
+    if (process.env.COPILOT_API_KEY) {
+      this.token = process.env.COPILOT_API_KEY;
+      console.log("[COPILOT PROVIDER] ✅ Found token in env");
+      return;
+    }
+    console.warn("[COPILOT PROVIDER] ⚠️ No Copilot token found. Please install GitHub Copilot CLI or extension.");
+  }
+  isAvailable() {
+    return !!this.token;
+  }
+  async generate(request) {
+    if (!this.token) {
+      throw new Error("Copilot provider not initialized - no token found");
+    }
+    const model = request.model || this.defaultModel;
+    try {
+      const tokenResponse = await fetch("https://api.github.com/copilot_internal/v2/token", {
+        headers: {
+          "Authorization": `token ${this.token}`,
+          "Editor-Version": "vscode/1.85.0",
+          "Editor-Plugin-Version": "copilot/1.144.0",
+          "User-Agent": "GithubCopilot/1.144.0"
+        }
+      });
+      if (!tokenResponse.ok) {
+        throw new Error(`Failed to authenticate with Copilot: ${tokenResponse.status}`);
+      }
+      const { token: sessionToken } = await tokenResponse.json();
+      const response = await fetch("https://api.githubcopilot.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${sessionToken}`,
+          "Content-Type": "application/json",
+          "Editor-Version": "vscode/1.85.0"
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: request.systemPrompt || "You are a helpful AI assistant." },
+            { role: "user", content: request.prompt }
+          ],
+          temperature: request.temperature || 0.7,
+          stop: typeof request.maxTokens === "undefined" ? void 0 : request.maxTokens ? null : null
+        })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Copilot API error: ${response.status} ${errText}`);
+      }
+      const data = await response.json();
+      const text = data.choices[0]?.message?.content || "";
+      return {
+        text,
+        usage: {
+          promptTokens: 0,
+          // Copilot API might not return this standard usage
+          completionTokens: 0,
+          totalTokens: 0
+        },
+        model,
+        provider: this.name
+      };
+    } catch (error) {
+      console.error(`[COPILOT PROVIDER] ❌ Error:`, error.message);
+      throw error;
+    }
+  }
+  getModels() {
+    return [
+      "gpt-4.1",
+      "gpt-4o",
+      "gpt-5-mini",
+      "grok-code-fast-1",
+      "raptor-mini",
+      "claude-haiku-4.5",
+      "claude-opus-4.5",
+      "claude-sonnet-4",
+      "claude-sonnet-4.5",
+      "gemini-2.5-pro",
+      "gemini-3-pro",
+      "gpt-5",
+      "gpt-5-codex",
+      "gpt-5.1",
+      "gpt-5.1-codex",
+      "gpt-5.1-codex-max",
+      "gpt-5.1-codex-mini"
+    ];
+  }
+  // Attempt dynamic fetch via models endpoint if accessible
+  async fetchModels() {
+    if (!this.token) {
+      console.warn("[COPILOT] Cannot fetch models: No token");
+      return [];
+    }
+    try {
+      console.log("[COPILOT] 🔄 Verifying token...");
+      const userResponse = await fetch("https://api.github.com/user", {
+        headers: {
+          "Authorization": `token ${this.token}`,
+          "User-Agent": "GithubCopilot/1.144.0"
+        }
+      });
+      if (userResponse.ok) {
+        const userData = await userResponse.json();
+        console.log(`[COPILOT] ✅ Authenticated as GitHub user: ${userData.login}`);
+        return this.getModels();
+      }
+      const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
+        headers: {
+          "Authorization": `token ${this.token}`,
+          "User-Agent": "GithubCopilot/1.144.0"
+        }
+      });
+      if (!response.ok) {
+        throw new Error(`Invalid Token (Status: ${response.status})`);
+      }
+      console.log("[COPILOT] ✅ Token verified successfully!");
+      return this.getModels();
+    } catch (error) {
+      console.error("[COPILOT] ❌ Verification failed:", error.message);
+      return [];
+    }
+  }
+}
+class CopilotVisionProvider {
+  name = "copilot";
+  token = null;
+  model = "gpt-4o";
+  // GPT-4o has vision capabilities
+  constructor(apiKey, model) {
+    if (model)
+      this.model = model;
+    if (apiKey) {
+      this.token = apiKey;
+      console.log("[COPILOT VISION] ✅ Using provided API key");
+    } else {
+      this.initializeToken();
+    }
+  }
+  initializeToken() {
+    if (process.env.COPILOT_API_KEY) {
+      this.token = process.env.COPILOT_API_KEY;
+      console.log("[COPILOT VISION] ✅ Found token in env");
+      return;
+    }
+    const appsJsonPath = path__namespace.join(os__namespace.homedir(), ".config", "github-copilot", "apps.json");
+    if (fs__namespace.existsSync(appsJsonPath)) {
+      try {
+        const content = JSON.parse(fs__namespace.readFileSync(appsJsonPath, "utf-8"));
+        for (const key in content) {
+          if (content[key].oauth_token) {
+            this.token = content[key].oauth_token;
+            console.log("[COPILOT VISION] ✅ Found token in apps.json");
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("[COPILOT VISION] Failed to parse apps.json");
+      }
+    }
+    const hostsJsonPath = path__namespace.join(os__namespace.homedir(), ".config", "github-copilot", "hosts.json");
+    if (fs__namespace.existsSync(hostsJsonPath)) {
+      try {
+        const content = JSON.parse(fs__namespace.readFileSync(hostsJsonPath, "utf-8"));
+        if (content["github.com"]?.oauth_token) {
+          this.token = content["github.com"].oauth_token;
+          console.log("[COPILOT VISION] ✅ Found token in hosts.json");
+          return;
+        }
+      } catch (e) {
+        console.warn("[COPILOT VISION] Failed to parse hosts.json");
+      }
+    }
+    console.warn("[COPILOT VISION] ⚠️ No Copilot token found");
+  }
+  isAvailable() {
+    return !!this.token;
+  }
+  async analyzeImage(request) {
+    if (!this.token) {
+      throw new Error("Copilot Vision provider not initialized - no token found");
+    }
+    console.log("[COPILOT VISION] 🖼️ Analyzing image...");
+    try {
+      const tokenResponse = await fetch("https://api.github.com/copilot_internal/v2/token", {
+        headers: {
+          "Authorization": `token ${this.token}`,
+          "Editor-Version": "vscode/1.85.0",
+          "Editor-Plugin-Version": "copilot/1.144.0",
+          "User-Agent": "GithubCopilot/1.144.0"
+        }
+      });
+      if (!tokenResponse.ok) {
+        throw new Error(`Failed to authenticate with Copilot: ${tokenResponse.status}`);
+      }
+      const { token: sessionToken } = await tokenResponse.json();
+      const systemPrompt = `You are GRISHA, the Security Guardian of the ATLAS System.
+Your task is to analyze screenshots and verify task execution.
+
+RESPOND IN UKRAINIAN LANGUAGE ONLY.
+
+Analyze the image for:
+1. VERIFICATION: Did the requested action complete successfully?
+2. SECURITY: Any phishing, fake dialogs, or suspicious elements?
+3. ERRORS: Any error dialogs, crash screens, or warnings?
+4. BLOCKERS: Popups that might block further actions?
+
+Return JSON:
+{
+  "analysis": "Brief Ukrainian description of what you see",
+  "anomalies": [
+    { "type": "string", "severity": "low|medium|high", "description": "string", "location": "string" }
+  ],
+  "confidence": 0.0-1.0,
+  "verified": true/false
+}`;
+      const userPrompt = request.prompt || (request.taskContext ? `Перевір виконання завдання: "${request.taskContext}". Що бачиш на екрані?` : "Проаналізуй цей скріншот. Що ти бачиш? Чи все в нормі?");
+      const response = await fetch("https://api.githubcopilot.com/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${sessionToken}`,
+          "Content-Type": "application/json",
+          "Editor-Version": "vscode/1.85.0"
+        },
+        body: JSON.stringify({
+          model: this.model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            {
+              role: "user",
+              content: [
+                { type: "text", text: userPrompt },
+                {
+                  type: "image_url",
+                  image_url: {
+                    url: `data:${request.mimeType || "image/jpeg"};base64,${request.image}`
+                  }
+                }
+              ]
+            }
+          ],
+          temperature: 0.3,
+          max_tokens: 1024
+        })
+      });
+      if (!response.ok) {
+        const errText = await response.text();
+        throw new Error(`Copilot Vision API error: ${response.status} ${errText}`);
+      }
+      const data = await response.json();
+      const text = data.choices[0]?.message?.content || "";
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            analysis: parsed.analysis || text,
+            anomalies: parsed.anomalies || [],
+            confidence: parsed.confidence || 0.8,
+            verified: parsed.verified ?? true,
+            provider: this.name
+          };
+        }
+      } catch (parseError) {
+        console.warn("[COPILOT VISION] Failed to parse JSON response, using raw text");
+      }
+      return {
+        analysis: text,
+        anomalies: [],
+        confidence: 0.7,
+        verified: !text.toLowerCase().includes("error") && !text.toLowerCase().includes("помилка"),
+        provider: this.name
+      };
+    } catch (error) {
+      console.error("[COPILOT VISION] ❌ Error:", error.message);
+      throw error;
+    }
+  }
+  getModels() {
+    return [
+      "gpt-4o",
+      "gpt-4o-mini",
+      "gpt-4-vision-preview",
+      "claude-sonnet-4"
+      // Claude also supports vision
+    ];
+  }
+}
+class ProviderRouter {
+  llmProviders = /* @__PURE__ */ new Map();
+  ttsProviders = /* @__PURE__ */ new Map();
+  sttProviders = /* @__PURE__ */ new Map();
+  visionProviders = /* @__PURE__ */ new Map();
+  constructor() {
+    this.initializeProviders();
+  }
+  /**
+   * Initialize all available providers
+   */
+  initializeProviders() {
+    console.log("[PROVIDER ROUTER] 🔌 Initializing providers...");
+    const brainConfig = getProviderConfig("brain");
+    if (brainConfig.apiKey) {
+      this.llmProviders.set("gemini", new GeminiProvider(brainConfig.apiKey, brainConfig.model));
+    }
+    const openaiKey = process.env.OPENAI_API_KEY;
+    if (openaiKey) {
+      this.llmProviders.set("openai", new OpenAIProvider(openaiKey));
+    }
+    const anthropicKey = process.env.ANTHROPIC_API_KEY;
+    if (anthropicKey) {
+      this.llmProviders.set("anthropic", new AnthropicProvider(anthropicKey));
+    }
+    const mistralKey = process.env.MISTRAL_API_KEY;
+    if (mistralKey) {
+      this.llmProviders.set("mistral", new MistralProvider(mistralKey));
+    }
+    const copilotKey = process.env.COPILOT_API_KEY;
+    const copilotProvider = new VSCodeCopilotProvider(copilotKey);
+    if (copilotProvider.isAvailable()) {
+      this.llmProviders.set("copilot", copilotProvider);
+    }
+    const ttsConfig = getProviderConfig("tts");
+    if (ttsConfig.apiKey) {
+      const geminiTTS = new GeminiTTSProvider(ttsConfig.apiKey, ttsConfig.model);
+      this.ttsProviders.set("gemini", geminiTTS);
+    }
+    getVisionConfig();
+    const copilotVision = new CopilotVisionProvider(copilotKey, "gpt-4o");
+    if (copilotVision.isAvailable()) {
+      this.visionProviders.set("copilot", copilotVision);
+    }
+    console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM, ${this.ttsProviders.size} TTS, ${this.visionProviders.size} Vision providers`);
+  }
+  /**
+   * Get provider configuration helper
+   */
+  getProvider(service, map, isAvailable) {
+    const config2 = getProviderConfig(service);
+    const provider = map.get(config2.provider);
+    if (provider && isAvailable(provider)) {
+      return provider;
+    }
+    if (config2.fallbackProvider) {
+      const fallback = map.get(config2.fallbackProvider);
+      if (fallback && isAvailable(fallback)) {
+        console.log(`[PROVIDER ROUTER] 🔄 Using fallback provider: ${config2.fallbackProvider} for ${service}`);
+        return fallback;
+      }
+    }
+    throw new Error(`No available provider for ${service}`);
+  }
+  /**
+   * Generate LLM response
+   */
+  async generateLLM(service, request) {
+    const provider = this.getProvider(service, this.llmProviders, (p) => p.isAvailable());
+    const config2 = getProviderConfig(service);
+    if (!request.model)
+      request.model = config2.model;
+    try {
+      return await provider.generate(request);
+    } catch (error) {
+      throw error;
+    }
+  }
+  /**
+   * Generate TTS audio
+   */
+  async speak(service, request) {
+    const provider = this.getProvider(service, this.ttsProviders, (p) => p.isAvailable());
+    return await provider.speak(request);
+  }
+  /**
+   * Generate Multi-Speaker TTS audio
+   */
+  async speakMulti(service, request) {
+    const provider = this.getProvider(service, this.ttsProviders, (p) => p.isAvailable());
+    if (provider.speakMulti) {
+      return await provider.speakMulti(request);
+    }
+    throw new Error(`Provider ${provider.name} does not support multi-speaker TTS`);
+  }
+  /**
+   * Analyze image for Vision (Grisha on-demand mode)
+   * For live mode, use GeminiLiveService directly
+   */
+  async analyzeVision(request) {
+    const visionConfig = getVisionConfig();
+    const onDemandConfig = visionConfig.onDemand;
+    let provider = this.visionProviders.get(onDemandConfig.provider);
+    if (!provider || !provider.isAvailable()) {
+      if (onDemandConfig.fallbackProvider) {
+        provider = this.visionProviders.get(onDemandConfig.fallbackProvider);
+        if (provider && provider.isAvailable()) {
+          console.log(`[PROVIDER ROUTER] 🔄 Using fallback Vision provider: ${onDemandConfig.fallbackProvider}`);
+        }
+      }
+    }
+    if (!provider || !provider.isAvailable()) {
+      throw new Error("No available Vision provider for on-demand analysis");
+    }
+    console.log(`[PROVIDER ROUTER] 🖼️ Analyzing image with ${provider.name}...`);
+    return await provider.analyzeImage(request);
+  }
+  /**
+   * Get Vision config (for mode checking)
+   */
+  getVisionConfig() {
+    return getVisionConfig();
+  }
+  /**
+   * Check if Vision on-demand is available
+   */
+  isVisionOnDemandAvailable() {
+    const config2 = getVisionConfig();
+    const onDemandConfig = config2.onDemand;
+    const primary = this.visionProviders.get(onDemandConfig.provider);
+    const fallback = onDemandConfig.fallbackProvider ? this.visionProviders.get(onDemandConfig.fallbackProvider) : null;
+    return (primary?.isAvailable() ?? false) || (fallback?.isAvailable() ?? false);
+  }
+  /**
+   * Check if Vision live mode is available (checks if Gemini Live would work)
+   */
+  isVisionLiveAvailable() {
+    const config2 = getVisionConfig();
+    return !!config2.live.apiKey;
+  }
+  /**
+   * Register a new LLM provider
+   */
+  registerLLMProvider(provider) {
+    this.llmProviders.set(provider.name, provider);
+  }
+  /**
+   * Register a new TTS provider
+   */
+  registerTTSProvider(provider) {
+    this.ttsProviders.set(provider.name, provider);
+  }
+  /**
+   * Register a new Vision provider
+   */
+  registerVisionProvider(provider) {
+    this.visionProviders.set(provider.name, provider);
+  }
+}
+let routerInstance = null;
+function getProviderRouter() {
+  if (!routerInstance) {
+    routerInstance = new ProviderRouter();
+  }
+  return routerInstance;
 }
 const ATLAS = {
   name: "ATLAS",
@@ -1024,6 +2014,8 @@ class UnifiedBrain extends CortexBrain {
   constructor() {
     super();
     console.log("[UNIFIED-BRAIN] 🧠🔗 Unified Brain initialized");
+    logProviderConfig();
+    getProviderRouter();
   }
   /**
    * Set Atlas Brain API for fallback and context
@@ -1061,46 +2053,33 @@ class UnifiedBrain extends CortexBrain {
   }
   /**
    * Think using KONTUR Cortex providers (Real Intelligence)
+   * Uses ProviderRouter for multi-provider support with fallback
    */
   async thinkWithCortex(request) {
-    console.log("[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (Gemini 2.0)...");
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY;
-    if (!apiKey) {
-      console.error("[UNIFIED-BRAIN] ❌ No API key found for Cortex");
-      throw new Error("No AI provider configured");
-    }
+    const mode = request.mode || "chat";
+    console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex via ProviderRouter in ${mode} mode...`);
     try {
-      const genAI = new genai.GoogleGenAI({ apiKey });
-      const modelName = process.env.GEMINI_MODEL || "gemini-2.5-flash";
-      const mode = request.mode || "chat";
-      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName}) in ${mode} mode...`);
+      const router2 = getProviderRouter();
       const systemPrompt = `${request.system_prompt}
 
 IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
-      const config = {
-        systemInstruction: systemPrompt,
+      const response = await router2.generateLLM("brain", {
+        prompt: request.user_prompt,
+        systemPrompt,
+        responseFormat: mode === "planning" ? "json" : "text",
         temperature: 0.7
-      };
-      if (mode === "planning") {
-        config.responseMimeType = "application/json";
-      }
-      const response = await genAI.models.generateContent({
-        model: modelName,
-        contents: [
-          { role: "user", parts: [{ text: request.user_prompt }] }
-        ],
-        config
       });
-      const content = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      const content = response.text;
       if (!content) {
         throw new Error("Empty response from Cortex");
       }
+      console.log(`[UNIFIED-BRAIN] ✅ Response from ${response.provider} (${response.model})`);
       if (mode === "chat") {
         return {
           text: content,
           usage: {
-            input_tokens: response.usageMetadata?.promptTokenCount || 0,
-            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+            input_tokens: response.usage?.promptTokens || 0,
+            output_tokens: response.usage?.completionTokens || 0
           }
         };
       } else {
@@ -1117,14 +2096,13 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
         }
         return {
           text: JSON.stringify(parsed),
-          // Keep consistent format for internal passing
           tool_calls: parsed.plan?.map((step) => ({
             name: step.tool,
             args: step.args
           })) || [],
           usage: {
-            input_tokens: response.usageMetadata?.promptTokenCount || 0,
-            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+            input_tokens: response.usage?.promptTokens || 0,
+            output_tokens: response.usage?.completionTokens || 0
           }
         };
       }
@@ -1753,13 +2731,340 @@ LANGUAGE RULES:
     }
   }
 }
+class GrishaVisionService extends events.EventEmitter {
+  isObserving = false;
+  captureInterval = null;
+  geminiLive = null;
+  frameCount = 0;
+  isSpeaking = false;
+  // Selected source for capture
+  selectedSourceId = null;
+  selectedSourceName = null;
+  constructor() {
+    super();
+  }
+  /**
+   * Get current Vision mode from config
+   */
+  get mode() {
+    return getVisionConfig().mode;
+  }
+  /**
+   * Set Gemini Live service (for live mode)
+   */
+  setGeminiLive(geminiLive) {
+    this.geminiLive = geminiLive;
+    if (geminiLive) {
+      geminiLive.on("text", (text) => {
+        this.processLiveResponse(text);
+      });
+      geminiLive.on("audio", (audio) => {
+        if (!this.isSpeaking) {
+          this.isSpeaking = true;
+          console.log("[GRISHA VISION] 🔇 Audio started - pausing frame capture");
+          setTimeout(() => {
+            if (this.isSpeaking) {
+              console.log("[GRISHA VISION] ⏱️ Audio timeout - resuming");
+              this.isSpeaking = false;
+            }
+          }, 5e3);
+        }
+        this.emit("audio", audio);
+      });
+      geminiLive.on("turnComplete", () => {
+        console.log("[GRISHA VISION] 🎤 Turn complete");
+        this.isSpeaking = false;
+        this.emitResult("confirmation", "Grisha finished speaking", true);
+      });
+    }
+  }
+  /**
+   * Get available screen/window sources
+   */
+  async getSources() {
+    try {
+      const sources = await electron.desktopCapturer.getSources({
+        types: ["window", "screen"],
+        thumbnailSize: { width: 150, height: 100 }
+      });
+      return sources.map((source) => ({
+        id: source.id,
+        name: source.name,
+        thumbnail: source.thumbnail.toDataURL(),
+        isScreen: source.id.startsWith("screen:")
+      }));
+    } catch (err) {
+      console.error("[GRISHA VISION] Failed to get sources:", err);
+      return [];
+    }
+  }
+  /**
+   * Select a specific source (window/screen) for capture
+   */
+  selectSource(sourceId, sourceName) {
+    this.selectedSourceId = sourceId;
+    this.selectedSourceName = sourceName;
+    console.log(`[GRISHA VISION] 🎯 Selected source: ${sourceName} (${sourceId})`);
+  }
+  /**
+   * Auto-select source by app name
+   */
+  async autoSelectSource(appName) {
+    const sources = await this.getSources();
+    const matched = sources.find(
+      (s) => s.name.toLowerCase().includes(appName.toLowerCase())
+    );
+    if (matched) {
+      this.selectSource(matched.id, matched.name);
+      return true;
+    }
+    return false;
+  }
+  /**
+   * Clear source selection (capture entire screen)
+   */
+  clearSourceSelection() {
+    this.selectedSourceId = null;
+    this.selectedSourceName = null;
+    console.log("[GRISHA VISION] 🖥️ Using full screen capture");
+  }
+  /**
+   * Start observation (works for both modes)
+   */
+  async startObservation(taskDescription) {
+    if (this.isObserving)
+      return;
+    const currentMode = this.mode;
+    console.log(`[GRISHA VISION] 👁️ Starting observation [${currentMode.toUpperCase()}]...`);
+    this.isObserving = true;
+    this.frameCount = 0;
+    if (currentMode === "live") {
+      await this.startLiveObservation(taskDescription);
+    } else {
+      this.emitResult("observation", `On-Demand спостереження активовано. ${taskDescription || "Готовий до перевірки."}`);
+    }
+  }
+  /**
+   * Stop observation
+   */
+  stopObservation() {
+    if (!this.isObserving)
+      return;
+    console.log(`[GRISHA VISION] 👁️ Observation stopped after ${this.frameCount} frames`);
+    this.isObserving = false;
+    this.isSpeaking = false;
+    if (this.captureInterval) {
+      clearInterval(this.captureInterval);
+      this.captureInterval = null;
+    }
+    this.emitResult("confirmation", `Спостереження завершено. Перевірено ${this.frameCount} кадрів.`);
+  }
+  /**
+   * Verify a step was executed (On-Demand mode)
+   * Captures screenshot and sends to Copilot/GPT-4o for analysis
+   */
+  async verifyStep(stepAction, stepDetails) {
+    console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
+    const currentMode = this.mode;
+    if (currentMode === "live") {
+      await this.notifyActionLive(stepAction, stepDetails || "");
+      return {
+        type: "verification",
+        message: "Запит надіслано до Gemini Live",
+        verified: true,
+        // Assume OK for live (async confirmation)
+        timestamp: Date.now(),
+        mode: "live"
+      };
+    }
+    try {
+      const base64Image = await this.captureFrame();
+      if (!base64Image) {
+        return this.errorResult("Не вдалося захопити екран");
+      }
+      const router2 = getProviderRouter();
+      const response = await router2.analyzeVision({
+        image: base64Image,
+        mimeType: "image/jpeg",
+        taskContext: stepAction,
+        prompt: `Перевір виконання кроку: "${stepAction}". ${stepDetails || ""}
+
+Чи виконано цю дію успішно? Опиши що бачиш.`
+      });
+      this.frameCount++;
+      const result = {
+        type: response.verified ? "verification" : "alert",
+        message: response.analysis,
+        verified: response.verified,
+        confidence: response.confidence,
+        anomalies: response.anomalies,
+        timestamp: Date.now(),
+        mode: "on-demand"
+      };
+      this.emit("observation", result);
+      console.log(`[GRISHA VISION] ${response.verified ? "✅" : "⚠️"} Step verified: ${response.analysis.slice(0, 100)}`);
+      return result;
+    } catch (error) {
+      console.error("[GRISHA VISION] Verification failed:", error);
+      return this.errorResult(`Помилка аналізу: ${error.message}`);
+    }
+  }
+  /**
+   * Capture a single frame from selected source or screen
+   */
+  async captureFrame() {
+    try {
+      let sources;
+      if (this.selectedSourceId) {
+        sources = await electron.desktopCapturer.getSources({
+          types: ["window", "screen"],
+          thumbnailSize: { width: 1280, height: 720 }
+          // Higher res for on-demand
+        });
+        const source = sources.find((s) => s.id === this.selectedSourceId);
+        if (source) {
+          const jpegBuffer = source.thumbnail.toJPEG(85);
+          return jpegBuffer.toString("base64");
+        }
+      }
+      sources = await electron.desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 1280, height: 720 }
+      });
+      if (sources.length > 0) {
+        const jpegBuffer = sources[0].thumbnail.toJPEG(85);
+        return jpegBuffer.toString("base64");
+      }
+      return null;
+    } catch (e) {
+      console.error("[GRISHA VISION] Capture failed:", e);
+      return null;
+    }
+  }
+  // ==================== PRIVATE METHODS ====================
+  /**
+   * Start Live observation (Gemini Live streaming)
+   */
+  async startLiveObservation(taskDescription) {
+    if (this.geminiLive && !this.geminiLive.isConnected) {
+      try {
+        await this.geminiLive.connect();
+        await new Promise((resolve) => setTimeout(resolve, 500));
+      } catch (e) {
+        console.error("[GRISHA VISION] Failed to connect Gemini Live:", e);
+      }
+    }
+    if (this.geminiLive?.sendText) {
+      this.geminiLive.sendText("Система: Починаємо спостереження. Опиши що бачиш на екрані.");
+    }
+    await this.captureAndSendLiveFrame();
+    this.captureInterval = setInterval(async () => {
+      if (this.isSpeaking)
+        return;
+      await this.captureAndSendLiveFrame();
+    }, 500);
+    this.emitResult("observation", `Live спостереження розпочато. ${taskDescription || "Моніторю виконання..."}`);
+  }
+  /**
+   * Capture and send frame to Gemini Live
+   */
+  async captureAndSendLiveFrame() {
+    try {
+      const base64 = await this.captureFrame();
+      if (base64 && this.geminiLive?.isConnected) {
+        this.geminiLive.sendVideoFrame(base64);
+        this.frameCount++;
+      }
+    } catch (e) {
+      console.error("[GRISHA VISION] Live capture failed:", e);
+    }
+  }
+  /**
+   * Notify Gemini Live about an action (Live mode)
+   */
+  async notifyActionLive(action, details) {
+    if (this.geminiLive?.sendText) {
+      console.log(`[GRISHA VISION] 🗣️ Prompting verification: ${action}`);
+      this.geminiLive.sendText(`Система: Виконано дію "${action}" (${details}). Підтвердь словом "Виконано" або повідом про помилку.`);
+      await this.captureAndSendLiveFrame();
+    }
+  }
+  /**
+   * Process response from Gemini Live
+   */
+  processLiveResponse(text) {
+    const lowerText = text.toLowerCase();
+    let resultType = "observation";
+    if (lowerText.includes("alert") || lowerText.includes("помилка") || lowerText.includes("error") || lowerText.includes("не виконано")) {
+      resultType = "alert";
+    } else if (lowerText.includes("ok") || lowerText.includes("виконано") || lowerText.includes("stable") || lowerText.includes("done")) {
+      resultType = "confirmation";
+    }
+    const result = {
+      type: resultType,
+      message: text,
+      verified: resultType === "confirmation",
+      timestamp: Date.now(),
+      mode: "live"
+    };
+    console.log(`[GRISHA VISION] 🔍 ${resultType.toUpperCase()}: ${text}`);
+    this.emit("observation", result);
+  }
+  /**
+   * Helper: emit observation result
+   */
+  emitResult(type, message, verified) {
+    this.emit("observation", {
+      type,
+      message,
+      verified,
+      timestamp: Date.now(),
+      mode: this.mode
+    });
+  }
+  /**
+   * Helper: create error result
+   */
+  errorResult(message) {
+    return {
+      type: "alert",
+      message,
+      verified: false,
+      timestamp: Date.now(),
+      mode: this.mode
+    };
+  }
+  get isActive() {
+    return this.isObserving;
+  }
+}
+let visionServiceInstance = null;
+function getGrishaVisionService() {
+  if (!visionServiceInstance) {
+    visionServiceInstance = new GrishaVisionService();
+  }
+  return visionServiceInstance;
+}
+const GrishaVisionService$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  GrishaVisionService,
+  getGrishaVisionService
+}, Symbol.toStringTag, { value: "Module" }));
 class TetyanaExecutor extends events.EventEmitter {
   core;
   currentPlan = null;
   active = false;
+  visionService = null;
   constructor(core) {
     super();
     this.core = core;
+  }
+  /**
+   * Set Vision Service (for main process integration)
+   */
+  setVisionService(service) {
+    this.visionService = service;
+    console.log("[TETYANA] 👁️ Vision service connected");
   }
   /**
    * Start executing a plan
@@ -1773,6 +3078,7 @@ class TetyanaExecutor extends events.EventEmitter {
     this.currentPlan = plan;
     console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
     this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
+    await this.startVisionObservation(plan.goal);
     try {
       for (let i = 0; i < plan.steps.length; i++) {
         if (!this.active)
@@ -1786,8 +3092,14 @@ class TetyanaExecutor extends events.EventEmitter {
         }
         await this.validateStep(step, stepNum);
         const result = await this.executeStep(step, stepNum);
+        const visionResult = await this.verifyStepWithVision(step, stepNum);
+        if (visionResult && !visionResult.verified && visionResult.type === "alert") {
+          console.warn(`[TETYANA] ⚠️ Vision alert: ${visionResult.message}`);
+          this.emitStatus("warning", `Grisha: ${visionResult.message}`);
+        }
         this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
       }
+      this.stopVisionObservation();
       if (this.active) {
         this.emitStatus("completed", `План успішно завершено.`);
         if (plan.user_response_ua) {
@@ -1796,6 +3108,7 @@ class TetyanaExecutor extends events.EventEmitter {
       }
     } catch (error) {
       console.error(`[TETYANA] 💥 Execution Failed: ${error.message}`);
+      this.stopVisionObservation();
       this.handleFailure(error, plan);
     } finally {
       this.active = false;
@@ -1809,7 +3122,44 @@ class TetyanaExecutor extends events.EventEmitter {
     if (this.active) {
       console.log("[TETYANA] 🛑 Emergency Stop requested");
       this.active = false;
+      this.stopVisionObservation();
       this.emitStatus("stopped", "Виконання зупинено.");
+    }
+  }
+  /**
+   * Start Vision observation for the plan
+   */
+  async startVisionObservation(goal) {
+    const vision = this.visionService || getGrishaVisionService();
+    const config2 = getVisionConfig();
+    console.log(`[TETYANA] 👁️ Starting Vision observation [${config2.mode.toUpperCase()}]`);
+    try {
+      await vision.startObservation(goal);
+    } catch (e) {
+      console.warn("[TETYANA] Vision observation failed to start:", e);
+    }
+  }
+  /**
+   * Stop Vision observation
+   */
+  stopVisionObservation() {
+    const vision = this.visionService || getGrishaVisionService();
+    vision.stopObservation();
+  }
+  /**
+   * Verify step with Vision (Grisha sees if it worked)
+   */
+  async verifyStepWithVision(step, stepNum) {
+    const vision = this.visionService || getGrishaVisionService();
+    try {
+      const result = await vision.verifyStep(
+        step.action,
+        `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`
+      );
+      return result;
+    } catch (e) {
+      console.warn("[TETYANA] Vision verification failed:", e);
+      return null;
     }
   }
   /**
@@ -2668,7 +4018,7 @@ class ReasoningCapsule {
     console.log(`🧠 REASONING: Thinking about "${prompt.substring(0, 50)}..." (Level: ${level})`);
     try {
       const model = "gemini-3-pro-preview";
-      const config = {
+      const config2 = {
         thinkingConfig: {
           thinkingLevel: level
         }
@@ -2678,7 +4028,7 @@ class ReasoningCapsule {
         contents: [{
           parts: [{ text: prompt }]
         }],
-        config
+        config: config2
       });
       const text = result.text || "";
       console.log(`🧠 REASONING: Thought complete. Length: ${text.length}`);
@@ -2919,102 +4269,48 @@ class BrainCapsule {
   }
 }
 class VoiceCapsule {
-  genAI = null;
-  apiKey;
   constructor(apiKey) {
-    this.apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY || "";
-    if (this.apiKey) {
-      this.genAI = new genai.GoogleGenAI({ apiKey: this.apiKey });
-      const keySource = apiKey ? "Custom" : process.env.GEMINI_API_KEY ? "GEMINI_API_KEY" : process.env.GOOGLE_API_KEY ? "GOOGLE_API_KEY" : process.env.GEMINI_LIVE_API_KEY ? "GEMINI_LIVE_API_KEY" : "Unknown";
-      console.log(`[VOICE CAPSULE] 🔊 Initialized with Gemini TTS (Key Source: ${keySource})`);
-    } else {
-      console.warn("[VOICE CAPSULE] ⚠️ No API key found (Checked: GEMINI_API_KEY, GOOGLE_API_KEY, GEMINI_LIVE_API_KEY)");
-    }
+    console.log("[VOICE CAPSULE] 🔊 Initialized (Using ProviderRouter)");
+    getProviderRouter();
   }
   /**
   * Generate single-speaker audio from text
   */
-  async speak(text, config = {}) {
-    if (!this.genAI) {
-      console.error("[VOICE CAPSULE] ❌ Not initialized");
-      return null;
-    }
+  async speak(text, config2 = {}) {
+    const router2 = getProviderRouter();
     const MAX_RETRIES = 3;
-    let lastError;
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
-        const voiceName = config.voiceName || "Kore";
-        const response = await this.genAI.models.generateContent({
-          model: "gemini-2.5-flash-preview-tts",
-          contents: [{ parts: [{ text }] }],
-          config: {
-            responseModalities: ["AUDIO"],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: {
-                  voiceName
-                }
-                // Enforce Ukrainian locale (model auto-detects from text, but good to note)
-                // locale: 'uk-UA' 
-              }
-            }
-          }
+        const response = await router2.speak("tts", {
+          text,
+          voice: config2.voiceName,
+          speed: config2.rate
         });
-        const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-        if (!audioData) {
-          throw new Error("No audio data received in response");
-        }
-        const buffer = Buffer.from(audioData, "base64");
-        const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-        console.log(`[VOICE CAPSULE] ✅ Generated audio (Attempt ${attempt}):`, arrayBuffer.byteLength, "bytes");
-        return arrayBuffer;
+        console.log(`[VOICE CAPSULE] ✅ Generated audio (Attempt ${attempt}):`, response.audio.byteLength, "bytes");
+        return response.audio;
       } catch (error) {
         console.warn(`[VOICE CAPSULE] ⚠️ TTS Attempt ${attempt} failed:`, error.message);
-        lastError = error;
         await new Promise((resolve) => setTimeout(resolve, 500 * attempt));
       }
     }
-    console.error("[VOICE CAPSULE] ❌ TTS failed after", MAX_RETRIES, "attempts:", lastError?.message);
+    console.error("[VOICE CAPSULE] ❌ TTS failed after", MAX_RETRIES, "attempts");
     return null;
   }
   /**
    * Generate multi-speaker audio from text
    */
-  async speakMulti(text, config) {
-    if (!this.genAI) {
-      console.error("[VOICE CAPSULE] ❌ Not initialized");
-      return null;
-    }
+  async speakMulti(text, config2) {
+    const router2 = getProviderRouter();
     try {
-      const speakerVoiceConfigs = config.speakers.map((speaker) => ({
-        speaker: speaker.name,
-        voiceConfig: {
-          prebuiltVoiceConfig: {
-            voiceName: speaker.voiceName
-          }
-        }
-      }));
-      const response = await this.genAI.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text }] }],
-        config: {
-          responseModalities: ["AUDIO"],
-          speechConfig: {
-            multiSpeakerVoiceConfig: {
-              speakerVoiceConfigs
-            }
-          }
-        }
+      const response = await router2.speakMulti("tts", {
+        text,
+        speakers: config2.speakers.map((s) => ({
+          name: s.name,
+          voice: s.voiceName
+        }))
       });
-      const audioData = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
-      if (!audioData) {
-        console.error("[VOICE CAPSULE] ❌ No audio data received");
-        return null;
-      }
-      const buffer = Buffer.from(audioData, "base64");
-      const arrayBuffer = buffer.buffer.slice(buffer.byteOffset, buffer.byteOffset + buffer.byteLength);
-      console.log("[VOICE CAPSULE] ✅ Generated multi-speaker audio:", arrayBuffer.byteLength, "bytes");
-      return arrayBuffer;
+      console.log("[VOICE CAPSULE] ✅ Generated multi-speaker audio:", response.audio.byteLength, "bytes");
+      return response.audio;
     } catch (error) {
       console.error("[VOICE CAPSULE] ❌ Multi-speaker TTS error:", error.message);
       return null;
@@ -3456,6 +4752,8 @@ class DeepIntegrationSystem {
   systemCapsule = null;
   geminiLive = null;
   grishaObserver = null;
+  grishaVision = null;
+  // Unified Vision Service (GrishaVisionService)
   organs = /* @__PURE__ */ new Map();
   listeners = /* @__PURE__ */ new Map();
   constructor() {
@@ -3517,19 +4815,27 @@ class DeepIntegrationSystem {
   }
   /**
    * Initialize Vision System (Grisha's Eyes)
+   * Supports both LIVE (Gemini) and ON-DEMAND (Copilot) modes
    */
   async initVisionSystem() {
     console.log("[DEEP-INTEGRATION] Initializing Vision System...");
-    console.log("[DEEP-INTEGRATION] Initializing Vision System...");
-    const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
-    if (apiKey) {
+    const { getVisionConfig: getVisionConfig2 } = await Promise.resolve().then(() => config);
+    const { getGrishaVisionService: getGrishaVisionService2 } = await Promise.resolve().then(() => GrishaVisionService$1);
+    const visionConfig = getVisionConfig2();
+    console.log(`[DEEP-INTEGRATION] Vision Mode: ${visionConfig.mode.toUpperCase()}`);
+    this.grishaVision = getGrishaVisionService2();
+    const liveApiKey = visionConfig.live.apiKey || process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
+    if (liveApiKey) {
       try {
-        this.geminiLive = new GeminiLiveService(apiKey);
-        this.geminiLive.connect().catch((e) => console.error("[VISION] Gemini Connect Connect Error:", e));
+        this.geminiLive = new GeminiLiveService(liveApiKey);
+        if (visionConfig.mode === "live") {
+          this.geminiLive.connect().catch((e) => console.error("[VISION] Gemini Connect Error:", e));
+        }
         this.geminiLive.on("error", (err) => {
           console.error("[VISION] Gemini Live Error:", err.message);
           synapse.emit("GRISHA", "ALERT", `Помилка доступу до зору: ${err.message}`);
         });
+        this.grishaVision.setGeminiLive(this.geminiLive);
         this.grishaObserver = new GrishaObserver();
         this.grishaObserver.setGeminiLive(this.geminiLive);
         this.grishaObserver.on("observation", (result) => {
@@ -3538,14 +4844,22 @@ class DeepIntegrationSystem {
         this.grishaObserver.on("audio", (audioChunk) => {
           synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
         });
-        global.grishaObserver = this.grishaObserver;
         console.log("[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active");
       } catch (error) {
-        console.error("[DEEP-INTEGRATION] Failed to init Vision:", error);
+        console.error("[DEEP-INTEGRATION] Failed to init Gemini Live:", error);
       }
     } else {
-      console.warn("[DEEP-INTEGRATION] ⚠️ No API Key for Vision. Grisha will be blind.");
+      console.warn("[DEEP-INTEGRATION] ⚠️ No API Key for Live Vision.");
     }
+    this.grishaVision.on("observation", (result) => {
+      synapse.emit("GRISHA", result.type.toUpperCase(), result.message);
+    });
+    this.grishaVision.on("audio", (audioChunk) => {
+      synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
+    });
+    global.grishaObserver = this.grishaObserver;
+    global.grishaVision = this.grishaVision;
+    console.log(`[DEEP-INTEGRATION] ✅ Vision System ready [${visionConfig.mode}]`);
   }
   /**
    * Initialize MCP Handlers (Filesystem & OS)
@@ -3673,13 +4987,51 @@ class DeepIntegrationSystem {
     });
     ipcMain.removeHandler("vision:get_model_status");
     ipcMain.handle("vision:get_model_status", () => {
-      if (!this.geminiLive) {
-        return { status: "disconnected", error: null };
+      const { getVisionConfig: getVisionConfig2 } = require("../kontur/providers/config");
+      const config2 = getVisionConfig2();
+      if (config2.mode === "live") {
+        if (!this.geminiLive) {
+          return { status: "disconnected", error: null, mode: "live" };
+        }
+        return {
+          status: this.geminiLive.modelStatus,
+          error: this.geminiLive.errorType,
+          mode: "live"
+        };
+      } else {
+        return { status: "connected", error: null, mode: "on-demand" };
       }
-      return {
-        status: this.geminiLive.modelStatus,
-        error: this.geminiLive.errorType
-      };
+    });
+    ipcMain.removeHandler("vision:select_source");
+    ipcMain.handle("vision:select_source", async (_, { sourceId, sourceName }) => {
+      if (this.grishaVision) {
+        this.grishaVision.selectSource(sourceId, sourceName);
+        return { success: true };
+      }
+      return { success: false, error: "Vision service not initialized" };
+    });
+    ipcMain.removeHandler("vision:get_mode");
+    ipcMain.handle("vision:get_mode", () => {
+      const { getVisionConfig: getVisionConfig2 } = require("../kontur/providers/config");
+      return getVisionConfig2().mode;
+    });
+    ipcMain.removeHandler("vision:get_config");
+    ipcMain.handle("vision:get_config", () => {
+      const { getVisionConfig: getVisionConfig2 } = require("../kontur/providers/config");
+      return getVisionConfig2();
+    });
+    ipcMain.removeHandler("vision:analyze");
+    ipcMain.handle("vision:analyze", async (_, { taskContext }) => {
+      try {
+        if (!this.grishaVision) {
+          return { success: false, error: "Vision service not initialized" };
+        }
+        const result = await this.grishaVision.verifyStep(taskContext || "Manual analysis", "");
+        return { success: true, result };
+      } catch (err) {
+        console.error("[IPC] Vision analyze error:", err);
+        return { success: false, error: err.message };
+      }
     });
     console.log("[DEEP-INTEGRATION] ✅ IPC Bridge established");
   }

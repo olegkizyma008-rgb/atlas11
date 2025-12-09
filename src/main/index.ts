@@ -26,7 +26,7 @@ async function bootstrapSystem() {
     }
 }
 
-function createWindow(): void {
+async function createWindow(): Promise<void> {
     // Create the browser window.
     const mainWindow = new BrowserWindow({
         width: 900,
@@ -40,8 +40,8 @@ function createWindow(): void {
         }
     })
 
-    // Initialize KONTUR system (Unified)
-    bootstrapSystem().catch(e => console.error('[KONTUR] Initialization failed:', e));
+    // Initialize KONTUR system BEFORE showing window (fix race condition)
+    await bootstrapSystem().catch(e => console.error('[KONTUR] Initialization failed:', e));
 
     // Initialize tRPC
     createIPCHandler({ router: appRouter, windows: [mainWindow] })
