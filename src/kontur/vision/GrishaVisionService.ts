@@ -215,48 +215,61 @@ export class GrishaVisionService extends EventEmitter {
      * Verify a step was executed (On-Demand mode)
      * Captures screenshot and sends to Copilot/GPT-4o for analysis
      */
+    /**
+     * Verify a step was executed
+     */
     async verifyStep(stepAction: string, stepDetails?: string): Promise<VisionObservationResult> {
         console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
 
-        const currentMode = this.mode;
+        // If ON-DEMAND mode, run directly
+        if (this.mode === 'on-demand') {
+            return this.verifyStepOnDemand(stepAction, stepDetails);
+        }
 
-        // Live mode: Notify Gemini Live and WAIT for response
-        await this.notifyActionLive(stepAction, stepDetails || '');
+        // Live mode with fallback
+        return new Promise(async (resolve) => {
+            // Notify Gemini Live
+            await this.notifyActionLive(stepAction, stepDetails || '');
 
-        return new Promise((resolve) => {
-            const startTime = Date.now();
+            const cleanup = () => {
+                this.removeListener('observation', responseHandler);
+            };
 
-            // Handler for incoming observations (from processLiveResponse)
             const responseHandler = (result: VisionObservationResult) => {
-                // We look for confirmation or alert
                 if (result.type === 'confirmation' || result.type === 'alert') {
                     cleanup();
                     resolve(result);
                 }
             };
 
-            const cleanup = () => {
-                this.removeListener('observation', responseHandler);
-            };
-
-            // Listen for Gemini's response
             this.on('observation', responseHandler);
 
-            // Timeout after 15 seconds if Gemini is silent
-            setTimeout(() => {
+            // Timeout with FALLBACK
+            setTimeout(async () => {
                 cleanup();
-                console.warn('[GRISHA VISION] ⚠️ Verification timeout (Live Mode)');
-                resolve({
-                    type: 'alert', // Treat as alert/warning
-                    message: 'Timeout: Gemini Live verification failed. Not confirmed.',
-                    verified: false, // Strict fail
-                    timestamp: Date.now(),
-                    mode: 'live'
-                });
-            }, 15000);
-        });
+                console.warn('[GRISHA VISION] ⚠️ Verification timeout (Live Mode). Falling back to On-Demand verification...');
 
-        // On-Demand mode: capture and analyze
+                try {
+                    // FALLBACK: Try GPT-4o / Copilot analysis as backup
+                    const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails);
+                    resolve(fallbackResult);
+                } catch (e) {
+                    resolve({
+                        type: 'alert',
+                        message: 'Timeout & Fallback Failed: Gemini Live did not respond and On-Demand analysis failed.',
+                        verified: false,
+                        timestamp: Date.now(),
+                        mode: 'live'
+                    });
+                }
+            }, 10000); // 10s timeout before fallback
+        });
+    }
+
+    /**
+     * Private: On-Demand Verification Logic
+     */
+    private async verifyStepOnDemand(stepAction: string, stepDetails?: string): Promise<VisionObservationResult> {
         try {
             const base64Image = await this.captureFrame();
             if (!base64Image) {
@@ -284,7 +297,7 @@ export class GrishaVisionService extends EventEmitter {
             };
 
             this.emit('observation', result);
-            console.log(`[GRISHA VISION] ${response.verified ? '✅' : '⚠️'} Step verified: ${response.analysis.slice(0, 100)}`);
+            console.log(`[GRISHA VISION] ${response.verified ? '✅' : '⚠️'} Step verified (On-Demand): ${response.analysis.slice(0, 100)}`);
 
             return result;
 
