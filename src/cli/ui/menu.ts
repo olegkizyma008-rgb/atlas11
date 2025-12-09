@@ -5,10 +5,12 @@
  */
 
 import chalk from 'chalk';
+import inquirer from 'inquirer';
+import ora from 'ora';
+import { execSync } from 'child_process';
 import { select, input, confirm, secret } from './prompts.js';
 import { configManager } from '../managers/config-manager.js';
 import { modelRegistry } from '../managers/model-registry.js';
-import ora from 'ora';
 
 // Service definitions
 const SERVICES = [
@@ -472,6 +474,22 @@ async function configureAPIKeys(): Promise<void> {
         const keyInfo = keysList.find(k => k.key === selected);
         const current = configManager.get(selected);
         console.log(chalk.gray(`\n  Current: ${current ? current.substring(0, 20) + '...' : 'not set'}`));
+
+        // Special options for Copilot
+        if (selected === 'COPILOT_API_KEY') {
+            const method = await select('Method', [
+                { name: 'Enter Manually', value: 'manual' },
+                { name: 'Import from GitHub CLI', value: 'gh' },
+                { name: 'Cancel', value: 'cancel' }
+            ]);
+
+            if (method === 'cancel') continue;
+
+            if (method === 'gh') {
+                await importCopilotTokenFromGh();
+                continue;
+            }
+        }
 
         const value = await input(`${keyInfo?.label || selected}`, current);
         if (value) {
