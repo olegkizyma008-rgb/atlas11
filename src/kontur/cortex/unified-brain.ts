@@ -418,8 +418,13 @@ export class UnifiedBrain extends CortexBrain {
       return 'planning';
     }
 
-    // Check for planning keywords in prompt
-    const planningKeywords = ['plan', 'execute', 'task', 'do', 'create', 'build', 'make', 'develop', 'implement'];
+    // Check for planning keywords in prompt (English + Ukrainian)
+    const planningKeywords = [
+      // English
+      'plan', 'execute', 'task', 'do', 'create', 'build', 'make', 'develop', 'implement', 'open', 'run', 'save', 'write', 'multiply', 'calculate',
+      // Ukrainian imperatives (дієслова наказового способу)
+      'відкрий', 'запусти', 'створи', 'зроби', 'напиши', 'збережи', 'видали', 'перемнож', 'підрахуй', 'порахуй', 'обчисли', 'знайди', 'покажи', 'встанови', 'налаштуй', 'скопіюй', 'перемісти', 'виконай', 'додай', 'введи', 'набери'
+    ];
     const lowerPrompt = prompt.toLowerCase();
 
     const matchedKeyword = planningKeywords.find(kw => lowerPrompt.includes(kw));
@@ -434,8 +439,9 @@ export class UnifiedBrain extends CortexBrain {
   }
 
   async processUnified(packet: KPP_Packet): Promise<KPP_Packet> {
+    const atlasPersona = getPersona('ATLAS');
     const response = await this.think({
-      system_prompt: 'You are KONTUR Unified Brain',
+      system_prompt: atlasPersona.systemPrompt,
       user_prompt: packet.payload.prompt || JSON.stringify(packet.payload),
     });
 
