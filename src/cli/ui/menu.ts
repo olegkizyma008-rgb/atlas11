@@ -80,6 +80,16 @@ export async function mainMenu(): Promise<void> {
 
         // Build service status display
         const serviceChoices = SERVICES.map(s => {
+            // Special handling for execution - it uses EXECUTION_ENGINE, not provider/model
+            if (s.key === 'execution') {
+                const engine = config['EXECUTION_ENGINE'] || 'not set';
+                const engineLabel = engine === 'python-bridge' ? 'Python Bridge' :
+                    engine === 'native' ? 'Native (MCP)' : engine;
+                return {
+                    name: `${s.label.padEnd(12)} ${chalk.cyan(engineLabel)}`,
+                    value: `service:${s.key}`
+                };
+            }
             const provider = config[`${s.key.toUpperCase()}_PROVIDER`] || 'not set';
             const model = config[`${s.key.toUpperCase()}_MODEL`] || 'not set';
             return {
@@ -912,6 +922,21 @@ async function runHealthCheck(): Promise<void> {
     // Check standard services
     for (const service of SERVICES) {
         const prefix = service.key.toUpperCase();
+
+        // Special handling for Execution - uses EXECUTION_ENGINE, not provider
+        if (service.key === 'execution') {
+            const engine = config['EXECUTION_ENGINE'];
+            if (engine) {
+                const engineLabel = engine === 'python-bridge' ? 'Python Bridge' : 'Native (MCP)';
+                console.log(`  ${chalk.green('●')} ${service.label.padEnd(12)} ${chalk.gray(engineLabel.padEnd(10))} ${chalk.green('Configured')}`);
+                okCount++;
+            } else {
+                console.log(`  ${chalk.gray('○')} ${service.label.padEnd(12)} ${chalk.gray('not set'.padEnd(10))} ${chalk.gray('Not configured')}`);
+                warnCount++;
+            }
+            continue;
+        }
+
         const provider = config[`${prefix}_PROVIDER`] || 'not set';
 
         // Determine which API key to use
