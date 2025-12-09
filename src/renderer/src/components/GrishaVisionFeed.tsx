@@ -18,9 +18,10 @@ interface GrishaVisionFeedProps {
     isActive: boolean
     status?: 'stable' | 'analyzing' | 'alert'
     targetApp?: string // Auto-select window by app name (e.g., "Terminal", "Calculator")
+    activeSource?: { id: string; name: string } // Explicit source from backend
 }
 
-export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: GrishaVisionFeedProps) => {
+export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp, activeSource }: GrishaVisionFeedProps) => {
     const videoRef = useRef<HTMLVideoElement>(null)
     const [streamActive, setStreamActive] = useState(false)
     const [streamType, setStreamType] = useState<'camera' | 'screen' | 'window'>('camera')
@@ -78,8 +79,10 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
                     startWindowStream(matched)
                 }
             }
+            return result;
         } catch (err) {
             console.error('Failed to load sources:', err)
+            return [];
         }
     }
 
@@ -159,6 +162,33 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
             loadSources()
         }
     }, [isActive, targetApp])
+
+    // Auto-switch to activeSource from backend
+    useEffect(() => {
+        if (isActive && activeSource) {
+            console.log("Switching to active source from backend:", activeSource);
+            // We need to fetch full source info (thumbnail etc) to get stream
+            // Check if we already have sources loaded, if not load them
+            const switchSource = async () => {
+                let currentSources = sources;
+                if (currentSources.length === 0) {
+                    currentSources = await loadSources();
+                }
+
+                const match = currentSources.find((s: any) => s.id === activeSource.id || s.name === activeSource.name);
+                if (match) {
+                    startWindowStream(match);
+                } else {
+                    console.warn("Source not found for auto-switch:", activeSource);
+                    // Try to reload one more time if missing
+                    currentSources = await loadSources();
+                    const retryMatch = currentSources.find((s: any) => s.id === activeSource.id || s.name === activeSource.name);
+                    if (retryMatch) startWindowStream(retryMatch);
+                }
+            };
+            switchSource();
+        }
+    }, [isActive, activeSource]);
 
     // Send frames to Grisha Brain
     useEffect(() => {

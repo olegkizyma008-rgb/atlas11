@@ -196,6 +196,10 @@ export class DeepIntegrationSystem {
       synapse.emit('GRISHA', 'AUDIO_CHUNK', { chunk: audioChunk });
     });
 
+    this.grishaVision.on('source_changed', (data: any) => {
+      synapse.emit('GRISHA', 'SOURCE_CHANGED', data);
+    });
+
     // Expose services globally for debugging
     (global as any).grishaVision = this.grishaVision;
 

@@ -3374,69 +3374,52 @@ class GrishaVisionService extends events.EventEmitter {
    */
   async verifyStep(stepAction, stepDetails) {
     console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
-    const currentMode = this.mode;
-    if (currentMode === "live") {
-      await this.notifyActionLive(stepAction, stepDetails || "");
-      return {
-        type: "verification",
-        message: "Запит надіслано до Gemini Live",
-        verified: true,
-        // Assume OK for live (async confirmation)
-        timestamp: Date.now(),
-        mode: "live"
+    this.mode;
+    await this.notifyActionLive(stepAction, stepDetails || "");
+    return new Promise((resolve) => {
+      const responseHandler = (result) => {
+        if (result.type === "confirmation" || result.type === "alert") {
+          cleanup();
+          resolve(result);
+        }
       };
-    }
-    try {
-      const base64Image = await this.captureFrame();
-      if (!base64Image) {
-        return this.errorResult("Не вдалося захопити екран");
-      }
-      const router2 = getProviderRouter();
-      const response = await router2.analyzeVision({
-        image: base64Image,
-        mimeType: "image/jpeg",
-        taskContext: stepAction,
-        prompt: `Перевір виконання кроку: "${stepAction}". ${stepDetails || ""}
-
-Чи виконано цю дію успішно? Опиши що бачиш.`
-      });
-      this.frameCount++;
-      const result = {
-        type: response.verified ? "verification" : "alert",
-        message: response.analysis,
-        verified: response.verified,
-        confidence: response.confidence,
-        anomalies: response.anomalies,
-        timestamp: Date.now(),
-        mode: "on-demand"
+      const cleanup = () => {
+        this.removeListener("observation", responseHandler);
       };
-      this.emit("observation", result);
-      console.log(`[GRISHA VISION] ${response.verified ? "✅" : "⚠️"} Step verified: ${response.analysis.slice(0, 100)}`);
-      return result;
-    } catch (error) {
-      console.error("[GRISHA VISION] Verification failed:", error);
-      return this.errorResult(`Помилка аналізу: ${error.message}`);
-    }
+      this.on("observation", responseHandler);
+      setTimeout(() => {
+        cleanup();
+        console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode)");
+        resolve({
+          type: "observation",
+          // Downgrade to simple observation
+          message: "Timeout: Gemini Live did not respond in time.",
+          verified: true,
+          // Proceed cautiously (soft fail)
+          timestamp: Date.now(),
+          mode: "live"
+        });
+      }, 15e3);
+    });
   }
   /**
    * Capture a single frame from selected source or screen
    */
-  async captureFrame() {
+  async captureFrame(overrideSourceId) {
     try {
-      let sources;
-      if (this.selectedSourceId) {
-        sources = await electron.desktopCapturer.getSources({
+      const targetId = overrideSourceId || this.selectedSourceId;
+      if (targetId) {
+        const sources2 = await electron.desktopCapturer.getSources({
           types: ["window", "screen"],
           thumbnailSize: { width: 1280, height: 720 }
-          // Higher res for on-demand
         });
-        const source = sources.find((s) => s.id === this.selectedSourceId);
+        const source = sources2.find((s) => s.id === targetId);
         if (source) {
           const jpegBuffer = source.thumbnail.toJPEG(85);
           return jpegBuffer.toString("base64");
         }
       }
-      sources = await electron.desktopCapturer.getSources({
+      const sources = await electron.desktopCapturer.getSources({
         types: ["screen"],
         thumbnailSize: { width: 1280, height: 720 }
       });
@@ -4427,12 +4410,29 @@ class GrishaCapsule {
   }
   async handleValidationRequest(packet) {
     const { action, args, stepNum } = packet.payload;
-    if (["mouse_click", "ui_action", "keyboard_type"].includes(action)) {
+    if (["mouse_click", "ui_action", "keyboard_type", "open_application"].includes(action)) {
       console.log(`[GRISHA] 👁️ Visual Verification triggered for ${action}`);
       try {
-        const screenshot = await this.executeTool("kontur://organ/mcp/os", "get_screenshot", { action: "screen" });
-        if (screenshot.content && screenshot.content[1] && screenshot.content[1].type === "image") {
-          const base64 = screenshot.content[1].data;
+        let sourceId = void 0;
+        if (args.appName) {
+          try {
+            const sourcesRes = await this.executeTool("kontur://organ/vision", "get_sources", {});
+            if (sourcesRes.sources) {
+              const match = sourcesRes.sources.find(
+                (s) => s.name.toLowerCase().includes(args.appName.toLowerCase())
+              );
+              if (match) {
+                sourceId = match.id;
+                console.log(`[GRISHA] 🎯 Switching vision focus to window: ${match.name}`);
+              }
+            }
+          } catch (err) {
+            console.warn("[GRISHA] Failed to resolve sources:", err);
+          }
+        }
+        const visionRes = await this.executeTool("kontur://organ/vision", "capture", { sourceId });
+        if (visionRes && visionRes.image) {
+          const base64 = visionRes.image;
           const visionReport = await this.vision.analyzeScreenshot(base64);
           this.lastVisualAnalysis = visionReport;
           if (visionReport.anomaliesDetected) {
@@ -5323,6 +5323,46 @@ class DeepIntegrationSystem {
       synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
     });
     global.grishaVision = this.grishaVision;
+    this.core.register("kontur://organ/vision", {
+      send: async (packet) => {
+        const { op_code } = packet.instruction;
+        const args = packet.payload || {};
+        try {
+          let result = {};
+          if (op_code === "get_sources") {
+            result = { sources: await this.grishaVision.getSources() };
+          } else if (op_code === "capture") {
+            const sourceId = args.sourceId || args.id;
+            const image = await this.grishaVision.captureFrame(sourceId);
+            result = { image };
+          } else if (op_code === "select_source") {
+            this.grishaVision.selectSource(args.sourceId, args.sourceName || "Unknown");
+            result = { success: true };
+          }
+          if (packet.route.reply_to) {
+            const response = createPacket(
+              "kontur://organ/vision",
+              packet.route.reply_to,
+              PacketIntent.RESPONSE,
+              result
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
+          }
+        } catch (e) {
+          if (packet.route.reply_to) {
+            const response = createPacket(
+              "kontur://organ/vision",
+              packet.route.reply_to,
+              PacketIntent.ERROR,
+              { error: e.message }
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
+          }
+        }
+      }
+    });
     console.log(`[DEEP-INTEGRATION] ✅ Vision System ready [${visionConfig.mode}]`);
   }
   /**

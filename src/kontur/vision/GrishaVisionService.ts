@@ -121,6 +121,7 @@ export class GrishaVisionService extends EventEmitter {
         this.selectedSourceId = sourceId;
         this.selectedSourceName = sourceName;
         console.log(`[GRISHA VISION] 🎯 Selected source: ${sourceName} (${sourceId})`);
+        this.emit('source_changed', { id: sourceId, name: sourceName });
     }
 
     /**

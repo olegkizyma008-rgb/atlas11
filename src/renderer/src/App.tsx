@@ -67,6 +67,7 @@ function App(): JSX.Element {
     const [micEnabled, setMicEnabled] = useState(true)
     const [speakerEnabled, setSpeakerEnabled] = useState(true)
     const [grishaVisionStatus, setGrishaVisionStatus] = useState<'stable' | 'analyzing' | 'alert'>('stable')
+    const [grishaSource, setGrishaSource] = useState<{ id: string; name: string } | undefined>(undefined)
 
     // Refs for stable access inside callback
     const speakerEnabledRef = useRef(speakerEnabled);
@@ -151,6 +152,12 @@ function App(): JSX.Element {
                 }
             }
             return; // Audio chunks don't need logging
+        }
+
+        // Handle Vision Source Change
+        if (source === 'GRISHA' && signal.type === 'SOURCE_CHANGED') {
+            setGrishaSource(signal.payload);
+            return;
         }
 
         const newLog: Log = {
@@ -254,6 +261,7 @@ function App(): JSX.Element {
             <GrishaVisionFeed
                 isActive={true}
                 status={grishaVisionStatus}
+                activeSource={grishaSource}
             />
 
             {/* Log Panel - Bottom Left */}

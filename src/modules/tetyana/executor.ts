@@ -133,9 +133,6 @@ export class TetyanaExecutor extends EventEmitter {
 
             if (this.active) {
                 this.emitStatus("completed", `План успішно завершено.`);
-                if (plan.user_response_ua) {
-                    this.speak(plan.user_response_ua);
-                }
             }
 
         } catch (error: any) {
