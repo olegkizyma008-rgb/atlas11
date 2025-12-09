@@ -84,15 +84,21 @@ export class CortexBrain extends EventEmitter {
   private async initMCP() {
     try {
       const split = (str: string) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map(s => s.replace(/^"|"$/g, '')) || [];
-      const homeDir = process.env.HOME || '/Users/dev';
+      const homeDir = process.env.HOME || process.env.USERPROFILE || '';
+
+      if (!homeDir) console.warn("[CORTEX] ⚠️ Could not determine HOME directory for MCP");
 
       // 1. Filesystem MCP (Official) - Allow project dir + Desktop
       const { McpBridge } = await import('../mcp/McpBridge');
+
+      const allowedPaths = [process.cwd()];
+      if (homeDir) allowedPaths.push(path.join(homeDir, 'Desktop'));
+
       const fsBridge = new McpBridge(
         'filesystem',
         '1.0.0',
         'node',
-        ['node_modules/@modelcontextprotocol/server-filesystem/dist/index.js', process.cwd(), `${homeDir}/Desktop`]
+        ['node_modules/@modelcontextprotocol/server-filesystem/dist/index.js', ...allowedPaths]
       );
 
       // 2. OS Automation MCP (Local)

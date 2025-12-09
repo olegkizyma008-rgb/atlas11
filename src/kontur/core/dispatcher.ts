@@ -157,7 +157,23 @@ export class Core extends EventEmitter {
    */
   private applyFix(fix: string, error: any) {
     console.log(`[AEDS FIX] Applying: ${fix}`);
-    // Placeholder for actual fix implementation
+
+    switch (fix) {
+      case 'restart_organ':
+        // Logic to identify which organ caused error would be needed here
+        // For now, we broadcast a heal signal
+        this.emit('system_heal', { type: 'restart', reason: error.message });
+        break;
+      case 'clear_buffer':
+        if (global.gc) global.gc(); // Optional: if exposed
+        break;
+      case 'recompute_hash':
+        // Handled by retry logic in networking layer usually
+        break;
+      case 'retry_parse':
+        // Handled by retry logic
+        break;
+    }
   }
 
   /**
