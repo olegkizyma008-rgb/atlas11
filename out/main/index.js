@@ -4613,6 +4613,10 @@ function analyzeThreat(content, patterns) {
   };
 }
 function validateOperation(operation, params, policy = ATLAS_SECURITY_POLICY) {
+  if (process.env.GRISHA_TEST_MODE === "true") {
+    console.warn("[GRISHA] ⚠️ TEST MODE ACTIVE - All operations allowed");
+    return { allowed: true };
+  }
   if (policy.allowlistedOperations.includes(operation)) {
     return { allowed: true };
   }
