@@ -1,10 +1,12 @@
 
 import { Plan, PlanStep } from '../atlas/contract';
-import { createPacket, KPP_Packet, PacketIntent } from '../../kontur/protocol/nexus';
+import { KPP_Packet } from '../../kontur/protocol/nexus'; // Corrected import
+import { OpenInterpreterBridge } from './open_interpreter_bridge';
+import { createPacket, PacketIntent } from '../../kontur/protocol/nexus';
 import { Core } from '../../kontur/core/dispatcher';
 import { EventEmitter } from 'events';
 import { getGrishaVisionService, GrishaVisionService, VisionObservationResult } from '../../kontur/vision/GrishaVisionService';
-import { getVisionConfig } from '../../kontur/providers/config';
+import { getVisionConfig, getExecutionConfig } from '../../kontur/providers/config';
 import { getToolRegistry } from '../../kontur/core/ToolRegistry';
 
 export class TetyanaExecutor extends EventEmitter {
@@ -29,7 +31,40 @@ export class TetyanaExecutor extends EventEmitter {
     /**
      * Start executing a plan
      */
-    public async execute(plan: Plan) {
+    public async execute(plan: Plan, inputPacket: KPP_Packet): Promise<void> {
+        const executionConfig = getExecutionConfig();
+        const usePythonBridge = executionConfig.engine === 'python-bridge';
+
+        if (usePythonBridge) {
+            // Experimental Open Interpreter Bridge Execution
+            try {
+                // Bridge Logic
+                // Bridge Logic
+                const prompt = plan.goal;
+                const bridge = new OpenInterpreterBridge();
+
+                if (OpenInterpreterBridge.checkEnvironment()) {
+                    this.core.emit('tetyana:log', { message: '[Bridge] Handing over to Open Interpreter...' });
+                    const result = await bridge.execute(prompt);
+                    this.core.emit('tetyana:log', { message: `[Bridge] Result: ${result}` });
+
+                    // Emit a success packet artificially
+                    this.core.emit('tetyana:done', {
+                        correlation_id: inputPacket.nexus.correlation_id, // Accessing via nexus
+                        source: 'tetyana',
+                        target: inputPacket.route.from, // Accessing via route
+                        data: { result }
+                    });
+                    return;
+                } else {
+                    this.core.emit('tetyana:error', { message: '[Bridge] Python environment not found!' });
+                }
+            } catch (err: any) {
+                this.core.emit('tetyana:error', { message: `[Bridge] Execution Failed: ${err.message}` });
+                return;
+            }
+        }
+
         if (this.active) {
             console.warn('[TETYANA] Already executing a plan. Queuing not implemented yet.');
             return;
@@ -69,14 +104,13 @@ export class TetyanaExecutor extends EventEmitter {
 
         try {
             for (let i = 0; i < plan.steps.length; i++) {
-                if (!this.active) break; // formatting break
+                if (!this.active) break;
 
                 const step = plan.steps[i];
                 const stepNum = i + 1;
                 console.log(`[TETYANA] ▶️ Step ${stepNum}: ${step.action}`);
 
                 // 🛑 SYSTEM 2 THINKING (Gemini 3)
-                // If plan is complex (>3 steps) and it's the first step, or if step is marked critical
                 if (plan.steps.length > 3 && i === 0) {
                     this.emitStatus("thinking", "🤔 Аналізую план дій (Gemini 3)...");
                     await this.consultReasoning(plan);
@@ -109,7 +143,6 @@ export class TetyanaExecutor extends EventEmitter {
                 if (visionResult && !visionResult.verified && visionResult.type === 'alert') {
                     console.warn(`[TETYANA] ⚠️ Vision alert: ${visionResult.message}`);
                     this.emitStatus("warning", `Grisha: ${visionResult.message}`);
-                    // Continue for now, but could be configurable to stop
                 }
 
                 // 5. Report Success
@@ -155,7 +188,7 @@ export class TetyanaExecutor extends EventEmitter {
         const vision = this.visionService || getGrishaVisionService();
         const config = getVisionConfig();
 
-        console.log(`[TETYANA] 👁️ Starting Vision observation [${config.mode.toUpperCase()}]`);
+        console.log(`[TETYANA] 👁️ Starting Vision observation[${config.mode.toUpperCase()}]`);
 
         try {
             await vision.startObservation(goal);
@@ -336,7 +369,7 @@ export class TetyanaExecutor extends EventEmitter {
             );
             packet.instruction.op_code = toolName; // MCP expects the tool name as the method
             packet.route.reply_to = 'kontur://organ/tetyana';
-            packet.nexus.correlation_id = cmdId;
+            packet.nexus.correlation_id = cmdId; // Use nexus.correlation_id
 
             this.core.ingest(packet);
         });

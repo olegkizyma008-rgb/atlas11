@@ -21,7 +21,8 @@ const SERVICES = [
     { key: 'tts', label: 'TTS', desc: 'Text-to-Speech' },
     { key: 'stt', label: 'STT', desc: 'Speech-to-Text' },
     { key: 'vision', label: 'Vision', desc: 'Visual Analysis (Grisha)', hasMode: true },
-    { key: 'reasoning', label: 'Reasoning', desc: 'Deep Thinking (Gemini 3)' }
+    { key: 'reasoning', label: 'Reasoning', desc: 'Deep Thinking (Gemini 3)' },
+    { key: 'execution', label: 'Execution', desc: 'Agent Engine (Python/Native)' }
 ] as const;
 
 // Vision mode options
@@ -134,6 +135,12 @@ async function configureService(service: string): Promise<void> {
     // TTS/STT now use Vision-style "Primary/Fallback + Details" menu
     if (service === 'tts' || service === 'stt') {
         await configureVoiceService(service, serviceName, serviceInfo?.desc);
+        return;
+    }
+
+    // Execution Engine configuration
+    if (service === 'execution') {
+        await configureExecutionEngine();
         return;
     }
 
@@ -504,6 +511,45 @@ async function configureVisionMode(label: string, prefix: string): Promise<void>
             case 'apikey':
                 await editApiKey(apiKeyKey, `${label} API Key`, currentProvider);
                 break;
+        }
+    }
+}
+
+/**
+ * Configure Execution Engine (Python Bridge vs Native)
+ */
+async function configureExecutionEngine(): Promise<void> {
+    while (true) {
+        showHeader('Configure Execution Engine');
+        console.log(chalk.gray('  Select the agent runtime environment\n'));
+
+        const config = configManager.getAll();
+        const currentEngine = config['EXECUTION_ENGINE'] || 'native';
+
+        const choices = [
+            {
+                name: `Engine           ${currentEngine === 'python-bridge' ? chalk.green('Python Bridge (Open Interpreter)') : chalk.cyan('Native (MCP)')}`,
+                value: 'engine'
+            },
+            { name: '─'.repeat(35), value: '_sep', disabled: true },
+            { name: 'Back', value: 'back' }
+        ];
+
+        const action = await select('', choices);
+        if (action === 'back') return;
+
+        if (action === 'engine') {
+            const engine = await select('Select Engine', [
+                { name: `Python Bridge    ${chalk.gray('Advanced automation via Open Interpreter')}`, value: 'python-bridge' },
+                { name: `Native (MCP)     ${chalk.gray('Standard Atlas MCP execution')}`, value: 'native' },
+                { name: 'Back', value: 'back' }
+            ]);
+
+            if (engine !== 'back') {
+                configManager.set('EXECUTION_ENGINE', engine);
+                console.log(chalk.green(`\n  Execution engine set to ${engine}`));
+                await new Promise(r => setTimeout(r, 800));
+            }
         }
     }
 }

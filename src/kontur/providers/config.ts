@@ -3,7 +3,7 @@
  * Supports Vision with separate Live and On-Demand configurations
  */
 
-import { ProviderName, ServiceType, ProviderConfig, VisionConfig, VisionMode, VisionModeConfig, ServiceConfig } from './types';
+import { ProviderName, ServiceType, ProviderConfig, VisionConfig, VisionMode, VisionModeConfig, ServiceConfig, ExecutionConfig } from './types';
 
 // Default configurations for standard services
 const DEFAULTS: Record<Exclude<ServiceType, 'vision'>, ProviderConfig> = {
@@ -124,6 +124,15 @@ export function getVisionConfig(): VisionConfig {
 }
 
 /**
+ * Get Execution Engine configuration
+ */
+export function getExecutionConfig(): ExecutionConfig {
+    return {
+        engine: (process.env.EXECUTION_ENGINE as 'python-bridge' | 'native') || 'native'
+    };
+}
+
+/**
  * Get all service configurations
  */
 export function getAllConfigs(): ServiceConfig {
@@ -132,7 +141,8 @@ export function getAllConfigs(): ServiceConfig {
         tts: getProviderConfig('tts'),
         stt: getProviderConfig('stt'),
         vision: getVisionConfig(),
-        reasoning: getProviderConfig('reasoning')
+        reasoning: getProviderConfig('reasoning'),
+        execution: getExecutionConfig()
     };
 }
 
@@ -144,7 +154,10 @@ export function logProviderConfig(): void {
     console.log('[PROVIDER CONFIG] Current configuration:');
 
     for (const [service, config] of Object.entries(configs)) {
-        if (service === 'vision') {
+        if (service === 'execution') {
+            const execConfig = config as ExecutionConfig;
+            console.log(`  execution: engine=${execConfig.engine}`);
+        } else if (service === 'vision') {
             const visionConfig = config as VisionConfig;
             console.log(`  vision [mode: ${visionConfig.mode}]:`);
             console.log(`    live: ${visionConfig.live.provider} (${visionConfig.live.model})${visionConfig.live.fallbackProvider ? ` -> fallback: ${visionConfig.live.fallbackProvider}` : ''}`);

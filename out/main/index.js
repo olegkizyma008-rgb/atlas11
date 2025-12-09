@@ -437,6 +437,14 @@ class Core extends events.EventEmitter {
     super();
     this.initAEDS();
     this.startHealthChecks();
+    this.register("kontur://core/system", {
+      send: (packet) => {
+        if (packet.instruction.intent === PacketIntent.AI_PLAN) {
+          this.executePlan(packet.payload);
+        }
+      },
+      isAlive: () => true
+    });
   }
   /**
    * Initialize AEDS (Antibody Error Detection System)
@@ -594,6 +602,7 @@ class Core extends events.EventEmitter {
    * Main packet ingestion and routing logic
    */
   ingest(packet) {
+    this.emit("ingest", packet);
     console.log(`[CORE INGEST] Processing ${packet.nexus.uid} from ${packet.route.from}`);
     if (!verifyPacket(packet)) {
       console.warn(`[INTEGRITY FAIL] calculated hash mismatch for ${packet.nexus.uid}`);
@@ -3680,13 +3689,22 @@ class TetyanaExecutor extends events.EventEmitter {
     return new Promise((resolve, reject) => {
       const cmdId = `cmd-${Date.now()}-${Math.random()}`;
       this.pendingRequests.set(cmdId, { resolve, reject });
+      const registry = getToolRegistry();
+      const toolName = step.tool || step.action;
+      const targetURI = registry.getToolTarget(toolName);
+      if (!targetURI) {
+        this.pendingRequests.delete(cmdId);
+        reject(new Error(`Tool execution failed: No target URI found for tool '${toolName}'. Is it registered?`));
+        return;
+      }
+      console.log(`[TETYANA] 🚀 Executing '${toolName}' via ${targetURI} (ID: ${cmdId})`);
       const packet = createPacket(
         "kontur://organ/tetyana",
-        step.tool,
+        targetURI,
         PacketIntent.CMD,
-        step.args
+        step.args || {}
       );
-      packet.instruction.op_code = step.action;
+      packet.instruction.op_code = toolName;
       packet.route.reply_to = "kontur://organ/tetyana";
       packet.nexus.correlation_id = cmdId;
       this.core.ingest(packet);
@@ -4301,6 +4319,7 @@ class GrishaCapsule {
         }
       );
       response.route.reply_to = originalPacket.route.reply_to;
+      response.nexus.correlation_id = originalPacket.nexus.correlation_id;
       this.core.ingest(response);
       console.log(`[GRISHA] 🛡️ Verdict Sent: ${allowed ? "APPROVED" : "DENIED"} for ${originalPacket.payload.action}`);
     }
@@ -4741,10 +4760,6 @@ class VoiceCapsule {
     } else {
       text = textOrArgs;
     }
-    synapse.emit("voice", "request_tts", {
-      text,
-      voice: voiceName
-    });
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await router2.speak("tts", {
@@ -5177,21 +5192,25 @@ class DeepIntegrationSystem {
         try {
           const result = await this.unifiedBrain.executeTool(tool, args);
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               "kontur://organ/mcp/filesystem",
               packet.route.reply_to,
               PacketIntent.RESPONSE,
               { msg: `MCP Logic Executed. Result: ${JSON.stringify(result)}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
           }
         } catch (e) {
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               "kontur://organ/mcp/filesystem",
               packet.route.reply_to,
               PacketIntent.ERROR,
               { error: e.message, msg: `Failed: ${e.message}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
           }
         }
       }
@@ -5203,21 +5222,25 @@ class DeepIntegrationSystem {
         try {
           const result = await this.unifiedBrain.executeTool(tool, args);
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               "kontur://organ/mcp/os",
               packet.route.reply_to,
               PacketIntent.RESPONSE,
               { msg: `OS Command Executed: ${JSON.stringify(result)}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
           }
         } catch (e) {
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               "kontur://organ/mcp/os",
               packet.route.reply_to,
               PacketIntent.ERROR,
               { error: e.message, msg: `Failed: ${e.message}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
           }
         }
       }
@@ -5407,8 +5430,11 @@ class DeepIntegrationSystem {
     }
     if (this.reasoning) {
       const reasoningUrn = "kontur://organ/reasoning";
-      this.core.register(reasoningUrn, async (packet) => {
-        return this.reasoning?.handlePacket(packet);
+      this.core.register(reasoningUrn, {
+        send: async (packet) => {
+          return this.reasoning?.handlePacket(packet);
+        },
+        isAlive: () => true
       });
       this.reasoning.register(this.core);
       console.log(`[DEEP-INTEGRATION] 🧠 Reasoning Capsule registered as ${reasoningUrn}`);

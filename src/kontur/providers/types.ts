@@ -149,10 +149,15 @@ export interface VisionConfig {
     onDemand: VisionModeConfig; // Settings for On-Demand screenshots (Copilot/GPT-4o)
 }
 
+export interface ExecutionConfig {
+    engine: 'python-bridge' | 'native';
+}
+
 export interface ServiceConfig {
     brain: ProviderConfig;
     tts: ProviderConfig;
     stt: ProviderConfig;
     vision: VisionConfig;
     reasoning: ProviderConfig;
+    execution: ExecutionConfig;
 }
