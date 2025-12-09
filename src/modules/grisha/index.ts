@@ -263,19 +263,19 @@ export class GrishaCapsule implements GrishaAPI {
             this.threatHistory.set(key, (this.threatHistory.get(key) || 0) + 1);
 
             // Emit threat signal
-            synapse.emit('grisha', 'audit_log', {
-                action: args.action,
-                verdict: 'BLOCKED',
-                reason: validation.reason
-            });
+            // synapse.emit('grisha', 'audit_log', {
+            //     action: args.action,
+            //     verdict: 'BLOCKED',
+            //     reason: validation.reason
+            // });
 
             console.warn(`🛡️ GRISHA: BLOCKED - ${validation.reason}`);
         } else {
             // Log successful audit
-            synapse.emit('grisha', 'audit_log', {
-                action: args.action,
-                verdict: 'ALLOWED'
-            });
+            // synapse.emit('grisha', 'audit_log', {
+            //     action: args.action,
+            //     verdict: 'ALLOWED'
+            // });
 
             console.log(`🛡️ GRISHA: ALLOWED - ${args.action}`);
         }

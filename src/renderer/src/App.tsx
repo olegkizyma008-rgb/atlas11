@@ -160,18 +160,31 @@ function App(): JSX.Element {
             return;
         }
 
+        const message = typeof signal.payload === 'string'
+            ? signal.payload
+            : JSON.stringify(signal.payload);
+
+        // 🔇 FILTERING SPAM LOGS
+        if (message.includes('Grisha finished speaking')) return;
+        if (message.includes('{"action":')) return; // Just in case backend still sends it
+
         const newLog: Log = {
             id: Math.random().toString(36),
             source,
-            message: typeof signal.payload === 'string'
-                ? signal.payload
-                : JSON.stringify(signal.payload),
+            message,
             timestamp: Date.now(),
             type: source === 'GRISHA' && signal.payload?.includes?.('ALERT') ? 'warning' : 'info'
         }
 
-        // Use functional update to avoid dependency on 'logs'
-        setLogs(prev => [...prev, newLog].slice(-100))
+        // 🔇 DEDUPLICATION
+        // Check if the last log has the exact same message and source (within 2 seconds)
+        setLogs(prev => {
+            const lastLog = prev[prev.length - 1];
+            if (lastLog && lastLog.source === source && lastLog.message === message && (Date.now() - lastLog.timestamp) < 2000) {
+                return prev; // precise duplicate, skip
+            }
+            return [...prev, newLog].slice(-100);
+        })
 
 
         // Update active agent and status based on signal
