@@ -446,7 +446,8 @@ INSTRUCTIONS:
 4. Use AppleScript (osascript) via python 'subprocess' or 'os.system' to open applications or control UI if needed.
 5. For "TextEditor", assume "TextEdit" on macOS.
 6. Write and run the python code to perform this specific action immediately.
-7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'. Use the app name from the context or arguments.`;
+7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'. Use the app name from the context or arguments.
+8. FOR FILE OPERATIONS: Use standard python 'os' and 'shutil' modules. DO NOT use AppleScript (Finder) for creating, moving, or listing files as it triggers permission errors.`;
 
             try {
                 this.core.emit('tetyana:log', { message: `[Bridge] Executing Step ${stepNum}...` });

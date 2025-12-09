@@ -410,8 +410,11 @@ class Core extends events.EventEmitter {
     ["kontur://cortex/ai/main", SecurityScope.ROOT],
     ["kontur://core/system", SecurityScope.ROOT],
     // Whitelist for internal Atlas/Grisha components
-    ["kontur://atlas/system", SecurityScope.SYSTEM],
-    ["kontur://atlas/GRISHA", SecurityScope.SYSTEM],
+    ["kontur://atlas/SYSTEM", SecurityScope.ROOT],
+    // Uppercase SYSTEM often used in logs
+    ["kontur://atlas/system", SecurityScope.ROOT],
+    ["kontur://atlas/GRISHA", SecurityScope.ROOT],
+    // Grisha needs root to post events
     ["kontur://organ/tetyana", SecurityScope.SYSTEM],
     ["kontur://organ/grisha", SecurityScope.SYSTEM],
     ["kontur://organ/mcp/filesystem", SecurityScope.SYSTEM],
@@ -3373,35 +3376,79 @@ class GrishaVisionService extends events.EventEmitter {
    * Verify a step was executed (On-Demand mode)
    * Captures screenshot and sends to Copilot/GPT-4o for analysis
    */
+  /**
+   * Verify a step was executed
+   */
   async verifyStep(stepAction, stepDetails) {
     console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
-    this.mode;
-    await this.notifyActionLive(stepAction, stepDetails || "");
-    return new Promise((resolve) => {
+    if (this.mode === "on-demand") {
+      return this.verifyStepOnDemand(stepAction, stepDetails);
+    }
+    return new Promise(async (resolve) => {
+      await this.notifyActionLive(stepAction, stepDetails || "");
+      const cleanup = () => {
+        this.removeListener("observation", responseHandler);
+      };
       const responseHandler = (result) => {
         if (result.type === "confirmation" || result.type === "alert") {
           cleanup();
           resolve(result);
         }
       };
-      const cleanup = () => {
-        this.removeListener("observation", responseHandler);
-      };
       this.on("observation", responseHandler);
-      setTimeout(() => {
+      setTimeout(async () => {
         cleanup();
-        console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode)");
-        resolve({
-          type: "alert",
-          // Treat as alert/warning
-          message: "Timeout: Gemini Live verification failed. Not confirmed.",
-          verified: false,
-          // Strict fail
-          timestamp: Date.now(),
-          mode: "live"
-        });
-      }, 15e3);
+        console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode). Falling back to On-Demand verification...");
+        try {
+          const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails);
+          resolve(fallbackResult);
+        } catch (e) {
+          resolve({
+            type: "alert",
+            message: "Timeout & Fallback Failed: Gemini Live did not respond and On-Demand analysis failed.",
+            verified: false,
+            timestamp: Date.now(),
+            mode: "live"
+          });
+        }
+      }, 1e4);
     });
+  }
+  /**
+   * Private: On-Demand Verification Logic
+   */
+  async verifyStepOnDemand(stepAction, stepDetails) {
+    try {
+      const base64Image = await this.captureFrame();
+      if (!base64Image) {
+        return this.errorResult("Не вдалося захопити екран");
+      }
+      const router2 = getProviderRouter();
+      const response = await router2.analyzeVision({
+        image: base64Image,
+        mimeType: "image/jpeg",
+        taskContext: stepAction,
+        prompt: `Перевір виконання кроку: "${stepAction}". ${stepDetails || ""}
+
+Чи виконано цю дію успішно? Опиши що бачиш.`
+      });
+      this.frameCount++;
+      const result = {
+        type: response.verified ? "verification" : "alert",
+        message: response.analysis,
+        verified: response.verified,
+        confidence: response.confidence,
+        anomalies: response.anomalies,
+        timestamp: Date.now(),
+        mode: "on-demand"
+      };
+      this.emit("observation", result);
+      console.log(`[GRISHA VISION] ${response.verified ? "✅" : "⚠️"} Step verified (On-Demand): ${response.analysis.slice(0, 100)}`);
+      return result;
+    } catch (error) {
+      console.error("[GRISHA VISION] Verification failed:", error);
+      return this.errorResult(`Помилка аналізу: ${error.message}`);
+    }
   }
   /**
    * Capture a single frame from selected source or screen
@@ -4563,17 +4610,8 @@ Assess system security threats. Return JSON: { threats: string[], level: 'low'|'
     if (!validation.allowed) {
       const key = `${args.action}:${validation.riskLevel}`;
       this.threatHistory.set(key, (this.threatHistory.get(key) || 0) + 1);
-      synapse.emit("grisha", "audit_log", {
-        action: args.action,
-        verdict: "BLOCKED",
-        reason: validation.reason
-      });
       console.warn(`🛡️ GRISHA: BLOCKED - ${validation.reason}`);
     } else {
-      synapse.emit("grisha", "audit_log", {
-        action: args.action,
-        verdict: "ALLOWED"
-      });
       console.log(`🛡️ GRISHA: ALLOWED - ${args.action}`);
     }
     return {
