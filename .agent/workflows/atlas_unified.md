@@ -25,6 +25,9 @@ The system operates as a single organism with three distinct functional modes (P
 ### ⚡ TETYANA (Executor)
 *   **Mode**: `EXECUTION`
 *   **Role**: The Hands. Executes the approved plan step-by-step.
+*   **Execution Engines**:
+    *   `native` - Standard MCP-based execution via KONTUR protocol.
+    *   `python-bridge` - Open Interpreter with RAG & Accessibility (advanced automation).
 *   **Tools**:
     *   `run_command` (Terminal)
     *   `write_to_file` / `replace_file_content` (Coding)
@@ -58,10 +61,11 @@ Every user request MUST follow this cycle.
 2.  **User Review**: Ask user for approval if the task is complex/risky.
 
 ### Phase 3: Execution (TETYANA)
-1.  **Tool Use**: Execute steps using specific tools.
+1.  **Engine Selection**: Check `EXECUTION_ENGINE` config (`native` or `python-bridge`).
+2.  **Tool Use**: Execute steps using specific tools.
     *   *Web Handling*: use `browser` tool. DO NOT assume selectors; inspect -> interact.
     *   *Coding*: use `write_to_file`.
-2.  **Dynamic Adaptation**: If a step fails, **Stop**. Report to ATLAS. Re-plan.
+3.  **Dynamic Adaptation**: If a step fails, **Stop**. Report to ATLAS. Re-plan.
     *   *Anti-Pattern*: Retrying the same thing 5 times.
 
 ### Phase 4: Verification (GRISHA)
@@ -71,7 +75,21 @@ Every user request MUST follow this cycle.
 
 ---
 
-## 3. Global Immutable Rules
+## 3. Execution Engines
+
+### Native (MCP)
+Standard KONTUR protocol execution. Tools are routed via MCP servers.
+*   **Config**: `EXECUTION_ENGINE=native`
+
+### Python Bridge (Open Interpreter)
+Advanced automation using Open Interpreter with RAG knowledge base and Accessibility API.
+*   **Config**: `EXECUTION_ENGINE=python-bridge`
+*   **Location**: `~/mac_assistant/`
+*   **Capabilities**: Screen control, natural language commands, macOS automation.
+
+---
+
+## 4. Global Immutable Rules
 
 ### 🇺🇦 Localization Protocol
 *   **User Channel**: **UKRAINIAN (UA)**. System responses, UI, Voice.
@@ -83,6 +101,6 @@ Every user request MUST follow this cycle.
 *   **Blind Coding**: Using libraries without checking `context7` or valid docs.
 *   **Guesstimating**: Writing code and hoping it works without running it.
 
-## 4. Technical Constraints
+## 5. Technical Constraints
 *   **MCP First**: All external capability via MCP.
 *   **Atomic Files**: Edit files cleanly.

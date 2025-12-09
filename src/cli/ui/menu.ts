@@ -95,6 +95,7 @@ export async function mainMenu(): Promise<void> {
             { name: 'App Settings', value: 'settings' },
             { name: 'System Health Check', value: 'health' },
             { name: '─'.repeat(40), value: '_sep2', disabled: true },
+            { name: chalk.magenta('Test Tetyana (NL Mode)'), value: 'test_tetyana' },
             { name: chalk.yellow('Exit'), value: 'exit' }
         ];
 
@@ -114,6 +115,8 @@ export async function mainMenu(): Promise<void> {
             await configureAppSettings();
         } else if (action === 'health') {
             await runHealthCheck();
+        } else if (action === 'test_tetyana') {
+            await testTetyanaMode();
         }
     }
 }
@@ -1263,5 +1266,64 @@ async function importCopilotTokenFromGh(targetKey?: string): Promise<string | nu
         spinner.fail(`Error: ${e.message}`);
         await input('Press Enter to return...');
         return null;
+    }
+}
+
+/**
+ * Test Tetyana Mode - Natural Language Execution Testing
+ * Allows direct NL commands to the execution engine for rapid testing
+ */
+async function testTetyanaMode(): Promise<void> {
+    const PYTHON_PATH = path.join(os.homedir(), 'mac_assistant', 'venv', 'bin', 'python3');
+    const AGENT_SCRIPT = path.join(os.homedir(), 'mac_assistant', 'mac_master_agent.py');
+
+    // Check environment
+    if (!fs.existsSync(PYTHON_PATH) || !fs.existsSync(AGENT_SCRIPT)) {
+        console.log(chalk.red('\n  Python Bridge environment not found!'));
+        console.log(chalk.gray(`  Expected: ${PYTHON_PATH}`));
+        console.log(chalk.gray(`  Expected: ${AGENT_SCRIPT}`));
+        await input('Press Enter to return...');
+        return;
+    }
+
+    console.clear();
+    console.log(chalk.bold.magenta('\n  TETYANA TEST MODE (Natural Language)'));
+    console.log(chalk.gray('  Type commands in natural language. Type "exit" to quit.\n'));
+
+    while (true) {
+        const command = await input('Command');
+
+        if (!command || command.toLowerCase() === 'exit') {
+            console.log(chalk.gray('\n  Exiting Test Mode...\n'));
+            return;
+        }
+
+        const spinner = ora('Executing via Python Bridge...').start();
+
+        try {
+            // Pass command to Python agent
+            const result = execSync(
+                `${PYTHON_PATH} ${AGENT_SCRIPT} "${command.replace(/"/g, '\\"')}"`,
+                {
+                    encoding: 'utf-8',
+                    timeout: 120000, // 2 minute timeout
+                    env: {
+                        ...process.env,
+                        PYTHONUNBUFFERED: '1'
+                    }
+                }
+            );
+
+            spinner.succeed('Executed');
+            console.log(chalk.cyan('\n  Result:'));
+            console.log(chalk.gray('  ' + result.split('\n').join('\n  ')));
+            console.log('');
+
+        } catch (e: any) {
+            spinner.fail('Execution failed');
+            console.log(chalk.red(`\n  Error: ${e.message}\n`));
+            if (e.stdout) console.log(chalk.gray(e.stdout));
+            if (e.stderr) console.log(chalk.yellow(e.stderr));
+        }
     }
 }
