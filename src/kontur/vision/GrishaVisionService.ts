@@ -539,74 +539,46 @@ export class GrishaVisionService extends EventEmitter {
 
             console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
 
-            // STEP 2: Verify the action was completed
-            // Be STEP-TYPE AWARE: Different actions require different verification criteria
+            // STEP 2: Simple verification with 3 components
             const router = getProviderRouter();
 
-            // Detect step type from action string
-            const isOpenAction = /open|launch|відкрити|запустити/i.test(stepAction);
-            const isTypeAction = /type|input|введи|надрукуй/i.test(stepAction);
-            const isSaveAction = /save|збереж/i.test(stepAction);
+            // Build execution history from previous steps (passed via stepDetails)
+            // Format: "Крок N: action {args}" - extract step number and previous completed steps
+            const stepMatch = stepDetails?.match(/Крок (\d+)/);
+            const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
 
-            let verificationPrompt = '';
+            const verificationPrompt = `
+АНАЛІЗ ВИКОНАННЯ КРОКУ
 
-            if (isOpenAction) {
-                // For OPEN actions: Only verify the app is visible and active
-                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+═══════════════════════════════════════════════════════
+📍 КОМПОНЕНТ 1: ЩО ЩОЙНО ЗРОБИЛА ТЕТЯНА
+Дія: "${stepAction}"
+Деталі: ${stepDetails || 'немає'}
+Цільова програма: ${targetApp || 'невідома'}
+═══════════════════════════════════════════════════════
 
-${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ''}
-Завдання Кроку: "${stepAction}".
+📍 КОМПОНЕНТ 2: ЩО ТИ БАЧИШ НА ЕКРАНІ
+Проаналізуй скріншот. Опиши що РЕАЛЬНО видно.
 
-КРИТЕРІЇ УСПІХУ для дії "Відкрити":
-1. Чи бачиш ти вікно програми "${targetApp || 'application'}"?
-2. Чи це вікно активне (на передньому плані)?
+═══════════════════════════════════════════════════════
 
-ІГНОРУЙ вміст вікна (числа, текст) - попередні дані НЕ мають значення для цього кроку.
-Якщо програма ВІДКРИТА і АКТИВНА - відповідай "ВЕРИФІКОВАНО: ${targetApp || 'Application'} відкрито і активно."
-Якщо програма НЕ відкрита - відповідай "ПОМИЛКА: Програму не видно."`;
-            } else if (isTypeAction) {
-                // For TYPE actions: Check if the character/text was entered
-                const expectedText = stepDetails?.match(/"([^"]+)"/)?.[1] || '';
-                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+📍 КОМПОНЕНТ 3: ГЛОБАЛЬНА МЕТА
+${globalContext ? `"${globalContext}"` : 'Не задана.'}
 
-${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ''}
-Завдання Кроку: "${stepAction}". ${stepDetails || ''}
+═══════════════════════════════════════════════════════
 
-КРИТЕРІЇ УСПІХУ для дії "Ввести текст":
-1. Чи бачиш ти щойно введений текст/символ "${expectedText}" у вікні?
-2. Чи текст з'явився на екрані?
+🎯 ПРЯМЕ ЗАПИТАННЯ:
+Чи виконано крок "${stepAction}" успішно?
 
-Якщо текст введено - відповідай "ВЕРИФІКОВАНО: Текст введено."
-Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
-            } else if (isSaveAction) {
-                // For SAVE actions: This is where we check the final result
-                const contextPrompt = globalContext
-                    ? `ГЛОБАЛЬНА МЕТА: "${globalContext}"\n`
-                    : '';
-                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+Порівняй:
+- Що МАЛО статися (Компонент 1)
+- Що РЕАЛЬНО сталося (Компонент 2)
+- Чи це наближає до мети (Компонент 3)
 
-${contextPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ''}
-
-КРИТЕРІЇ УСПІХУ для дії "Зберегти":
-1. Чи файл створено/збережено?
-2. Чи результат відповідає глобальній меті?
-
-Якщо збережено успішно - відповідай "ВЕРИФІКОВАНО: Файл збережено."
-Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
-            } else {
-                // Default: General verification
-                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
-
-${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ''}
-Завдання Кроку: "${stepAction}". ${stepDetails || ''}
-
-ПЕРЕВІРКА:
-1. Чи виконано цю дію успішно?
-2. Що ти бачиш на екрані?
-
-Якщо дія виконана - відповідай "ВЕРИФІКОВАНО: [деталі]."
-Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
-            }
+ВІДПОВІДЬ:
+Якщо ТАК — напиши "ВЕРИФІКОВАНО: [короткий опис]"
+Якщо НІ — напиши "ПОМИЛКА: [причина]"
+`;
 
             const response = await router.analyzeVision({
                 image: base64Image,

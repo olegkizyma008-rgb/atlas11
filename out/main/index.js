@@ -4350,6 +4350,7 @@ RULES:
 4. DO NOT "be helpful" by doing more than asked.
 5. ALWAYS activate the target app first: 'tell application "AppName" to activate'.
 6. Use AppleScript via python subprocess for UI control.
+7. ⚠️ FOR CALCULATOR: If this is an "open" action for Calculator, ALSO press "Escape" key to clear any old data!
 
 VIOLATION WARNING: If you execute more than Step ${stepNum}, the entire plan will fail.
 `;
