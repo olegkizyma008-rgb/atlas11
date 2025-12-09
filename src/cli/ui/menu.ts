@@ -15,9 +15,15 @@ const SERVICES = [
     { key: 'brain', label: 'Brain', desc: 'Chat and Planning' },
     { key: 'tts', label: 'TTS', desc: 'Text-to-Speech' },
     { key: 'stt', label: 'STT', desc: 'Speech-to-Text' },
-    { key: 'vision', label: 'Vision', desc: 'Visual Analysis (Grisha)' },
+    { key: 'vision', label: 'Vision', desc: 'Visual Analysis (Grisha)', hasMode: true },
     { key: 'reasoning', label: 'Reasoning', desc: 'Deep Thinking (Gemini 3)' }
 ] as const;
+
+// Vision mode options
+const VISION_MODES = [
+    { value: 'live', label: 'Live Stream', desc: 'Gemini Live - continuous video stream for real-time observation' },
+    { value: 'on-demand', label: 'On-Demand', desc: 'Screenshot after task - Copilot/GPT-4o analysis' }
+];
 
 // Available providers
 const PROVIDERS = ['gemini', 'copilot', 'openai', 'anthropic', 'mistral'];
@@ -132,20 +138,35 @@ async function configureService(service: string): Promise<void> {
         // Also show global key if service-specific not set
         const effectiveApiKey = currentApiKey || config[PROVIDER_API_KEYS[currentProvider || 'gemini']] || config['GEMINI_API_KEY'];
 
-        const choices = [
+        // Check if this service has mode (Vision)
+        const hasMode = serviceInfo && 'hasMode' in serviceInfo && serviceInfo.hasMode;
+        const currentMode = hasMode ? config[`${serviceUpper}_MODE`] : null;
+
+        const choices: { name: string; value: string; disabled?: boolean | string }[] = [];
+
+        // For Vision, show mode first
+        if (hasMode) {
+            const modeLabel = currentMode === 'live' ? 'Live Stream' : currentMode === 'on-demand' ? 'On-Demand' : 'not set';
+            choices.push({ name: `Mode             ${fmtVal(modeLabel)}`, value: 'mode' });
+        }
+
+        choices.push(
             { name: `Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
             { name: `Model            ${fmtVal(currentModel)}`, value: 'model' },
             { name: `API Key          ${fmtKey(currentApiKey)}${!currentApiKey && effectiveApiKey ? chalk.gray(' (using global)') : ''}`, value: 'apikey' },
-            { name: `Fallback         ${fmtVal(currentFallback, 'none')}`, value: 'fallback' },
+            { name: `Fallback         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
             { name: '─'.repeat(35), value: '_sep', disabled: true },
             { name: 'Back', value: 'back' }
-        ];
+        );
 
         const action = await select('', choices);
 
         if (action === 'back') return;
 
         switch (action) {
+            case 'mode':
+                await selectVisionMode(`${serviceUpper}_MODE`);
+                break;
             case 'provider':
                 await selectProvider(providerKey);
                 break;
@@ -228,6 +249,32 @@ async function editApiKey(keyName: string, label: string): Promise<void> {
         configManager.set(keyName, value);
         console.log(chalk.green('\n  Saved!'));
         await new Promise(r => setTimeout(r, 800));
+    }
+}
+
+/**
+ * Select Vision mode (live vs on-demand)
+ */
+async function selectVisionMode(modeKey: string): Promise<void> {
+    const choices = [
+        ...VISION_MODES.map(m => ({
+            name: `${m.label.padEnd(15)} ${chalk.gray(m.desc)}`,
+            value: m.value
+        })),
+        { name: 'Back', value: 'back' }
+    ];
+
+    const selected = await select('Vision Mode', choices);
+    if (selected !== 'back') {
+        configManager.set(modeKey, selected);
+
+        // Hint about recommended providers for each mode
+        if (selected === 'live') {
+            console.log(chalk.gray('\n  Tip: Live mode works best with Gemini as primary provider.'));
+        } else if (selected === 'on-demand') {
+            console.log(chalk.gray('\n  Tip: On-demand mode works with Copilot (GPT-4o) or Gemini.'));
+        }
+        await new Promise(r => setTimeout(r, 1200));
     }
 }
 

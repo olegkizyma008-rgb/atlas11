@@ -94,6 +94,35 @@ export interface ISTTProvider {
     isAvailable(): boolean;
 }
 
+// ============ Vision Interfaces ============
+export type VisionMode = 'live' | 'on-demand';
+
+export interface VisionRequest {
+    image: string; // base64
+    mimeType?: string; // default: image/jpeg
+    prompt?: string; // optional analysis prompt
+    taskContext?: string; // what task was just executed
+}
+
+export interface VisionResponse {
+    analysis: string;
+    anomalies: Array<{
+        type: string;
+        severity: 'low' | 'medium' | 'high';
+        description: string;
+        location?: string;
+    }>;
+    confidence: number;
+    verified: boolean; // did the task complete successfully?
+    provider: ProviderName;
+}
+
+export interface IVisionProvider {
+    readonly name: ProviderName;
+    analyzeImage(request: VisionRequest): Promise<VisionResponse>;
+    isAvailable(): boolean;
+}
+
 // ============ Provider Config ============
 export interface ProviderConfig {
     provider: ProviderName;
@@ -102,10 +131,14 @@ export interface ProviderConfig {
     apiKey?: string;
 }
 
+export interface VisionConfig extends ProviderConfig {
+    mode: VisionMode; // 'live' = Gemini Live stream, 'on-demand' = screenshot after task
+}
+
 export interface ServiceConfig {
     brain: ProviderConfig;
     tts: ProviderConfig;
     stt: ProviderConfig;
-    vision: ProviderConfig;
+    vision: VisionConfig;
     reasoning: ProviderConfig;
 }

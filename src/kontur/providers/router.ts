@@ -1,12 +1,13 @@
 /**
  * Provider Router - Routes requests to primary/fallback providers
- * Central hub for all LLM/TTS/STT requests
+ * Central hub for all LLM/TTS/STT/Vision requests
  */
 
 import {
     ILLMProvider,
     ITTSProvider,
     ISTTProvider,
+    IVisionProvider,
     LLMRequest,
     LLMResponse,
     TTSRequest,
@@ -14,21 +15,25 @@ import {
     MultiSpeakerRequest,
     STTRequest,
     STTResponse,
+    VisionRequest,
+    VisionResponse,
     ProviderName,
     ServiceType
 } from './types';
-import { getProviderConfig } from './config';
+import { getProviderConfig, getVisionConfig } from './config';
 import { GeminiProvider } from './gemini';
 import { GeminiTTSProvider } from './gemini-tts';
 import { OpenAIProvider } from './openai';
 import { AnthropicProvider } from './anthropic';
 import { MistralProvider } from './mistral';
 import { VSCodeCopilotProvider } from './copilot';
+import { CopilotVisionProvider } from './copilot-vision';
 
 export class ProviderRouter {
     private llmProviders: Map<ProviderName, ILLMProvider> = new Map();
     private ttsProviders: Map<ProviderName, ITTSProvider> = new Map();
     private sttProviders: Map<ProviderName, ISTTProvider> = new Map();
+    private visionProviders: Map<ProviderName, IVisionProvider> = new Map();
 
     constructor() {
         this.initializeProviders();
@@ -81,7 +86,19 @@ export class ProviderRouter {
             this.ttsProviders.set('gemini', geminiTTS);
         }
 
-        console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM, ${this.ttsProviders.size} TTS providers`);
+        // === Vision Providers ===
+        const visionConfig = getVisionConfig();
+
+        // Copilot Vision (GPT-4o) - works for on-demand mode
+        const copilotVision = new CopilotVisionProvider(copilotKey, 'gpt-4o');
+        if (copilotVision.isAvailable()) {
+            this.visionProviders.set('copilot', copilotVision);
+        }
+
+        // Note: Gemini Vision for on-demand mode could be added here
+        // For live mode, GeminiLiveService handles it separately
+
+        console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM, ${this.ttsProviders.size} TTS, ${this.visionProviders.size} Vision providers`);
     }
 
     /**
@@ -150,6 +167,52 @@ export class ProviderRouter {
     }
 
     /**
+     * Analyze image for Vision (Grisha on-demand mode)
+     * For live mode, use GeminiLiveService directly
+     */
+    async analyzeVision(request: VisionRequest): Promise<VisionResponse> {
+        const visionConfig = getVisionConfig();
+
+        // Try primary provider
+        let provider = this.visionProviders.get(visionConfig.provider);
+
+        if (!provider || !provider.isAvailable()) {
+            // Try fallback
+            if (visionConfig.fallbackProvider) {
+                provider = this.visionProviders.get(visionConfig.fallbackProvider);
+                if (provider && provider.isAvailable()) {
+                    console.log(`[PROVIDER ROUTER] 🔄 Using fallback Vision provider: ${visionConfig.fallbackProvider}`);
+                }
+            }
+        }
+
+        if (!provider || !provider.isAvailable()) {
+            throw new Error('No available Vision provider for on-demand analysis');
+        }
+
+        console.log(`[PROVIDER ROUTER] 🖼️ Analyzing image with ${provider.name}...`);
+        return await provider.analyzeImage(request);
+    }
+
+    /**
+     * Get Vision config (for mode checking)
+     */
+    getVisionConfig() {
+        return getVisionConfig();
+    }
+
+    /**
+     * Check if Vision on-demand is available
+     */
+    isVisionOnDemandAvailable(): boolean {
+        const config = getVisionConfig();
+        const primary = this.visionProviders.get(config.provider);
+        const fallback = config.fallbackProvider ? this.visionProviders.get(config.fallbackProvider) : null;
+
+        return (primary?.isAvailable() ?? false) || (fallback?.isAvailable() ?? false);
+    }
+
+    /**
      * Register a new LLM provider
      */
     registerLLMProvider(provider: ILLMProvider): void {
@@ -162,6 +225,13 @@ export class ProviderRouter {
     registerTTSProvider(provider: ITTSProvider): void {
         this.ttsProviders.set(provider.name, provider);
     }
+
+    /**
+     * Register a new Vision provider
+     */
+    registerVisionProvider(provider: IVisionProvider): void {
+        this.visionProviders.set(provider.name, provider);
+    }
 }
 
 // Singleton instance
@@ -173,3 +243,4 @@ export function getProviderRouter(): ProviderRouter {
     }
     return routerInstance;
 }
+
