@@ -52,9 +52,11 @@ export class ProviderRouter {
         // === LLM Providers ===
         const brainConfig = getProviderConfig('brain');
 
-        // Gemini
-        if (brainConfig.apiKey) {
-            this.llmProviders.set('gemini', new GeminiProvider(brainConfig.apiKey, brainConfig.model));
+        // Gemini - use GEMINI_API_KEY directly (independent of brain config)
+        const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+        if (geminiKey) {
+            this.llmProviders.set('gemini', new GeminiProvider(geminiKey, 'gemini-2.5-flash'));
+            console.log('[PROVIDER ROUTER] ✅ Gemini LLM provider initialized');
         }
 
         // OpenAI

@@ -1755,18 +1755,40 @@ class ProviderRouter {
     throw new Error(`No available provider for ${service}`);
   }
   /**
-   * Generate LLM response
+   * Generate LLM response with automatic fallback
    */
   async generateLLM(service, request) {
-    const provider = this.getProvider(service, this.llmProviders, (p) => p.isAvailable());
     const config2 = getProviderConfig(service);
+    const primaryProvider = this.llmProviders.get(config2.provider);
     if (!request.model)
       request.model = config2.model;
-    try {
-      return await provider.generate(request);
-    } catch (error) {
-      throw error;
+    if (primaryProvider && primaryProvider.isAvailable()) {
+      try {
+        return await primaryProvider.generate(request);
+      } catch (error) {
+        console.warn(`[PROVIDER ROUTER] ⚠️ Primary provider (${config2.provider}) failed: ${error.message}`);
+        if (config2.fallbackProvider) {
+          const fallbackProvider = this.llmProviders.get(config2.fallbackProvider);
+          if (fallbackProvider && fallbackProvider.isAvailable()) {
+            console.log(`[PROVIDER ROUTER] 🔄 Switching to fallback: ${config2.fallbackProvider}`);
+            const fallbackConfig = getProviderConfig(service);
+            if (config2.fallbackProvider === "gemini") {
+              request.model = fallbackConfig.model || "gemini-2.5-flash";
+            }
+            return await fallbackProvider.generate(request);
+          }
+        }
+        throw error;
+      }
     }
+    if (config2.fallbackProvider) {
+      const fallbackProvider = this.llmProviders.get(config2.fallbackProvider);
+      if (fallbackProvider && fallbackProvider.isAvailable()) {
+        console.log(`[PROVIDER ROUTER] 🔄 Primary unavailable, using fallback: ${config2.fallbackProvider}`);
+        return await fallbackProvider.generate(request);
+      }
+    }
+    throw new Error(`No available provider for ${service}`);
   }
   /**
    * Generate TTS audio
