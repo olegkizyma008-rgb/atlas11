@@ -3677,36 +3677,20 @@ class GrishaVisionService extends events.EventEmitter {
       const stepMatch = stepDetails?.match(/Крок (\d+)/);
       const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
       const verificationPrompt = `
-STEP EXECUTION ANALYSIS
+STEP VERIFICATION
 
-═══════════════════════════════════════════════════════
-📍 COMPONENT 1: WHAT TETYANA JUST DID
-Action: "${stepAction}"
+Action performed: "${stepAction}"
 Details: ${stepDetails || "none"}
-Target Application: ${targetApp || "unknown"}
-═══════════════════════════════════════════════════════
+Target: ${targetApp || "screen"}
+${globalContext ? `Goal: "${globalContext}"` : ""}
 
-📍 COMPONENT 2: WHAT YOU SEE ON SCREEN
-Analyze the screenshot. Describe what is ACTUALLY visible.
+Look at the screenshot and verify:
+1. Did this action complete successfully?
+2. Is the result correct?
 
-═══════════════════════════════════════════════════════
-
-📍 COMPONENT 3: GLOBAL GOAL
-${globalContext ? `"${globalContext}"` : "Not specified."}
-
-═══════════════════════════════════════════════════════
-
-🎯 DIRECT QUESTION:
-Was step "${stepAction}" executed successfully?
-
-Compare:
-- What SHOULD have happened (Component 1)
-- What ACTUALLY happened (Component 2)
-- Does this move toward the goal (Component 3)
-
-ANSWER (respond in Ukrainian):
-If YES — write "ВЕРИФІКОВАНО: [brief description]"
-If NO — write "ПОМИЛКА: [reason]"
+Respond in Ukrainian:
+- Success: "ВЕРИФІКОВАНО: [what you see]"
+- Failure: "ПОМИЛКА: [what went wrong]"
 `;
       const response = await router2.analyzeVision({
         image: base64Image,
@@ -4201,13 +4185,9 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
       this.core.ingest(packet);
       setTimeout(() => {
         this.core.removeListener("ingest", responseHandlerWrapper);
-        if (process.env.NODE_ENV === "development") {
-          console.warn("[TETYANA] ⚠️ Grisha Timeout. Proceeding (DEV MODE).");
-          resolve();
-        } else {
-          reject(new Error("Security validation timeout - operation rejected"));
-        }
-      }, 5e3);
+        console.error("[TETYANA] ⏰ Grisha validation timeout after 15s - operation rejected");
+        reject(new Error("Security validation timeout - Grisha did not respond"));
+      }, 15e3);
     });
   }
   /**
@@ -4303,34 +4283,26 @@ INSTRUCTION: You must CORRECT your approach based on this feedback. Do not repea
 `;
       }
       const stepPrompt = `
-🚨 CRITICAL: SINGLE STEP EXECUTION MODE 🚨
+SINGLE STEP EXECUTION
 
-You MUST execute ONLY Step ${stepNum} and then STOP IMMEDIATELY.
-DO NOT execute any other steps. DO NOT continue to the next step.
-After completing THIS SINGLE ACTION, you MUST exit.
+Execute ONLY Step ${stepNum}, then stop.
 
-CONTEXT:
-Goal: "${this.currentPlan?.goal}"
-Full Plan (for reference only, DO NOT EXECUTE ALL):
+GOAL: "${this.currentPlan?.goal}"
+
+PLAN (reference only):
 ${fullPlanContext}
 
-═══════════════════════════════════════════════════════
-YOUR SINGLE TASK (Step ${stepNum} ONLY):
+CURRENT STEP (${stepNum}):
 Action: ${step.action}
-Arguments: ${JSON.stringify(step.args)}
-═══════════════════════════════════════════════════════
+Args: ${JSON.stringify(step.args)}
 ${correctionPrompt}
 
 RULES:
-1. Execute ONLY the action described above for Step ${stepNum}.
-2. After this ONE action, output "Step ${stepNum} done." and EXIT.
-3. DO NOT execute Steps ${stepNum + 1}, ${stepNum + 2}, etc.
-4. DO NOT "be helpful" by doing more than asked.
-5. ALWAYS activate the target app first: 'tell application "AppName" to activate'.
-6. Use AppleScript via python subprocess for UI control.
-7. ⚠️ FOR CALCULATOR: If this is an "open" action for Calculator, ALSO press "Escape" key to clear any old data!
-
-VIOLATION WARNING: If you execute more than Step ${stepNum}, the entire plan will fail.
+1. Do ONLY Step ${stepNum}. Stop after.
+2. Activate target app before interacting.
+3. Use AppleScript for macOS control.
+4. If opening an app, clear its state first (Escape or Cmd+C).
+5. Output "Step ${stepNum} done." when finished.
 `;
       try {
         this.core.emit("ingest", createPacket(

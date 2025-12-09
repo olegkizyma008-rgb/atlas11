@@ -272,6 +272,12 @@ export function validateOperation(
   params: Record<string, any>,
   policy: SecurityPolicy = ATLAS_SECURITY_POLICY
 ): { allowed: boolean; reason?: string; riskLevel?: ThreatLevel } {
+  // TEST MODE: Bypass all security checks when testing
+  if (process.env.GRISHA_TEST_MODE === 'true') {
+    console.warn('[GRISHA] ⚠️ TEST MODE ACTIVE - All operations allowed');
+    return { allowed: true };
+  }
+
   // Check whitelist first
   if (policy.allowlistedOperations.includes(operation)) {
     return { allowed: true };
