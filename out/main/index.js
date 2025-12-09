@@ -163,7 +163,8 @@ const KPP_Schema = zod.z.object({
     compressed: zod.z.boolean().default(false),
     quantum_state: zod.z.record(zod.z.number()).optional(),
     gen_prompt: zod.z.string().optional(),
-    gravity_factor: zod.z.number().min(0).max(1).default(1)
+    gravity_factor: zod.z.number().min(0).max(1).default(1),
+    correlation_id: zod.z.string().optional()
   }),
   route: zod.z.object({
     from: zod.z.string(),
@@ -183,13 +184,30 @@ const KPP_Schema = zod.z.object({
   }).optional()
 });
 function verifyPacket(packet) {
-  const payloadStr = JSON.stringify(packet.payload);
-  const hash = crypto__namespace.createHash("sha256").update(payloadStr).digest("hex");
-  return hash === packet.nexus.integrity;
+  let expectedHash = packet.nexus.integrity;
+  if (expectedHash.startsWith("sha256-")) {
+    expectedHash = expectedHash.slice(7);
+  }
+  const payloadStr = sortedStringify(packet.payload);
+  const computedHash = crypto__namespace.createHash("sha256").update(payloadStr).digest("hex");
+  return expectedHash === computedHash;
 }
 function computeIntegrity(payload) {
-  const payloadStr = JSON.stringify(payload);
+  const payloadStr = sortedStringify(payload);
   return crypto__namespace.createHash("sha256").update(payloadStr).digest("hex");
+}
+function sortedStringify(obj) {
+  if (obj === null || typeof obj !== "object") {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return "[" + obj.map(sortedStringify).join(",") + "]";
+  }
+  const keys = Object.keys(obj).sort();
+  const parts = keys.map((key) => {
+    return JSON.stringify(key) + ":" + sortedStringify(obj[key]);
+  });
+  return "{" + parts.join(",") + "}";
 }
 function createPacket(from, to, intent, payload, options) {
   const integrity = computeIntegrity(payload);
@@ -400,7 +418,10 @@ class Core extends events.EventEmitter {
     ["kontur://organ/mcp/os", SecurityScope.SYSTEM],
     ["kontur://organ/atlas", SecurityScope.ROOT],
     ["kontur://cortex/core", SecurityScope.ROOT],
-    ["kontur://atlas/ATLAS", SecurityScope.SYSTEM]
+    ["kontur://atlas/ATLAS", SecurityScope.SYSTEM],
+    // Integration & System Internal
+    ["system/integration", SecurityScope.USER],
+    ["kontur://integration", SecurityScope.SYSTEM]
   ]);
   limiter = new Bottleneck({
     maxConcurrent: 100,
@@ -501,6 +522,15 @@ class Core extends events.EventEmitter {
    */
   applyFix(fix, error) {
     console.log(`[AEDS FIX] Applying: ${fix}`);
+    switch (fix) {
+      case "restart_organ":
+        this.emit("system_heal", { type: "restart", reason: error.message });
+        break;
+      case "clear_buffer":
+        if (global.gc)
+          global.gc();
+        break;
+    }
   }
   /**
    * Evolve antibodies via DDR (Distributed DNA Repository)
@@ -577,7 +607,8 @@ class Core extends events.EventEmitter {
       this.levitatePacket(packet);
       return;
     }
-    this.limiter.schedule(async () => {
+    const bottleneckPriority = Math.max(0, Math.min(9, 10 - (packet.nexus.priority || 5)));
+    this.limiter.schedule({ priority: bottleneckPriority }, async () => {
       if (packet.route.to.includes("cortex") && this.cortex) {
         this.cortex.process(packet);
         return;
@@ -717,6 +748,8 @@ function getProviderConfig(service) {
 }
 function getVisionConfig() {
   const mode = process.env.VISION_MODE || "live";
+  const fallbackModeRaw = process.env.VISION_FALLBACK_MODE;
+  const fallbackMode = fallbackModeRaw === "" ? void 0 : fallbackModeRaw || void 0;
   const liveProviderRaw = process.env.VISION_LIVE_PROVIDER;
   const liveFallbackRaw = process.env.VISION_LIVE_FALLBACK_PROVIDER;
   const live = {
@@ -735,6 +768,7 @@ function getVisionConfig() {
   };
   return {
     mode,
+    fallbackMode,
     live,
     onDemand
   };
@@ -1164,6 +1198,20 @@ class VSCodeCopilotProvider {
       console.log("[COPILOT PROVIDER] ✅ Found token in env (COPILOT_API_KEY)");
       return;
     }
+    const ghHostsPath = path.join(os.homedir(), ".config", "gh", "hosts.yml");
+    if (fs.existsSync(ghHostsPath)) {
+      try {
+        const content = fs.readFileSync(ghHostsPath, "utf-8");
+        const match = content.match(/oauth_token:\s+(gh[op]_[A-Za-z0-9_]+)/);
+        if (match && match[1]) {
+          this.token = match[1];
+          console.log("[COPILOT PROVIDER] ✅ Found token in gh CLI config");
+          return;
+        }
+      } catch (e) {
+        console.warn("[COPILOT PROVIDER] Failed to parse gh hosts.yml", e);
+      }
+    }
     const appsJsonPath = path.join(os.homedir(), ".config", "github-copilot", "apps.json");
     if (fs.existsSync(appsJsonPath)) {
       try {
@@ -1191,11 +1239,6 @@ class VSCodeCopilotProvider {
       } catch (e) {
         console.warn("[COPILOT PROVIDER] Failed to parse hosts.json", e);
       }
-    }
-    if (process.env.COPILOT_API_KEY) {
-      this.token = process.env.COPILOT_API_KEY;
-      console.log("[COPILOT PROVIDER] ✅ Found token in env");
-      return;
     }
     console.warn("[COPILOT PROVIDER] ⚠️ No Copilot token found. Please install GitHub Copilot CLI or extension.");
   }
@@ -1234,7 +1277,8 @@ class VSCodeCopilotProvider {
             { role: "user", content: request.prompt }
           ],
           temperature: request.temperature || 0.7,
-          stop: typeof request.maxTokens === "undefined" ? void 0 : request.maxTokens ? null : null
+          max_tokens: request.maxTokens || 2048,
+          stream: false
         })
       });
       if (!response.ok) {
@@ -1244,74 +1288,55 @@ class VSCodeCopilotProvider {
       const data = await response.json();
       const text = data.choices[0]?.message?.content || "";
       return {
-        text,
+        text: data.choices[0]?.message?.content || "",
+        provider: "copilot",
         usage: {
           promptTokens: 0,
-          // Copilot API might not return this standard usage
           completionTokens: 0,
           totalTokens: 0
-        },
-        model,
-        provider: this.name
+        }
       };
     } catch (error) {
-      console.error(`[COPILOT PROVIDER] ❌ Error:`, error.message);
+      console.error("[COPILOT PROVIDER] ❌ Error:", error.message);
       throw error;
     }
   }
-  getModels() {
-    return [
-      "gpt-4.1",
-      "gpt-4o",
-      "gpt-5-mini",
-      "grok-code-fast-1",
-      "raptor-mini",
-      "claude-haiku-4.5",
-      "claude-opus-4.5",
-      "claude-sonnet-4",
-      "claude-sonnet-4.5",
-      "gemini-2.5-pro",
-      "gemini-3-pro",
-      "gpt-5",
-      "gpt-5-codex",
-      "gpt-5.1",
-      "gpt-5.1-codex",
-      "gpt-5.1-codex-max",
-      "gpt-5.1-codex-mini"
-    ];
-  }
-  // Attempt dynamic fetch via models endpoint if accessible
   async fetchModels() {
-    if (!this.token) {
-      console.warn("[COPILOT] Cannot fetch models: No token");
+    if (!this.token)
       return [];
-    }
     try {
-      console.log("[COPILOT] 🔄 Verifying token...");
-      const userResponse = await fetch("https://api.github.com/user", {
+      const tokenResponse = await fetch("https://api.github.com/copilot_internal/v2/token", {
         headers: {
           "Authorization": `token ${this.token}`,
+          "Editor-Version": "vscode/1.85.0",
+          "Editor-Plugin-Version": "copilot/1.144.0",
           "User-Agent": "GithubCopilot/1.144.0"
         }
       });
-      if (userResponse.ok) {
-        const userData = await userResponse.json();
-        console.log(`[COPILOT] ✅ Authenticated as GitHub user: ${userData.login}`);
-        return this.getModels();
-      }
-      const response = await fetch("https://api.github.com/copilot_internal/v2/token", {
-        headers: {
-          "Authorization": `token ${this.token}`,
-          "User-Agent": "GithubCopilot/1.144.0"
+      if (tokenResponse.ok) {
+        try {
+          const userResp = await fetch("https://api.github.com/user", {
+            headers: {
+              "Authorization": `token ${this.token}`,
+              "User-Agent": "Atlas-Agent"
+            }
+          });
+          if (userResp.ok) {
+            const user = await userResp.json();
+            console.log(`[COPILOT] ✅ Authenticated as GitHub user: ${user.login}`);
+          }
+        } catch (e) {
         }
-      });
-      if (!response.ok) {
-        throw new Error(`Invalid Token (Status: ${response.status})`);
+        return [
+          "gpt-4",
+          "gpt-4o",
+          "gpt-3.5-turbo",
+          "claude-3.5-sonnet"
+        ];
       }
-      console.log("[COPILOT] ✅ Token verified successfully!");
-      return this.getModels();
+      return [];
     } catch (error) {
-      console.error("[COPILOT] ❌ Verification failed:", error.message);
+      console.error("[COPILOT PROVIDER] Failed to fetch models:", error);
       return [];
     }
   }
@@ -1336,6 +1361,20 @@ class CopilotVisionProvider {
       this.token = process.env.COPILOT_API_KEY;
       console.log("[COPILOT VISION] ✅ Found token in env");
       return;
+    }
+    const ghHostsPath = path__namespace.join(os__namespace.homedir(), ".config", "gh", "hosts.yml");
+    if (fs__namespace.existsSync(ghHostsPath)) {
+      try {
+        const content = fs__namespace.readFileSync(ghHostsPath, "utf-8");
+        const match = content.match(/oauth_token:\s+(gh[op]_[A-Za-z0-9_]+)/);
+        if (match && match[1]) {
+          this.token = match[1];
+          console.log("[COPILOT VISION] ✅ Found token in gh CLI config");
+          return;
+        }
+      } catch (e) {
+        console.warn("[COPILOT VISION] Failed to parse gh hosts.yml", e);
+      }
     }
     const appsJsonPath = path__namespace.join(os__namespace.homedir(), ".config", "github-copilot", "apps.json");
     if (fs__namespace.existsSync(appsJsonPath)) {
@@ -1476,8 +1515,133 @@ Return JSON:
       "gpt-4o-mini",
       "gpt-4-vision-preview",
       "claude-sonnet-4"
-      // Claude also supports vision
     ];
+  }
+  async fetchModels() {
+    return this.getModels();
+  }
+}
+class WebTTSProvider {
+  name = "web";
+  constructor() {
+  }
+  isAvailable() {
+    return true;
+  }
+  async speak(request) {
+    console.warn("[WebTTSProvider] ⚠️ 'speak' called on backend. Web TTS should be handled by Frontend (Renderer).");
+    return {
+      audio: new ArrayBuffer(0),
+      mimeType: "audio/mp3",
+      provider: "web"
+    };
+  }
+}
+class WebSTTProvider {
+  name = "web";
+  constructor() {
+  }
+  isAvailable() {
+    return true;
+  }
+  async transcribe(request) {
+    console.warn("[WebSTTProvider] ⚠️ 'transcribe' called on backend. Web STT should be handled by Frontend (Renderer).");
+    return {
+      text: "",
+      provider: "web",
+      confidence: 0
+    };
+  }
+}
+class UkrainianTTSProvider {
+  name = "ukrainian";
+  isAvailable() {
+    return true;
+  }
+  async speak(request) {
+    return new Promise((resolve, reject) => {
+      const scriptPath = path.join(__dirname, "python", "ukrainian-tts.py");
+      let voice = request.voice || "tetiana";
+      const agentVoices = {
+        "ATLAS": process.env.UKRAINIAN_VOICE_ATLAS || "dmytro",
+        "TETYANA": process.env.UKRAINIAN_VOICE_TETYANA || "tetiana",
+        "GRISHA": process.env.UKRAINIAN_VOICE_GRISHA || "oleksa"
+      };
+      if (agentVoices[voice.toUpperCase()]) {
+        voice = agentVoices[voice.toUpperCase()];
+      }
+      const pythonProcess = child_process.spawn("python3", [
+        scriptPath,
+        "--voice",
+        voice
+      ]);
+      const audioChunks = [];
+      let errorData = "";
+      pythonProcess.stdin.write(request.text);
+      pythonProcess.stdin.end();
+      pythonProcess.stdout.on("data", (chunk) => {
+        audioChunks.push(chunk);
+      });
+      pythonProcess.stderr.on("data", (data) => {
+        errorData += data.toString();
+      });
+      pythonProcess.on("close", (code) => {
+        if (code !== 0) {
+          console.error("[UkrainianTTS] Python script error:", errorData);
+          reject(new Error(`Ukrainian TTS failed: ${errorData}`));
+        } else {
+          const audioBuffer = Buffer.concat(audioChunks);
+          const arrayBuffer = audioBuffer.buffer.slice(
+            audioBuffer.byteOffset,
+            audioBuffer.byteOffset + audioBuffer.byteLength
+          );
+          resolve({
+            audio: arrayBuffer,
+            mimeType: "audio/wav",
+            provider: "ukrainian"
+          });
+        }
+      });
+      pythonProcess.on("error", (err) => {
+        reject(new Error(`Failed to spawn python process: ${err.message}. Make sure python3 is installed and ukrainian-tts package is installed.`));
+      });
+    });
+  }
+}
+class MockLLMProvider {
+  name = "mock";
+  async generate(request) {
+    console.warn(`[MOCK PROVIDER] Generating response for: "${request.prompt.slice(0, 50)}..."`);
+    const isPlanning = request.responseFormat === "json";
+    let text = "";
+    if (isPlanning) {
+      text = JSON.stringify({
+        thought: "System is in offline mode. Simulating plan execution.",
+        response: "I am running in offline mode. I cannot perform real intelligence tasks, but I can demonstrate the workflow.",
+        plan: [
+          {
+            tool: "notify_user",
+            action: "notify",
+            args: { message: "System is offline (Mock Provider active)." }
+          }
+        ]
+      });
+    } else {
+      text = "I am Atlas (Mock Mode). No active AI provider was found, so I am responding with this placeholder message. Please configure your API keys in .env to enable real intelligence.";
+    }
+    return {
+      text,
+      usage: {
+        promptTokens: 10,
+        completionTokens: 20,
+        totalTokens: 30
+      },
+      model: "mock-v1",
+      provider: "mock"
+    };
+  }
+  isAvailable() {
+    return true;
   }
 }
 class ProviderRouter {
@@ -1514,11 +1678,16 @@ class ProviderRouter {
     if (copilotProvider.isAvailable()) {
       this.llmProviders.set("copilot", copilotProvider);
     }
+    this.llmProviders.set("mock", new MockLLMProvider());
     const ttsConfig = getProviderConfig("tts");
     if (ttsConfig.apiKey) {
       const geminiTTS = new GeminiTTSProvider(ttsConfig.apiKey, ttsConfig.model);
       this.ttsProviders.set("gemini", geminiTTS);
     }
+    this.ttsProviders.set("web", new WebTTSProvider());
+    getProviderConfig("stt");
+    this.sttProviders.set("web", new WebSTTProvider());
+    this.ttsProviders.set("ukrainian", new UkrainianTTSProvider());
     getVisionConfig();
     const copilotVision = new CopilotVisionProvider(copilotKey, "gpt-4o");
     if (copilotVision.isAvailable()) {
@@ -1541,6 +1710,11 @@ class ProviderRouter {
         console.log(`[PROVIDER ROUTER] 🔄 Using fallback provider: ${config2.fallbackProvider} for ${service}`);
         return fallback;
       }
+    }
+    const mockFn = map.get("mock");
+    if (mockFn && isAvailable(mockFn) && map === this.llmProviders) {
+      console.warn(`[PROVIDER ROUTER] ⚠️ All Keyed Providers failed. Falling back to MOCK for ${service}.`);
+      return mockFn;
     }
     throw new Error(`No available provider for ${service}`);
   }
@@ -1784,6 +1958,160 @@ const AGENT_PERSONAS = {
   TETYANA,
   GRISHA
 };
+class ToolRegistry {
+  tools = /* @__PURE__ */ new Map();
+  initialized = false;
+  /**
+   * Register a tool in the registry
+   */
+  registerTool(tool) {
+    if (this.tools.has(tool.name)) {
+      console.warn(`[TOOL REGISTRY] ⚠️ Tool '${tool.name}' already registered, overwriting`);
+    }
+    this.tools.set(tool.name, tool);
+  }
+  /**
+   * Register multiple tools from an MCP server
+   */
+  registerMCPTools(tools, source, target) {
+    for (const tool of tools) {
+      this.registerTool({
+        name: tool.name,
+        description: tool.description || "",
+        inputSchema: tool.inputSchema || {},
+        target,
+        source
+      });
+    }
+    console.log(`[TOOL REGISTRY] ✅ Registered ${tools.length} tools from ${source}`);
+  }
+  /**
+   * Check if a tool exists
+   */
+  hasTool(name) {
+    return this.tools.has(name);
+  }
+  /**
+   * Get tool definition
+   */
+  getTool(name) {
+    return this.tools.get(name);
+  }
+  /**
+   * Get KONTUR URN target for a tool
+   */
+  getToolTarget(name) {
+    return this.tools.get(name)?.target;
+  }
+  /**
+   * Get all tool names
+   */
+  getAllToolNames() {
+    return Array.from(this.tools.keys());
+  }
+  /**
+   * Get all tools
+   */
+  getAllTools() {
+    return Array.from(this.tools.values());
+  }
+  /**
+   * Get tool count
+   */
+  getToolCount() {
+    return this.tools.size;
+  }
+  /**
+   * Generate tool descriptions for LLM prompt
+   */
+  generateToolPrompt() {
+    const lines = this.getAllTools().map(
+      (t2) => `- ${t2.name}: ${t2.description} (Args: ${JSON.stringify(t2.inputSchema)})`
+    );
+    return lines.join("\n");
+  }
+  /**
+   * Validate a plan's tools before execution
+   */
+  validatePlanTools(steps) {
+    const errors = [];
+    for (const step of steps) {
+      const toolName = step.tool || step.action;
+      if (toolName && !this.hasTool(toolName)) {
+        errors.push(`Unknown tool: '${toolName}'`);
+      }
+    }
+    return {
+      valid: errors.length === 0,
+      errors
+    };
+  }
+  /**
+   * Find similar tool names (for error suggestions)
+   */
+  findSimilarTools(name) {
+    const allNames = this.getAllToolNames();
+    return allNames.filter(
+      (n) => n.includes(name) || name.includes(n) || this.levenshteinDistance(n, name) <= 3
+    ).slice(0, 3);
+  }
+  levenshteinDistance(a, b) {
+    const matrix = [];
+    for (let i = 0; i <= b.length; i++) {
+      matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+      matrix[0][j] = j;
+    }
+    for (let i = 1; i <= b.length; i++) {
+      for (let j = 1; j <= a.length; j++) {
+        if (b.charAt(i - 1) === a.charAt(j - 1)) {
+          matrix[i][j] = matrix[i - 1][j - 1];
+        } else {
+          matrix[i][j] = Math.min(
+            matrix[i - 1][j - 1] + 1,
+            matrix[i][j - 1] + 1,
+            matrix[i - 1][j] + 1
+          );
+        }
+      }
+    }
+    return matrix[b.length][a.length];
+  }
+  /**
+   * Mark registry as initialized
+   */
+  setInitialized() {
+    this.initialized = true;
+    console.log(`[TOOL REGISTRY] 🛠️ Initialized with ${this.tools.size} tools`);
+  }
+  isInitialized() {
+    return this.initialized;
+  }
+  /**
+   * Log registry status
+   */
+  logStatus() {
+    console.log("[TOOL REGISTRY] 📋 Current Tools:");
+    const bySource = /* @__PURE__ */ new Map();
+    for (const tool of this.tools.values()) {
+      if (!bySource.has(tool.source)) {
+        bySource.set(tool.source, []);
+      }
+      bySource.get(tool.source).push(tool.name);
+    }
+    for (const [source, names] of bySource) {
+      console.log(`  [${source}]: ${names.join(", ")}`);
+    }
+  }
+}
+let registryInstance = null;
+function getToolRegistry() {
+  if (!registryInstance) {
+    registryInstance = new ToolRegistry();
+  }
+  return registryInstance;
+}
 class CortexBrain extends events.EventEmitter {
   urn = "kontur://cortex/ai/main";
   provider = process.env.AI_PROVIDER || "gemini";
@@ -1811,36 +2139,41 @@ class CortexBrain extends events.EventEmitter {
     this.initializeAI();
   }
   initializeAI() {
-    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    const brainConfig = getProviderConfig("brain");
+    const googleApiKey = brainConfig.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    const modelName = brainConfig.model || "gemini-2.5-flash";
     if (googleApiKey) {
       this.genAI = new generativeAi.GoogleGenerativeAI(googleApiKey);
       this.chatModel = this.genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: modelName,
         systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt,
         generationConfig: {
           temperature: 0.7,
           responseMimeType: "application/json"
         }
-        // We will add tools dynamically if possible, or inject into prompt
-        // checks: https://ai.google.dev/gemini-api/docs/function-calling
       });
-      console.log(`[CORTEX] 🧠 Initialized with Gemini AI`);
+      console.log(`[CORTEX] 🧠 Initialized with ${brainConfig.provider} (model: ${modelName})`);
       this.initMCP();
     } else {
-      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY`);
+      console.warn(`[CORTEX] ⚠️ No BRAIN_API_KEY or GOOGLE_API_KEY`);
     }
   }
   mcpBridges = {};
   async initMCP() {
     try {
       const split = (str) => str.match(/(?:[^\s"]+|"[^"]*")+/g)?.map((s) => s.replace(/^"|"$/g, "")) || [];
-      const homeDir = process.env.HOME || "/Users/dev";
+      const homeDir = process.env.HOME || process.env.USERPROFILE || "";
+      if (!homeDir)
+        console.warn("[CORTEX] ⚠️ Could not determine HOME directory for MCP");
       const { McpBridge } = await Promise.resolve().then(() => require("./McpBridge-69bff3b7.js"));
+      const allowedPaths = [process.cwd()];
+      if (homeDir)
+        allowedPaths.push(path__namespace.join(homeDir, "Desktop"));
       const fsBridge = new McpBridge(
         "filesystem",
         "1.0.0",
         "node",
-        ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", process.cwd(), `${homeDir}/Desktop`]
+        ["node_modules/@modelcontextprotocol/server-filesystem/dist/index.js", ...allowedPaths]
       );
       const osBridge = new McpBridge(
         "os",
@@ -1856,9 +2189,13 @@ class CortexBrain extends events.EventEmitter {
       console.log(`[CORTEX] 🛠️ Loaded ${allTools.length} MCP Tools:`, allTools.map((t2) => t2.name).join(", "));
       this.mcpBridges["filesystem"] = fsBridge;
       this.mcpBridges["os"] = osBridge;
+      const registry = getToolRegistry();
+      registry.registerMCPTools(fsTools, "filesystem", "kontur://organ/mcp/filesystem");
+      registry.registerMCPTools(osTools, "os", "kontur://organ/mcp/os");
+      registry.setInitialized();
       fsTools.forEach((tool) => this.toolsMap[tool.name] = "kontur://organ/mcp/filesystem");
       osTools.forEach((tool) => this.toolsMap[tool.name] = "kontur://organ/mcp/os");
-      const toolDesc = allTools.map((t2) => `- ${t2.name}: ${t2.description} (Args: ${JSON.stringify(t2.inputSchema)})`).join("\n");
+      const toolDesc = registry.generateToolPrompt();
       const systemContext = `
 ## SYSTEM CONTEXT:
 - User Home Directory: ${homeDir}
@@ -1870,8 +2207,9 @@ class CortexBrain extends events.EventEmitter {
 ${systemContext}
 ## AVAILABLE MCP TOOLS (Use these instead of system/worker):
 ${toolDesc}`;
+      const brainConfig = getProviderConfig("brain");
       this.chatModel = this.genAI.getGenerativeModel({
-        model: "gemini-2.5-flash",
+        model: brainConfig.model || "gemini-2.5-flash",
         systemInstruction: enhancedPrompt,
         generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
       });
@@ -2047,8 +2385,13 @@ class UnifiedBrain extends CortexBrain {
       }
       return await this.thinkWithAtlas(request);
     } catch (error) {
-      console.error("[UNIFIED-BRAIN] Error:", error);
-      return this.fallbackResponse(request);
+      console.warn("[UNIFIED-BRAIN] Cortex reasoning failed, attempting fall back to Atlas...", error);
+      try {
+        return await this.thinkWithAtlas(request);
+      } catch (atlasError) {
+        console.error("[UNIFIED-BRAIN] Atlas Fallback failed:", atlasError);
+        return this.fallbackResponse(request);
+      }
     }
   }
   /**
@@ -2247,7 +2590,7 @@ IMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
                 tool: step.tool,
                 action: step.action,
                 args: step.args,
-                target: "kontur://organ/worker"
+                target: step.target || "kontur://organ/worker"
                 // Default, router handles optimization
               }))
             }
@@ -3079,6 +3422,23 @@ class TetyanaExecutor extends events.EventEmitter {
     console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
     this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
     await this.startVisionObservation(plan.goal);
+    const registry = getToolRegistry();
+    if (registry.isInitialized()) {
+      const validation = registry.validatePlanTools(plan.steps);
+      if (!validation.valid) {
+        const errorDetail = validation.errors.map((err) => {
+          const toolName = err.replace("Unknown tool: '", "").replace("'", "");
+          const similar = registry.findSimilarTools(toolName);
+          return similar.length > 0 ? `${err}. Did you mean: ${similar.join(", ")}?` : err;
+        }).join("; ");
+        console.error(`[TETYANA] ❌ Plan validation failed: ${errorDetail}`);
+        this.emitStatus("error", `Невідомі інструменти: ${errorDetail}`);
+        throw new Error(`Plan validation failed: ${errorDetail}`);
+      }
+      console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
+    } else {
+      console.warn("[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation");
+    }
     try {
       for (let i = 0; i < plan.steps.length; i++) {
         if (!this.active)
@@ -3170,7 +3530,7 @@ class TetyanaExecutor extends events.EventEmitter {
       console.log(`[TETYANA] 🧠 Consulting Reasoning Organ...`);
       const reqId = `reason-${Date.now()}`;
       const handler = (packet2) => {
-        if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.route.reply_to === reqId) {
+        if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.nexus.correlation_id === reqId) {
           this.core.removeListener("ingest", handlerWrapper);
           console.log(`[TETYANA] 🧠 Advice Received:`, packet2.payload.result);
           resolve();
@@ -3187,8 +3547,9 @@ class TetyanaExecutor extends events.EventEmitter {
           level: "high"
         }
       );
+      packet.nexus.correlation_id = reqId;
       packet.instruction.op_code = "think";
-      packet.route.reply_to = reqId;
+      packet.route.reply_to = "kontur://organ/tetyana";
       this.core.ingest(packet);
       setTimeout(() => {
         this.core.removeListener("ingest", handlerWrapper);
@@ -3205,7 +3566,7 @@ class TetyanaExecutor extends events.EventEmitter {
       console.log(`[TETYANA] 🛡️ Asking Grisha to validate step ${stepNum}...`);
       const verifId = `verif-${Date.now()}-${Math.random()}`;
       const responseHandler = (packet2) => {
-        if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.route.reply_to === verifId) {
+        if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.nexus.correlation_id === verifId) {
           this.core.removeListener("ingest", responseHandlerWrapper);
           if (packet2.payload.allowed) {
             console.log(`[TETYANA] ✅ Grisha Approved.`);
@@ -3229,12 +3590,17 @@ class TetyanaExecutor extends events.EventEmitter {
         }
       );
       packet.instruction.op_code = "VALIDATE";
-      packet.route.reply_to = verifId;
+      packet.route.reply_to = "kontur://organ/tetyana";
+      packet.nexus.correlation_id = verifId;
       this.core.ingest(packet);
       setTimeout(() => {
         this.core.removeListener("ingest", responseHandlerWrapper);
-        console.warn("[TETYANA] ⚠️ Grisha Timeout. Proceeding (DEV MODE).");
-        resolve();
+        if (process.env.NODE_ENV === "development") {
+          console.warn("[TETYANA] ⚠️ Grisha Timeout. Proceeding (DEV MODE).");
+          resolve();
+        } else {
+          reject(new Error("Security validation timeout - operation rejected"));
+        }
       }, 5e3);
     });
   }
@@ -3252,7 +3618,8 @@ class TetyanaExecutor extends events.EventEmitter {
         step.args
       );
       packet.instruction.op_code = step.action;
-      packet.route.reply_to = cmdId;
+      packet.route.reply_to = "kontur://organ/tetyana";
+      packet.nexus.correlation_id = cmdId;
       this.core.ingest(packet);
     });
   }
@@ -3262,14 +3629,15 @@ class TetyanaExecutor extends events.EventEmitter {
    * Called by TetyanaCapsule when a packet arrives for Tetyana
    */
   handleIncomingPacket(packet) {
-    if (this.pendingRequests.size > 0) {
-      const [key, promise] = this.pendingRequests.entries().next().value;
+    const correlationId = packet.nexus.correlation_id;
+    if (correlationId && this.pendingRequests.has(correlationId)) {
+      const promise = this.pendingRequests.get(correlationId);
       if (packet.instruction.intent === PacketIntent.ERROR) {
         promise.reject(new Error(packet.payload.msg || "Unknown Error"));
       } else {
         promise.resolve(packet.payload);
       }
-      this.pendingRequests.delete(key);
+      this.pendingRequests.delete(correlationId);
     }
   }
   handleFailure(error, plan) {
@@ -3914,11 +4282,27 @@ class GrishaCapsule {
       timestamp: Date.now()
     };
     try {
-      const result = JSON.parse(response.text || "{}");
+      let result = {};
+      const rawText = response.text || "";
+      try {
+        result = JSON.parse(rawText);
+      } catch {
+        const jsonMatch = rawText.match(/\{[\s\S]*"threats"[\s\S]*\}/);
+        if (jsonMatch) {
+          result = JSON.parse(jsonMatch[0]);
+        } else {
+          const threatKeywords = ["threat", "danger", "risk", "warning", "attack", "suspicious"];
+          const foundThreats = threatKeywords.filter((kw) => rawText.toLowerCase().includes(kw));
+          if (foundThreats.length > 0) {
+            result = { threats: [`Detected keywords: ${foundThreats.join(", ")}`], level: "medium" };
+          }
+          console.log("🛡️ GRISHA: Brain returned non-JSON, using fallback analysis.");
+        }
+      }
       report.threats = result.threats || allThreats;
       report.level = result.level || threatLevel;
     } catch (e) {
-      console.warn("🛡️ GRISHA: Failed to parse Brain response", e);
+      console.warn("🛡️ GRISHA: Failed to parse Brain response, using collected data.", e);
     }
     if (report.level !== "low") {
       synapse.emit("grisha", "threat_detected", {
@@ -4134,6 +4518,14 @@ class MemoryCapsule {
       return { items: [], summary: "Recall failed" };
     }
   }
+  /**
+   * Backwards-compatible wrapper for recall().
+   * Returns just the items array instead of { items, summary }.
+   */
+  async retrieve(args) {
+    const result = await this.recall(args);
+    return result.items;
+  }
   async optimize() {
     console.log("🔄 MemoryCapsule: Running optimization (deduplication & clustering)...");
     try {
@@ -4215,27 +4607,6 @@ class ForgeGhost {
     return { success: true, result: "Mock Execution Result" };
   }
 }
-class VoiceGhost {
-  constructor() {
-    console.log("🔊 VoiceGhost Initialized");
-  }
-  async speak(args) {
-    console.log(`🔊 VoiceGhost [${args.voice || "atlas"}]: "${args.text}"`);
-    await new Promise((r) => setTimeout(r, 500));
-  }
-  async listen(args) {
-    console.log("👂 VoiceGhost: Listening...");
-    await new Promise((r) => setTimeout(r, 1e3));
-    const commands = [
-      "Hello Atlas",
-      "Run system check",
-      "Create a new plan"
-    ];
-    const text = commands[Math.floor(Math.random() * commands.length)];
-    console.log(`👂 VoiceGhost: Heard "${text}"`);
-    return { text };
-  }
-}
 class BrainCapsule {
   genAI;
   constructor(apiKey) {
@@ -4269,22 +4640,42 @@ class BrainCapsule {
   }
 }
 class VoiceCapsule {
+  apiKey;
   constructor(apiKey) {
+    this.apiKey = apiKey || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY;
+    if (!this.apiKey) {
+      console.warn("[VOICE CAPSULE] ⚠️ No API key found for TTS. Check GEMINI_API_KEY, GOOGLE_API_KEY, or GEMINI_LIVE_API_KEY.");
+    }
     console.log("[VOICE CAPSULE] 🔊 Initialized (Using ProviderRouter)");
     getProviderRouter();
   }
   /**
   * Generate single-speaker audio from text
+  * Supports both modern (text, config) and legacy ({text, voice, speed}) signatures
   */
-  async speak(text, config2 = {}) {
+  async speak(textOrArgs, config2 = {}) {
     const router2 = getProviderRouter();
     const MAX_RETRIES = 3;
+    let text = "";
+    let voiceName = config2.voiceName;
+    let speed = config2.rate;
+    if (typeof textOrArgs === "object" && textOrArgs !== null) {
+      text = textOrArgs.text;
+      voiceName = textOrArgs.voice || voiceName;
+      speed = textOrArgs.speed || speed;
+    } else {
+      text = textOrArgs;
+    }
+    synapse.emit("voice", "request_tts", {
+      text,
+      voice: voiceName
+    });
     for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
       try {
         const response = await router2.speak("tts", {
           text,
-          voice: config2.voiceName,
-          speed: config2.rate
+          voice: voiceName,
+          speed
         });
         console.log(`[VOICE CAPSULE] ✅ Generated audio (Attempt ${attempt}):`, response.audio.byteLength, "bytes");
         return response.audio;
@@ -4315,6 +4706,16 @@ class VoiceCapsule {
       console.error("[VOICE CAPSULE] ❌ Multi-speaker TTS error:", error.message);
       return null;
     }
+  }
+  /**
+   * Listen for audio input (Stub for VoiceAPI compatibility).
+   * In KONTUR architecture, listening is handled by STTService or GeminiLiveService directly.
+   * This stub exists to satisfy Tetyana's dependency contract.
+   */
+  async listen(args = {}) {
+    console.warn("[VOICE CAPSULE] ⚠️ listen() called but not implemented in VoiceCapsule directly.");
+    console.warn("[VOICE CAPSULE] Use GeminiLiveService or STTService for audio input.");
+    return { error: "Not implemented in KONTUR VoiceCapsule. Use STTService." };
   }
 }
 global.WebSocket = WebSocket;
@@ -4524,169 +4925,6 @@ class GeminiLiveService extends events.EventEmitter {
     return this._isConnected;
   }
 }
-class GrishaObserver extends events.EventEmitter {
-  isObserving = false;
-  captureInterval = null;
-  geminiLive = null;
-  frameCount = 0;
-  isSpeaking = false;
-  // Lock to prevent frame capture during response
-  constructor() {
-    super();
-  }
-  /**
-   * Initialize with Gemini Live service reference
-   */
-  setGeminiLive(geminiLive) {
-    this.geminiLive = geminiLive;
-    if (geminiLive) {
-      geminiLive.on("text", (text) => {
-        this.processGrishaResponse(text);
-      });
-      geminiLive.on("audio", (audio) => {
-        if (!this.isSpeaking) {
-          this.isSpeaking = true;
-          console.log("[GRISHA OBSERVER] 🔇 Audio started - pausing frame capture");
-          setTimeout(() => {
-            if (this.isSpeaking) {
-              console.log("[GRISHA OBSERVER] ⏱️ Audio timeout - resuming frame capture");
-              this.isSpeaking = false;
-            }
-          }, 5e3);
-        }
-        this.emit("audio", audio);
-      });
-      geminiLive.on("turnComplete", () => {
-        console.log("[GRISHA OBSERVER] 🎤 Turn complete - resuming frame capture");
-        this.isSpeaking = false;
-        this.emit("observation", {
-          type: "confirmation",
-          message: "Grisha finished speaking (auto-confirmed via turnComplete)"
-        });
-      });
-    }
-  }
-  /**
-   * Start observing task execution
-   * Called when TETYANA begins executing a plan
-   */
-  async startObservation(taskDescription) {
-    if (this.isObserving)
-      return;
-    console.log("[GRISHA OBSERVER] 👁️ Starting observation...");
-    this.isObserving = true;
-    this.frameCount = 0;
-    if (this.geminiLive && !this.geminiLive.isConnected) {
-      try {
-        await this.geminiLive.connect();
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      } catch (e) {
-        console.error("[GRISHA OBSERVER] Failed to connect Gemini Live:", e);
-      }
-    }
-    if (this.geminiLive && typeof this.geminiLive.sendText === "function") {
-      this.geminiLive.sendText("Система: Починаємо спостереження. Опиши що бачиш на екрані.");
-    }
-    await this.captureAndSendFrame();
-    console.log(`[GRISHA OBSERVER] 📸 First frame sent`);
-    this.captureInterval = setInterval(async () => {
-      if (this.isSpeaking) {
-        return;
-      }
-      await this.captureAndSendFrame();
-    }, 500);
-    this.emit("observation", {
-      type: "observation",
-      message: `Спостереження розпочато. ${taskDescription || "Моніторю виконання..."}`,
-      timestamp: Date.now()
-    });
-  }
-  /**
-   * Stop observing
-   */
-  stopObservation() {
-    if (!this.isObserving)
-      return;
-    console.log(`[GRISHA OBSERVER] 👁️ Observation stopped after ${this.frameCount} frames`);
-    this.isObserving = false;
-    this.isSpeaking = false;
-    if (this.captureInterval) {
-      clearInterval(this.captureInterval);
-      this.captureInterval = null;
-    }
-    this.emit("observation", {
-      type: "confirmation",
-      message: `Спостереження завершено. Перевірено ${this.frameCount} кадрів.`,
-      timestamp: Date.now()
-    });
-  }
-  /**
-   * Capture current screen and send to Gemini Live
-   */
-  async captureAndSendFrame() {
-    try {
-      console.log("[GRISHA OBSERVER] 📸 Capturing screen...");
-      const sources = await electron.desktopCapturer.getSources({
-        types: ["screen"],
-        thumbnailSize: { width: 640, height: 360 }
-      });
-      console.log(`[GRISHA OBSERVER] 🖥️ Found ${sources.length} sources`);
-      if (sources.length > 0) {
-        const thumbnail = sources[0].thumbnail;
-        const jpegBuffer = thumbnail.toJPEG(70);
-        const base64 = jpegBuffer.toString("base64");
-        if (this.geminiLive) {
-          if (this.geminiLive.isConnected) {
-            this.geminiLive.sendVideoFrame(base64);
-            this.frameCount++;
-            console.log(`[GRISHA OBSERVER] 📤 Frame ${this.frameCount} sent`);
-          } else {
-            console.warn("[GRISHA OBSERVER] ⚠️ Gemini Live NOT connected, cannot send frame");
-          }
-        } else {
-          console.error("[GRISHA OBSERVER] ❌ Gemini Live instance is missing");
-        }
-      }
-    } catch (e) {
-      console.error("[GRISHA OBSERVER] ❌ Capture failed:", e);
-    }
-  }
-  /**
-   * Notify Grisha about an action performed by the system
-   * This prompts Grisha to verify the action specifically.
-   */
-  notifyAction(action, details) {
-    if (this.geminiLive && typeof this.geminiLive.sendText === "function") {
-      console.log(`[GRISHA OBSERVER] 🗣️ Prompting verification for: ${action}`);
-      this.geminiLive.sendText(`Система: Виконано дію "${action}" (${details}). Підтвердь словом "Виконано" або повідом про помилку.`);
-    }
-  }
-  /**
-   * Process Grisha's response from Gemini Live
-   */
-  processGrishaResponse(text) {
-    const lowerText = text.toLowerCase();
-    let resultType = "observation";
-    if (lowerText.includes("alert") || lowerText.includes("помилка") || lowerText.includes("error") || lowerText.includes("не виконано") || lowerText.includes("not done")) {
-      resultType = "alert";
-    } else if (lowerText.includes("ok") || lowerText.includes("виконано") || lowerText.includes("stable") || lowerText.includes("done")) {
-      resultType = "confirmation";
-    }
-    const result = {
-      type: resultType,
-      message: text,
-      timestamp: Date.now()
-    };
-    console.log(`[GRISHA OBSERVER] 🔍 ${resultType.toUpperCase()}: ${text}`);
-    this.emit("observation", result);
-  }
-  /**
-   * Check if currently observing
-   */
-  get isActive() {
-    return this.isObserving;
-  }
-}
 const execAsync = util.promisify(child_process.exec);
 class SystemCapsule {
   constructor() {
@@ -4745,7 +4983,6 @@ class DeepIntegrationSystem {
   // New Reasoning Organ
   memory = null;
   forge = null;
-  voiceGhost = null;
   brain = null;
   // Real IO Capsules
   voiceCapsule = null;
@@ -4836,14 +5073,7 @@ class DeepIntegrationSystem {
           synapse.emit("GRISHA", "ALERT", `Помилка доступу до зору: ${err.message}`);
         });
         this.grishaVision.setGeminiLive(this.geminiLive);
-        this.grishaObserver = new GrishaObserver();
-        this.grishaObserver.setGeminiLive(this.geminiLive);
-        this.grishaObserver.on("observation", (result) => {
-          synapse.emit("GRISHA", result.type.toUpperCase(), result.message);
-        });
-        this.grishaObserver.on("audio", (audioChunk) => {
-          synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
-        });
+        global.grishaObserver = this.grishaVision;
         console.log("[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active");
       } catch (error) {
         console.error("[DEEP-INTEGRATION] Failed to init Gemini Live:", error);
@@ -4857,7 +5087,6 @@ class DeepIntegrationSystem {
     this.grishaVision.on("audio", (audioChunk) => {
       synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
     });
-    global.grishaObserver = this.grishaObserver;
     global.grishaVision = this.grishaVision;
     console.log(`[DEEP-INTEGRATION] ✅ Vision System ready [${visionConfig.mode}]`);
   }
@@ -4987,8 +5216,7 @@ class DeepIntegrationSystem {
     });
     ipcMain.removeHandler("vision:get_model_status");
     ipcMain.handle("vision:get_model_status", () => {
-      const { getVisionConfig: getVisionConfig2 } = require("../kontur/providers/config");
-      const config2 = getVisionConfig2();
+      const config2 = getVisionConfig();
       if (config2.mode === "live") {
         if (!this.geminiLive) {
           return { status: "disconnected", error: null, mode: "live" };
@@ -5012,13 +5240,11 @@ class DeepIntegrationSystem {
     });
     ipcMain.removeHandler("vision:get_mode");
     ipcMain.handle("vision:get_mode", () => {
-      const { getVisionConfig: getVisionConfig2 } = require("../kontur/providers/config");
-      return getVisionConfig2().mode;
+      return getVisionConfig().mode;
     });
     ipcMain.removeHandler("vision:get_config");
     ipcMain.handle("vision:get_config", () => {
-      const { getVisionConfig: getVisionConfig2 } = require("../kontur/providers/config");
-      return getVisionConfig2();
+      return getVisionConfig();
     });
     ipcMain.removeHandler("vision:analyze");
     ipcMain.handle("vision:analyze", async (_, { taskContext }) => {
@@ -5033,6 +5259,10 @@ class DeepIntegrationSystem {
         return { success: false, error: err.message };
       }
     });
+    ipcMain.removeHandler("config:get_all");
+    ipcMain.handle("config:get_all", () => {
+      return getAllConfigs();
+    });
     console.log("[DEEP-INTEGRATION] ✅ IPC Bridge established");
   }
   /**
@@ -5040,13 +5270,15 @@ class DeepIntegrationSystem {
    */
   async initAtlasCapsules() {
     console.log("[DEEP-INTEGRATION] Initializing Atlas Capsules...");
-    const deepThinkingKey = process.env.ATLAS_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || "";
+    const deepThinkingKey = process.env.REASONING_API_KEY || process.env.GEMINI_LIVE_API_KEY || process.env.TTS_API_KEY || // Often same as Gemini key
+    process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY || "";
     this.memory = new MemoryCapsule();
     this.forge = new ForgeGhost();
-    this.voiceGhost = new VoiceGhost();
     this.brain = new BrainCapsule(deepThinkingKey);
+    if (!this.voiceCapsule)
+      this.voiceCapsule = new VoiceCapsule();
     this.atlas = new AtlasCapsule(this.memory, this.brain);
-    this.tetyana = new TetyanaCapsule(this.forge, this.voiceGhost, this.brain, this.core);
+    this.tetyana = new TetyanaCapsule(this.forge, this.voiceCapsule, this.brain, this.core);
     this.grisha = new GrishaCapsule(this.brain, this.core);
     this.reasoning = createReasoningCapsule(deepThinkingKey);
     console.log("[DEEP-INTEGRATION] 🧠 Reasoning Capsule (Gemini 3) created");
@@ -5059,7 +5291,7 @@ class DeepIntegrationSystem {
    */
   async spawnOrgans() {
     console.log("[DEEP-INTEGRATION] Spawning KONTUR organs...");
-    if (!this.memory || !this.forge || !this.voiceGhost || !this.brain) {
+    if (!this.memory || !this.forge || !this.brain) {
       throw new Error("Atlas Capsules not initialized");
     }
     if (process.env.AG === "true") {
@@ -5280,7 +5512,7 @@ async function bootstrapSystem() {
     console.error("[MAIN] 💥 Critical System Failure during Boot:", error);
   }
 }
-function createWindow() {
+async function createWindow() {
   const mainWindow = new electron.BrowserWindow({
     width: 900,
     height: 670,
@@ -5292,11 +5524,24 @@ function createWindow() {
       sandbox: false
     }
   });
-  bootstrapSystem().catch((e) => console.error("[KONTUR] Initialization failed:", e));
+  await bootstrapSystem().catch((e) => console.error("[KONTUR] Initialization failed:", e));
   main.createIPCHandler({ router: appRouter, windows: [mainWindow] });
-  mainWindow.on("ready-to-show", () => {
+  deepSystem?.on("ready", () => {
+    console.log("[MAIN] System Ready signal received - showing UI");
     mainWindow.show();
     synapse.emit("system", "wake_up", { timestamp: Date.now() });
+  });
+  mainWindow.on("ready-to-show", () => {
+    if (deepSystem && deepSystem.getStatus().core === "READY") {
+      mainWindow.show();
+      synapse.emit("system", "wake_up", { timestamp: Date.now() });
+    } else {
+      console.log("[MAIN] Waiting for system ready...");
+      deepSystem?.on("ready", () => {
+        mainWindow.show();
+        synapse.emit("system", "wake_up", { timestamp: Date.now() });
+      });
+    }
   });
   mainWindow.webContents.setWindowOpenHandler((details) => {
     electron.shell.openExternal(details.url);

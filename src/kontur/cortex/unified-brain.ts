@@ -36,6 +36,20 @@ interface ThinkResponse {
   };
 }
 
+// Structured Planning Interfaces
+interface PlanStep {
+  tool: string;
+  action: string;
+  args: Record<string, any>;
+  target?: string;
+}
+
+interface CortexPlanResponse {
+  thought: string;
+  response: string;
+  plan: PlanStep[];
+}
+
 export class UnifiedBrain extends CortexBrain {
   private atlasAPI: BrainAPI | null = null;
   private atlasOrganAPI: AtlasAPI | null = null;
@@ -158,7 +172,7 @@ export class UnifiedBrain extends CortexBrain {
 
         return {
           text: JSON.stringify(parsed),
-          tool_calls: parsed.plan?.map((step: any) => ({
+          tool_calls: (parsed.plan as PlanStep[])?.map((step) => ({
             name: step.tool,
             args: step.args
           })) || [],
@@ -188,7 +202,7 @@ export class UnifiedBrain extends CortexBrain {
 
     console.log('[UNIFIED-BRAIN] Falling back to Atlas Brain...');
 
-    return await this.atlasAPI.think(request as any);
+    return await this.atlasAPI.think(request);
   }
 
   /**
@@ -207,7 +221,7 @@ export class UnifiedBrain extends CortexBrain {
       const atlasResponse = await this.atlasAPI.think({
         ...request,
         system_prompt: `${request.system_prompt}. Also provide Atlas architectural perspective.`,
-      } as any);
+      });
 
       // Merge responses
       return {
@@ -342,11 +356,11 @@ export class UnifiedBrain extends CortexBrain {
             {
               reasoning: decision.thought,
               user_response: decision.response,
-              steps: decision.plan.map((step: any) => ({
+              steps: decision.plan.map((step: PlanStep) => ({
                 tool: step.tool,
                 action: step.action,
                 args: step.args,
-                target: 'kontur://organ/worker' // Default, router handles optimization
+                target: step.target || 'kontur://organ/worker' // Default, router handles optimization
               }))
             }
           );

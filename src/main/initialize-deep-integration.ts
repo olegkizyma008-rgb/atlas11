@@ -17,6 +17,7 @@ import {
 } from '../kontur/adapters/atlas-organ-mapper';
 import { synapse } from '../kontur/synapse';
 import { createPacket, PacketIntent } from '../kontur/protocol/nexus'; // Import packet utils
+import { getVisionConfig, getAllConfigs } from '../kontur/providers/config';
 
 // Import Atlas Capsules
 import { AtlasCapsule } from '../modules/atlas/index';
@@ -336,7 +337,6 @@ export class DeepIntegrationSystem {
     // Model Status for UI Indicator
     ipcMain.removeHandler('vision:get_model_status');
     ipcMain.handle('vision:get_model_status', () => {
-      const { getVisionConfig } = require('../kontur/providers/config');
       const config = getVisionConfig();
 
       if (config.mode === 'live') {
@@ -367,14 +367,12 @@ export class DeepIntegrationSystem {
     // Get current Vision mode
     ipcMain.removeHandler('vision:get_mode');
     ipcMain.handle('vision:get_mode', () => {
-      const { getVisionConfig } = require('../kontur/providers/config');
       return getVisionConfig().mode;
     });
 
     // Get full Vision config
     ipcMain.removeHandler('vision:get_config');
     ipcMain.handle('vision:get_config', () => {
-      const { getVisionConfig } = require('../kontur/providers/config');
       return getVisionConfig();
     });
 
@@ -396,7 +394,6 @@ export class DeepIntegrationSystem {
     // Get full system config (services, providers, etc) for UI
     ipcMain.removeHandler('config:get_all');
     ipcMain.handle('config:get_all', () => {
-      const { getAllConfigs } = require('../kontur/providers/config');
       return getAllConfigs();
     });
 

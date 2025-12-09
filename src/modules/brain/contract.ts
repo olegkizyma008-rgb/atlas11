@@ -6,7 +6,7 @@ export const BrainContract = {
         .args(z.object({
             system_prompt: z.string(),
             user_prompt: z.string(),
-            model: z.enum(['gemini-2.0-flash-exp', 'gemini-1.5-pro']).optional().default('gemini-2.0-flash-exp'),
+            model: z.string().optional().default('gemini-2.0-flash-exp'),
             tools: z.array(z.any()).optional() // For function calling schemas
         }))
         .returns(z.promise(z.object({

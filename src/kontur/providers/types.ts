@@ -13,7 +13,8 @@ export type ProviderName =
     | 'elevenlabs'
     | 'whisper'
     | 'web'
-    | 'ukrainian';
+    | 'ukrainian'
+    | 'mock';
 
 // ============ Service Types ============
 export type ServiceType = 'brain' | 'tts' | 'stt' | 'vision' | 'reasoning';

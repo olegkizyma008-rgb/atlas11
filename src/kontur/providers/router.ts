@@ -31,6 +31,7 @@ import { CopilotVisionProvider } from './copilot-vision';
 import { WebTTSProvider } from './web-tts';
 import { WebSTTProvider } from './web-stt';
 import { UkrainianTTSProvider } from './ukrainian-tts';
+import { MockLLMProvider } from './mock';
 
 export class ProviderRouter {
     private llmProviders: Map<ProviderName, ILLMProvider> = new Map();
@@ -81,6 +82,9 @@ export class ProviderRouter {
         if (copilotProvider.isAvailable()) {
             this.llmProviders.set('copilot', copilotProvider);
         }
+
+        // Mock Fallback (Always available if enabled or as last resort)
+        this.llmProviders.set('mock', new MockLLMProvider());
 
         // === TTS Providers ===
         const ttsConfig = getProviderConfig('tts');
@@ -144,6 +148,13 @@ export class ProviderRouter {
                 console.log(`[PROVIDER ROUTER] 🔄 Using fallback provider: ${config.fallbackProvider} for ${service}`);
                 return fallback;
             }
+        }
+
+        // Check for mock fallback if heavily degraded
+        const mockFn = map.get('mock' as any);
+        if (mockFn && isAvailable(mockFn) && (map === this.llmProviders as any)) {
+            console.warn(`[PROVIDER ROUTER] ⚠️ All Keyed Providers failed. Falling back to MOCK for ${service}.`);
+            return mockFn;
         }
 
         throw new Error(`No available provider for ${service}`);
