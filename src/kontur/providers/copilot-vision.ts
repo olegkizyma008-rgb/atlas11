@@ -26,14 +26,31 @@ export class CopilotVisionProvider implements IVisionProvider {
     }
 
     private initializeToken() {
-        // 1. Check env var
+        // 0. Check env var (Standard for Atlas)
         if (process.env.COPILOT_API_KEY) {
             this.token = process.env.COPILOT_API_KEY;
             console.log('[COPILOT VISION] ✅ Found token in env');
             return;
         }
 
-        // 2. Try apps.json
+        // 1. Try ~/.config/gh/hosts.yml (GitHub CLI path) - High Priority
+        const ghHostsPath = path.join(os.homedir(), '.config', 'gh', 'hosts.yml');
+        if (fs.existsSync(ghHostsPath)) {
+            try {
+                const content = fs.readFileSync(ghHostsPath, 'utf-8');
+                // Simple parsing for "oauth_token: gho_..." under github.com
+                const match = content.match(/oauth_token:\s+(gh[op]_[A-Za-z0-9_]+)/);
+                if (match && match[1]) {
+                    this.token = match[1];
+                    console.log('[COPILOT VISION] ✅ Found token in gh CLI config');
+                    return;
+                }
+            } catch (e) {
+                console.warn('[COPILOT VISION] Failed to parse gh hosts.yml', e);
+            }
+        }
+
+        // 2. Try ~/.config/github-copilot/apps.json (CLI/Shared)
         const appsJsonPath = path.join(os.homedir(), '.config', 'github-copilot', 'apps.json');
         if (fs.existsSync(appsJsonPath)) {
             try {
@@ -50,7 +67,7 @@ export class CopilotVisionProvider implements IVisionProvider {
             }
         }
 
-        // 3. Try hosts.json
+        // 3. Try ~/.config/github-copilot/hosts.json (Goose/Copilot CLI path)
         const hostsJsonPath = path.join(os.homedir(), '.config', 'github-copilot', 'hosts.json');
         if (fs.existsSync(hostsJsonPath)) {
             try {
@@ -198,7 +215,11 @@ Return JSON:
             'gpt-4o',
             'gpt-4o-mini',
             'gpt-4-vision-preview',
-            'claude-sonnet-4' // Claude also supports vision
+            'claude-sonnet-4'
         ];
+    }
+
+    async fetchModels(): Promise<string[]> {
+        return this.getModels();
     }
 }
