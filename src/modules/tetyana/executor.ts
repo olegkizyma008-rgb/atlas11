@@ -76,6 +76,8 @@ export class TetyanaExecutor extends EventEmitter {
 
 
         try {
+            const MAX_RETRIES = 3;
+
             for (let i = 0; i < plan.steps.length; i++) {
                 if (!this.active) break;
 
@@ -89,103 +91,106 @@ export class TetyanaExecutor extends EventEmitter {
                     await this.consultReasoning(plan);
                 }
 
-                // 👁️ VISION OPTIMIZATION: Pause during step execution
-                const vision = this.visionService || getGrishaVisionService();
-                vision.pauseCapture();
+                // --- RETRY LOOP ---
+                let attempts = 0;
+                let verified = false;
+                let feedbackContext: string = ""; // Feedback from Grisha to guide retry
 
-                // 🎯 Auto-select window if step targets an app
-                // Check all possible fields where an app name might be
-                let appName = step.args?.appName || step.args?.app || step.args?.name || step.args?.application;
-
-                // Special handling for 'open' actions
-                if (!appName && (step.action === 'open_application' || step.action === 'open' || step.action === 'launch')) {
-                    appName = step.args?.arg1 || step.args?.target;
-                }
-
-                // Check if step.action itself is an app name (e.g., "calculator", "safari")
-                const APP_NAME_MAP: Record<string, string> = {
-                    'calculator': 'Calculator',
-                    'калькулятор': 'Calculator',
-                    'safari': 'Safari',
-                    'сафарі': 'Safari',
-                    'chrome': 'Google Chrome',
-                    'terminal': 'Terminal',
-                    'термінал': 'Terminal',
-                    'notes': 'Notes',
-                    'нотатки': 'Notes',
-                    'finder': 'Finder',
-                    'textedit': 'TextEdit',
-                };
-                if (!appName && APP_NAME_MAP[step.action.toLowerCase()]) {
-                    appName = APP_NAME_MAP[step.action.toLowerCase()];
-                }
-
-                // Try to extract from step description if still not found
-                const stepDescription = (step as any).description;
-                if (!appName && stepDescription) {
-                    // Common patterns: "відкрити Калькулятор", "open Calculator", "в програмі Safari"
-                    const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
-                    if (descMatch) {
-                        appName = descMatch[1];
+                while (!verified && attempts < MAX_RETRIES) {
+                    attempts++;
+                    if (attempts > 1) {
+                        console.warn(`[TETYANA] 🔄 Retry Attempt ${attempts}/${MAX_RETRIES} for Step ${stepNum}...`);
+                        this.emitStatus("warning", `Корекція кроку ${stepNum} (Спроба ${attempts})...`);
                     }
-                }
 
-                if (appName) {
-                    console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
-                    this.lastActiveApp = appName; // Remember for subsequent steps
-                    await vision.autoSelectSource(appName);
-                } else if (this.lastActiveApp) {
-                    // No explicit app, but we have a previous one - re-select it for vision
-                    console.log(`[TETYANA] 👁️ Re-selecting window: ${this.lastActiveApp}`);
-                    await vision.autoSelectSource(this.lastActiveApp);
-                }
+                    // 👁️ VISION OPTIMIZATION: Pause during step execution
+                    const vision = this.visionService || getGrishaVisionService();
+                    vision.pauseCapture();
 
-                // 1. Validate with Grisha (security check)
-                await this.validateStep(step, stepNum);
+                    // 🎯 Auto-select window logic
+                    let appName = step.args?.appName || step.args?.app || step.args?.name || step.args?.application;
 
-                // 2. Execute Step (PYTHON BRIDGE PREFERRED)
-                // User requested "Powerful System" (RAG) -> Python Bridge
-                // Also mandatory permission check
+                    if (!appName && (step.action === 'open_application' || step.action === 'open' || step.action === 'launch')) {
+                        appName = step.args?.arg1 || step.args?.target;
+                    }
 
-                // Flight check: Permissions
-                try {
-                    // We can't easily call internal tool from here without context, 
-                    // but we can trust the bridge to handle it OR we assume Terminal has permissions.
-                    // The Python Bridge runs in the shell of the parent process.
-                } catch (e) { /* ignore */ }
+                    const APP_NAME_MAP: Record<string, string> = {
+                        'calculator': 'Calculator',
+                        'калькулятор': 'Calculator',
+                        'safari': 'Safari',
+                        'сафарі': 'Safari',
+                        'chrome': 'Google Chrome',
+                        'terminal': 'Terminal',
+                        'термінал': 'Terminal',
+                        'notes': 'Notes',
+                        'нотатки': 'Notes',
+                        'finder': 'Finder',
+                        'textedit': 'TextEdit',
+                    };
+                    if (!appName && APP_NAME_MAP[step.action.toLowerCase()]) {
+                        appName = APP_NAME_MAP[step.action.toLowerCase()];
+                    }
 
-                let result;
-                const useBridge = true; // FORCE PYTHON BRIDGE per user request
+                    const stepDescription = (step as any).description;
+                    if (!appName && stepDescription) {
+                        const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
+                        if (descMatch) {
+                            appName = descMatch[1];
+                        }
+                    }
 
-                if (useBridge) {
-                    console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
-                    result = await this.executeStepViaBridge(step, stepNum);
-                } else {
-                    // Execute via Native MCP (Fallback)
-                    result = await this.executeStep(step, stepNum);
-                }
+                    if (!appName && step.action.includes('_')) {
+                        const parts = step.action.split('_');
+                        if (APP_NAME_MAP[parts[1]?.toLowerCase()]) {
+                            appName = APP_NAME_MAP[parts[1].toLowerCase()];
+                        }
+                    }
 
-                // 👁️ VISION OPTIMIZATION: Resume for verification
-                vision.resumeCapture();
-
-                // 3. Vision Verification (verify step was executed correctly)
-                console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
-                if (this.lastActiveApp) {
-                    console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
-                }
-
-                const visionResult = await this.verifyStepWithVision(step, stepNum);
-
-                // 4. Check if Vision detected a problem
-                if (visionResult) {
-                    if (visionResult.verified) {
-                        console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
+                    if (appName) {
+                        console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
+                        this.lastActiveApp = appName;
+                        await vision.autoSelectSource(appName);
+                    } else if (this.lastActiveApp) {
+                        console.log(`[TETYANA] 👁️ Re-selecting last app: ${this.lastActiveApp}`);
+                        await vision.autoSelectSource(this.lastActiveApp);
                     } else {
-                        console.warn(`[TETYANA] ⚠️ Grisha alert: ${visionResult.message}`);
-                        this.emitStatus("warning", `Grisha: ${visionResult.message}`);
+                        console.warn(`[TETYANA] ⚠️ Unknown target app. Vision might lose context.`);
                     }
-                } else {
-                    console.log(`[TETYANA] 👁️ Vision verification unavailable, continuing...`);
+
+                    // 1. Validate with Grisha (security check)
+                    if (attempts === 1) await this.validateStep(step, stepNum);
+
+                    // 2. Execute Step (Via Bridge)
+                    console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
+                    await this.executeStepViaBridge(step, stepNum, feedbackContext);
+
+                    // 👁️ VISION RESUME
+                    vision.resumeCapture();
+
+                    // 3. Vision Verification
+                    console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
+                    if (this.lastActiveApp) {
+                        console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
+                    }
+
+                    const visionResult = await this.verifyStepWithVision(step, stepNum);
+
+                    // 4. Check Verification Result
+                    if (visionResult && visionResult.verified) {
+                        console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
+                        verified = true;
+                    } else {
+                        const reason = visionResult?.message || "Unknown verification failure";
+                        console.warn(`[TETYANA] ⚠️ Grisha Rejected Step ${stepNum}: ${reason}`);
+
+                        feedbackContext = `PREVIOUS ATTEMPT FAILED. 
+Vision Feedback: "${reason}". 
+CORRECTION REQUIRED: Please analyze what went wrong and try a different approach/keys/command.`;
+                    }
+                } // End Retry Loop
+
+                if (!verified) {
+                    throw new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
                 }
 
                 // 5. Report Success
@@ -523,7 +528,7 @@ export class TetyanaExecutor extends EventEmitter {
     /**
      * Execute a SINGLE step via Python Bridge
      */
-    private async executeStepViaBridge(step: PlanStep, stepNum: number): Promise<any> {
+    private async executeStepViaBridge(step: PlanStep, stepNum: number, feedbackContext: string = ""): Promise<any> {
         return new Promise(async (resolve, reject) => {
             console.log(`[TETYANA] 🐍 Executing Step ${stepNum} via Python Bridge: ${step.action}`);
 
@@ -539,6 +544,15 @@ export class TetyanaExecutor extends EventEmitter {
                 `Step ${i + 1}: ${s.action} ${JSON.stringify(s.args || {})}`
             ).join('\n');
 
+            let correctionPrompt = "";
+            if (feedbackContext) {
+                correctionPrompt = `
+⚠️ PREVIOUS ATTEMPT REJECTED:
+${feedbackContext}
+INSTRUCTION: You must CORRECT your approach based on this feedback. Do not repeat the exact same action if it failed.
+`;
+            }
+
             const stepPrompt = `
 CONTEXT:
 The user wants to: "${this.currentPlan?.goal}"
@@ -549,6 +563,7 @@ CURRENT TASK:
 You are currently executing Step ${stepNum}.
 Task: ${step.action}
 Arguments: ${JSON.stringify(step.args)}
+${correctionPrompt}
 
 MANDATORY RULES:
 1. CHECK PERMISSIONS FIRST: Verify you have Accessibility/ScreenRecording permissions.

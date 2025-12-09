@@ -3524,10 +3524,10 @@ class GrishaVisionService extends events.EventEmitter {
   /**
    * Verify a step was executed
    */
-  async verifyStep(stepAction, stepDetails, globalContext) {
+  async verifyStep(stepAction, stepDetails, globalContext, targetApp) {
     console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
     if (this.mode === "on-demand") {
-      return this.verifyStepOnDemand(stepAction, stepDetails, globalContext);
+      return this.verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp);
     }
     return new Promise(async (resolve) => {
       await this.notifyActionLive(stepAction, stepDetails || "");
@@ -3545,7 +3545,7 @@ class GrishaVisionService extends events.EventEmitter {
         cleanup();
         console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode). Falling back to On-Demand verification...");
         try {
-          const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails, globalContext);
+          const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp);
           resolve(fallbackResult);
         } catch (e) {
           resolve({
@@ -3563,11 +3563,14 @@ class GrishaVisionService extends events.EventEmitter {
    * Check if an object/window is visible on screen
    * Returns visibility check result
    */
-  async checkObjectVisibility(stepAction, base64Image) {
+  async checkObjectVisibility(stepAction, base64Image, explicitTarget) {
     try {
       const router2 = getProviderRouter();
-      const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
-      const objectName = objectMatch ? objectMatch[1].trim() : this.selectedSourceName || stepAction;
+      let objectName = explicitTarget;
+      if (!objectName) {
+        const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
+        objectName = objectMatch ? objectMatch[1].trim() : this.selectedSourceName || stepAction;
+      }
       const visibilityPrompt = `
 АНАЛІЗ ВИДИМОСТІ:
 Завдання: "${stepAction}"
@@ -3647,14 +3650,14 @@ class GrishaVisionService extends events.EventEmitter {
    * Private: On-Demand Verification Logic
    * NOW WITH VISIBILITY CHECK FIRST AND GLOBAL CONTEXT
    */
-  async verifyStepOnDemand(stepAction, stepDetails, globalContext) {
+  async verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp) {
     try {
       const base64Image = await this.captureFrame();
       if (!base64Image) {
         return this.errorResult("Не вдалося захопити екран");
       }
       console.log("[GRISHA VISION] 👁️ Checking object visibility first...");
-      const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image);
+      const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image, targetApp);
       if (!visibilityCheck.visible) {
         console.warn(`[GRISHA VISION] ⚠️ Object not visible: ${visibilityCheck.message}`);
         const result2 = {
@@ -3675,13 +3678,15 @@ class GrishaVisionService extends events.EventEmitter {
 Перевір, чи крок наближає нас до цієї мети.
 
 ` : "";
+      const targetPrompt = targetApp ? `ЦIЛЬОВА ПРОГРАМА: "${targetApp}" (Вікно має бути активним)
+` : "";
       const response = await router2.analyzeVision({
         image: base64Image,
         mimeType: "image/jpeg",
         taskContext: stepAction,
         prompt: `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
 
-${contextPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ""}
+${contextPrompt}${targetPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ""}
 
 ПЕРЕВІРКА:
 1. Чи виконано цю дію успішно?
@@ -4036,15 +4041,57 @@ class TetyanaExecutor extends events.EventEmitter {
   async verifyStepWithVision(step, stepNum) {
     const vision = this.visionService || getGrishaVisionService();
     try {
+      const humanReadable = this.getHumanReadableAction(step, this.lastActiveApp);
+      const targetApp = this.lastActiveApp || void 0;
       const result = await vision.verifyStep(
-        step.action,
+        humanReadable,
         `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`,
-        this.currentPlan ? this.currentPlan.goal : void 0
+        this.currentPlan ? this.currentPlan.goal : void 0,
+        targetApp
       );
       return result;
     } catch (e) {
       console.warn("[TETYANA] Vision verification failed:", e);
       return null;
+    }
+  }
+  /**
+   * Helper: Convert PlanStep to Human Readable String
+   */
+  getHumanReadableAction(step, targetApp) {
+    try {
+      const args = step.args || {};
+      const app = targetApp || args.appName || args.app || "Application";
+      switch (step.action.toLowerCase()) {
+        case "input":
+        case "type":
+          if (args.arg1 === "=")
+            return `Press '=' in ${app}`;
+          if (args.arg1 && args.arg1.length === 1 && /[^a-zA-Z0-9]/.test(args.arg1)) {
+            return `Type Symbol '${args.arg1}' in ${app}`;
+          }
+          if (args.text || args.arg1) {
+            return `Type '${args.text || args.arg1}' in ${app}`;
+          }
+          return `Type in ${app}`;
+        case "launch":
+        case "open":
+        case "open_application":
+          return `Open ${app}`;
+        case "click":
+          if (args.element)
+            return `Click ${args.element} in ${app}`;
+          if (args.text)
+            return `Click text '${args.text}' in ${app}`;
+          return `Click in ${app}`;
+        case "press":
+        case "hotkey":
+          return `Press Hotkey ${args.keys || args.key || args.arg1} in ${app}`;
+        default:
+          return `${step.action} in ${app}`;
+      }
+    } catch (e) {
+      return step.action;
     }
   }
   /**
