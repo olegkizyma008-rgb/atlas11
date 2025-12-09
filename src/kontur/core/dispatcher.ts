@@ -43,6 +43,7 @@ export class Core extends EventEmitter {
     ['kontur://organ/atlas', SecurityScope.ROOT],
     ['kontur://cortex/core', SecurityScope.ROOT],
     ['kontur://atlas/ATLAS', SecurityScope.SYSTEM],
+    ['kontur://atlas/voice', SecurityScope.SYSTEM],
     // Integration & System Internal
     ['system/integration', SecurityScope.USER],
     ['kontur://integration', SecurityScope.SYSTEM],

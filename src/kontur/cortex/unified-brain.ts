@@ -91,13 +91,14 @@ export class UnifiedBrain extends CortexBrain {
       // 1. Try KONTUR Cortex first
       const cortexResponse = await this.thinkWithCortex(request);
 
-      // 2. If Cortex succeeds, return enriched with Atlas insights
+      // 2. If Cortex succeeds, return response
+      // Only enrich with Atlas context for planning mode (internal reasoning)
+      // Chat mode should return clean response directly to avoid verbose output in UI
       if (cortexResponse.text) {
-        const enrichedResponse = await this.enrichWithAtlasContext(
-          cortexResponse,
-          request
-        );
-        return enrichedResponse;
+        if (request.mode === 'planning') {
+          return await this.enrichWithAtlasContext(cortexResponse, request);
+        }
+        return cortexResponse;
       }
 
       // 3. Fallback to Atlas Brain
