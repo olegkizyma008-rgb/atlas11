@@ -490,44 +490,89 @@ async function configureAppSettings(): Promise<void> {
         showHeader('App Settings');
         const config = configManager.getAll();
 
+        const visionAutoStart = config['VISION_AUTO_START'] || 'true';
+        const language = config['APP_LANGUAGE'] || 'uk';
+        const theme = config['APP_THEME'] || 'dark';
+
         const choices = [
+            { name: `Language         ${language === 'uk' ? chalk.cyan('Українська') : chalk.gray('English')}`, value: 'APP_LANGUAGE' },
+            { name: `Theme            ${theme === 'dark' ? chalk.magenta('Dark') : chalk.yellow('Light')}`, value: 'APP_THEME' },
+            { name: `Vision autostart ${visionAutoStart === 'true' ? chalk.green('on') : chalk.gray('off')}`, value: 'VISION_AUTO_START' },
+            { name: '─'.repeat(35), value: '_sep1', disabled: true },
             { name: `NODE_ENV         ${fmtVal(config['NODE_ENV'], 'development')}`, value: 'NODE_ENV' },
             { name: `LOG_LEVEL        ${fmtVal(config['LOG_LEVEL'], 'info')}`, value: 'LOG_LEVEL' },
             { name: `DEBUG            ${fmtVal(config['DEBUG'], 'false')}`, value: 'DEBUG' },
-            { name: '─'.repeat(35), value: '_sep', disabled: true },
+            { name: '─'.repeat(35), value: '_sep2', disabled: true },
             { name: 'Back', value: 'back' }
         ];
 
         const selected = await select('', choices);
         if (selected === 'back') return;
 
-        if (selected === 'NODE_ENV') {
-            const envChoices = [
-                { name: 'development', value: 'development' },
-                { name: 'production', value: 'production' },
-                { name: 'test', value: 'test' },
-                { name: 'Back', value: 'back' }
-            ];
-            const env = await select('Environment', envChoices);
-            if (env !== 'back') configManager.set('NODE_ENV', env);
-        } else if (selected === 'LOG_LEVEL') {
-            const logChoices = [
-                { name: 'debug', value: 'debug' },
-                { name: 'info', value: 'info' },
-                { name: 'warn', value: 'warn' },
-                { name: 'error', value: 'error' },
-                { name: 'Back', value: 'back' }
-            ];
-            const level = await select('Log Level', logChoices);
-            if (level !== 'back') configManager.set('LOG_LEVEL', level);
-        } else if (selected === 'DEBUG') {
-            const debugChoices = [
-                { name: 'true', value: 'true' },
-                { name: 'false', value: 'false' },
-                { name: 'Back', value: 'back' }
-            ];
-            const debug = await select('Debug Mode', debugChoices);
-            if (debug !== 'back') configManager.set('DEBUG', debug);
+        switch (selected) {
+            case 'APP_LANGUAGE': {
+                const langChoices = [
+                    { name: `Українська       ${chalk.gray('Системні повідомлення українською')}`, value: 'uk' },
+                    { name: `English          ${chalk.gray('System messages in English')}`, value: 'en' },
+                    { name: 'Back', value: 'back' }
+                ];
+                const lang = await select('Language', langChoices);
+                if (lang !== 'back') configManager.set('APP_LANGUAGE', lang);
+                break;
+            }
+            case 'APP_THEME': {
+                const themeChoices = [
+                    { name: `Dark             ${chalk.gray('Темна тема (рекомендовано)')}`, value: 'dark' },
+                    { name: `Light            ${chalk.gray('Світла тема')}`, value: 'light' },
+                    { name: 'Back', value: 'back' }
+                ];
+                const t = await select('Theme', themeChoices);
+                if (t !== 'back') configManager.set('APP_THEME', t);
+                break;
+            }
+            case 'VISION_AUTO_START': {
+                const autoChoices = [
+                    { name: `On               ${chalk.gray('Grisha активується автоматично')}`, value: 'true' },
+                    { name: `Off              ${chalk.gray('Grisha потрібно запускати вручну')}`, value: 'false' },
+                    { name: 'Back', value: 'back' }
+                ];
+                const auto = await select('Vision Auto Start', autoChoices);
+                if (auto !== 'back') configManager.set('VISION_AUTO_START', auto);
+                break;
+            }
+            case 'NODE_ENV': {
+                const envChoices = [
+                    { name: 'development', value: 'development' },
+                    { name: 'production', value: 'production' },
+                    { name: 'test', value: 'test' },
+                    { name: 'Back', value: 'back' }
+                ];
+                const env = await select('Environment', envChoices);
+                if (env !== 'back') configManager.set('NODE_ENV', env);
+                break;
+            }
+            case 'LOG_LEVEL': {
+                const logChoices = [
+                    { name: 'debug', value: 'debug' },
+                    { name: 'info', value: 'info' },
+                    { name: 'warn', value: 'warn' },
+                    { name: 'error', value: 'error' },
+                    { name: 'Back', value: 'back' }
+                ];
+                const level = await select('Log Level', logChoices);
+                if (level !== 'back') configManager.set('LOG_LEVEL', level);
+                break;
+            }
+            case 'DEBUG': {
+                const debugChoices = [
+                    { name: 'true', value: 'true' },
+                    { name: 'false', value: 'false' },
+                    { name: 'Back', value: 'back' }
+                ];
+                const debug = await select('Debug Mode', debugChoices);
+                if (debug !== 'back') configManager.set('DEBUG', debug);
+                break;
+            }
         }
     }
 }
@@ -537,13 +582,17 @@ async function configureAppSettings(): Promise<void> {
  */
 async function runHealthCheck(): Promise<void> {
     showHeader('System Health Check');
+    console.log(chalk.gray('  Checking all services...\n'));
 
     const config = configManager.getAll();
+    let okCount = 0;
+    let warnCount = 0;
+    let errorCount = 0;
 
+    // Check standard services
     for (const service of SERVICES) {
         const prefix = service.key.toUpperCase();
         const provider = config[`${prefix}_PROVIDER`] || 'not set';
-        const model = config[`${prefix}_MODEL`] || 'not set';
 
         // Determine which API key to use
         let apiKey = config[`${prefix}_API_KEY`];
@@ -552,11 +601,16 @@ async function runHealthCheck(): Promise<void> {
         }
 
         let status: string;
+        let statusSymbol: string;
 
         if (!provider || provider === 'not set') {
-            status = chalk.gray('-- Not configured');
+            status = chalk.gray('Not configured');
+            statusSymbol = chalk.gray('○');
+            warnCount++;
         } else if (!apiKey) {
             status = chalk.yellow('No API key');
+            statusSymbol = chalk.yellow('△');
+            warnCount++;
         } else if (provider === 'gemini') {
             const spinner = ora({ text: `Testing ${service.label}...`, prefixText: '  ' }).start();
             try {
@@ -564,14 +618,18 @@ async function runHealthCheck(): Promise<void> {
                 const client = new GoogleGenAI({ apiKey });
                 await client.models.list();
                 spinner.stop();
-                status = chalk.green('OK');
+                status = chalk.green('Connected');
+                statusSymbol = chalk.green('●');
+                okCount++;
             } catch (e: any) {
                 spinner.stop();
                 if (e.message?.includes('expired')) {
                     status = chalk.red('Key Expired');
                 } else {
-                    status = chalk.red(`Error: ${e.message?.substring(0, 30)}`);
+                    status = chalk.red(`Error: ${e.message?.substring(0, 25)}`);
                 }
+                statusSymbol = chalk.red('✕');
+                errorCount++;
             }
         } else if (provider === 'copilot') {
             const spinner = ora({ text: `Testing ${service.label}...`, prefixText: '  ' }).start();
@@ -580,18 +638,55 @@ async function runHealthCheck(): Promise<void> {
                 const cp = new VSCodeCopilotProvider(apiKey);
                 const models = await cp.fetchModels();
                 spinner.stop();
-                status = models.length > 0 ? chalk.green('OK') : chalk.yellow('No models');
+                if (models.length > 0) {
+                    status = chalk.green('Connected');
+                    statusSymbol = chalk.green('●');
+                    okCount++;
+                } else {
+                    status = chalk.yellow('No models');
+                    statusSymbol = chalk.yellow('△');
+                    warnCount++;
+                }
             } catch (e: any) {
                 spinner.stop();
-                status = chalk.red(`Error: ${e.message?.substring(0, 30)}`);
+                status = chalk.red(`Error: ${e.message?.substring(0, 25)}`);
+                statusSymbol = chalk.red('✕');
+                errorCount++;
             }
         } else {
             status = chalk.blue('Configured');
+            statusSymbol = chalk.blue('●');
+            okCount++;
         }
 
-        console.log(`  ${service.label.padEnd(14)} ${chalk.gray(provider.padEnd(10))} ${status}`);
+        console.log(`  ${statusSymbol} ${service.label.padEnd(12)} ${chalk.gray(provider.padEnd(10))} ${status}`);
+    }
+
+    // Vision mode info
+    console.log(chalk.gray('\n  ─── Vision Details ───'));
+    const visionMode = config['VISION_MODE'] || 'live';
+    const fallbackMode = config['VISION_FALLBACK_MODE'];
+    console.log(`  Mode: ${visionMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand')}`);
+    if (fallbackMode) {
+        console.log(`  Fallback: ${fallbackMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand')}`);
+    } else {
+        console.log(`  Fallback: ${chalk.gray('none')}`);
+    }
+
+    // Summary
+    console.log(chalk.gray('\n  ─── Summary ───'));
+    console.log(`  ${chalk.green('●')} OK: ${okCount}  ${chalk.yellow('△')} Warn: ${warnCount}  ${chalk.red('✕')} Error: ${errorCount}`);
+
+    // Overall status
+    if (errorCount > 0) {
+        console.log(chalk.red('\n  ⚠ System has errors. Check API keys.'));
+    } else if (warnCount > 0) {
+        console.log(chalk.yellow('\n  △ System partially configured.'));
+    } else {
+        console.log(chalk.green('\n  ✓ System ready!'));
     }
 
     console.log('');
     await input('Press Enter to return...');
 }
+
