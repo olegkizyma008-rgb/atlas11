@@ -93,7 +93,9 @@ export class TetyanaExecutor extends EventEmitter {
                 vision.pauseCapture();
 
                 // 🎯 Auto-select window if step targets an app
-                const appName = step.args?.appName || step.args?.app;
+                // Check all possible fields where an app name might be
+                const appName = step.args?.appName || step.args?.app || step.args?.name || ((step.action === 'open_application' || step.action === 'open') ? step.args?.arg1 : undefined);
+
                 if (appName) {
                     console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
                     await vision.autoSelectSource(appName);

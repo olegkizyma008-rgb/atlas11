@@ -3292,6 +3292,7 @@ class GrishaVisionService extends events.EventEmitter {
     this.selectedSourceId = sourceId;
     this.selectedSourceName = sourceName;
     console.log(`[GRISHA VISION] 🎯 Selected source: ${sourceName} (${sourceId})`);
+    this.emit("source_changed", { id: sourceId, name: sourceName });
   }
   /**
    * Auto-select source by app name
@@ -3626,9 +3627,6 @@ class TetyanaExecutor extends events.EventEmitter {
       this.stopVisionObservation();
       if (this.active) {
         this.emitStatus("completed", `План успішно завершено.`);
-        if (plan.user_response_ua) {
-          this.speak(plan.user_response_ua);
-        }
       }
     } catch (error) {
       console.error(`[TETYANA] 💥 Execution Failed: ${error.message}`);
@@ -5321,6 +5319,9 @@ class DeepIntegrationSystem {
     });
     this.grishaVision.on("audio", (audioChunk) => {
       synapse.emit("GRISHA", "AUDIO_CHUNK", { chunk: audioChunk });
+    });
+    this.grishaVision.on("source_changed", (data) => {
+      synapse.emit("GRISHA", "SOURCE_CHANGED", data);
     });
     global.grishaVision = this.grishaVision;
     this.core.register("kontur://organ/vision", {
