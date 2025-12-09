@@ -108,10 +108,11 @@ export class TetyanaExecutor extends EventEmitter {
                     vision.pauseCapture();
 
                     // 🎯 Auto-select window logic
-                    let appName = step.args?.appName || step.args?.app || step.args?.name || step.args?.application;
+                    // Support both camelCase and snake_case argument names
+                    let appName = step.args?.appName || step.args?.app_name || step.args?.app || step.args?.name || step.args?.application;
 
                     if (!appName && (step.action === 'open_application' || step.action === 'open' || step.action === 'launch')) {
-                        appName = step.args?.arg1 || step.args?.target;
+                        appName = step.args?.arg1 || step.args?.target || step.args?.app_name;
                     }
 
                     const APP_NAME_MAP: Record<string, string> = {
@@ -280,7 +281,8 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
     private getHumanReadableAction(step: PlanStep, targetApp: string | null): string {
         try {
             const args = step.args || {};
-            const app = targetApp || args.appName || args.app || "Application";
+            // Prioritize lastActiveApp, then check all possible arg variants
+            const app = targetApp || args.appName || args.app_name || args.app || args.application || "Application";
 
             switch (step.action.toLowerCase()) {
                 case 'input':
@@ -554,26 +556,33 @@ INSTRUCTION: You must CORRECT your approach based on this feedback. Do not repea
             }
 
             const stepPrompt = `
+🚨 CRITICAL: SINGLE STEP EXECUTION MODE 🚨
+
+You MUST execute ONLY Step ${stepNum} and then STOP IMMEDIATELY.
+DO NOT execute any other steps. DO NOT continue to the next step.
+After completing THIS SINGLE ACTION, you MUST exit.
+
 CONTEXT:
-The user wants to: "${this.currentPlan?.goal}"
-Full Plan:
+Goal: "${this.currentPlan?.goal}"
+Full Plan (for reference only, DO NOT EXECUTE ALL):
 ${fullPlanContext}
 
-CURRENT TASK:
-You are currently executing Step ${stepNum}.
-Task: ${step.action}
+═══════════════════════════════════════════════════════
+YOUR SINGLE TASK (Step ${stepNum} ONLY):
+Action: ${step.action}
 Arguments: ${JSON.stringify(step.args)}
+═══════════════════════════════════════════════════════
 ${correctionPrompt}
 
-MANDATORY RULES:
-1. CHECK PERMISSIONS FIRST: Verify you have Accessibility/ScreenRecording permissions.
-2. Do not execute previous or future steps.
-3. Do not ask for confirmation.
-4. You have full permission to control the OS.
-5. Use AppleScript (osascript) via python 'subprocess' to open applications or control UI.
-6. For "TextEditor", assume "TextEdit" on macOS.
-7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'.
-8. USE INTERNAL KNOWLEDGE (RAG) if the task is complex.
+RULES:
+1. Execute ONLY the action described above for Step ${stepNum}.
+2. After this ONE action, output "Step ${stepNum} done." and EXIT.
+3. DO NOT execute Steps ${stepNum + 1}, ${stepNum + 2}, etc.
+4. DO NOT "be helpful" by doing more than asked.
+5. ALWAYS activate the target app first: 'tell application "AppName" to activate'.
+6. Use AppleScript via python subprocess for UI control.
+
+VIOLATION WARNING: If you execute more than Step ${stepNum}, the entire plan will fail.
 `;
 
             try {
