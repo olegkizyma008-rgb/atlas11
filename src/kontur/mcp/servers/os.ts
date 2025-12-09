@@ -7,6 +7,8 @@ import {
 import { z } from "zod";
 import { exec } from "child_process";
 import { promisify } from "util";
+import { existsSync } from "fs";
+import { join, dirname } from "path";
 
 const execAsync = promisify(exec);
 
@@ -223,10 +225,42 @@ e = CG.CGEventCreateMouseEvent(None, CG.kCGEventLeftMouseUp, (${x}, ${y}), 0)
 CG.CGEventPost(CG.kCGHIDEventTap, e)
 `;
 
-// Helper for Native Bridge
-const HELPER_PATH = `${process.cwd()}/bin/atlas-ui-helper`;
+// Helper for Native Bridge - Dynamic Path Resolution
+
+/**
+ * Resolve atlas-ui-helper path for dev & production environments
+ * Priority: 1) Electron resources 2) process.cwd/bin 3) __dirname relative
+ */
+function resolveHelperPath(): string {
+    const candidates = [
+        // Production Electron: resources directory
+        join(process.resourcesPath || '', 'bin', 'atlas-ui-helper'),
+        // Dev: relative to project root
+        join(process.cwd(), 'bin', 'atlas-ui-helper'),
+        // Fallback: relative to this script
+        join(dirname(__dirname), '..', '..', '..', 'bin', 'atlas-ui-helper'),
+    ];
+
+    for (const candidate of candidates) {
+        if (existsSync(candidate)) {
+            console.log(`[OS-MCP] Helper found at: ${candidate}`);
+            return candidate;
+        }
+    }
+
+    console.warn('[OS-MCP] atlas-ui-helper NOT found. Native accessibility will use AppleScript fallback.');
+    return ''; // Return empty - runHelper will use fallback
+}
+
+const HELPER_PATH = resolveHelperPath();
+let helperAvailable = HELPER_PATH !== '';
 
 async function runHelper(args: string[]): Promise<any> {
+    // Fallback to AppleScript if no native helper
+    if (!helperAvailable) {
+        return runAppleScriptFallback(args);
+    }
+
     try {
         const { stdout } = await execAsync(`"${HELPER_PATH}" ${args.join(' ')}`);
         try {
@@ -235,8 +269,49 @@ async function runHelper(args: string[]): Promise<any> {
             return stdout.trim();
         }
     } catch (e: any) {
-        throw new Error(`Helper failed: ${e.message}`);
+        console.warn(`[OS-MCP] Helper failed, trying AppleScript fallback: ${e.message}`);
+        return runAppleScriptFallback(args);
     }
+}
+
+/**
+ * AppleScript fallback for basic accessibility operations
+ * Limited compared to native helper but works without compilation
+ */
+async function runAppleScriptFallback(args: string[]): Promise<any> {
+    const [cmd, ...rest] = args;
+
+    if (cmd === 'dump-tree') {
+        // Basic window list via AppleScript
+        const pid = rest[0];
+        const script = `
+            tell application "System Events"
+                set appList to every process whose unix id is ${pid}
+                if (count of appList) > 0 then
+                    set app1 to item 1 of appList
+                    set winList to every window of app1
+                    set result to {}
+                    repeat with w in winList
+                        set end of result to {title: name of w, role: "AXWindow"}
+                    end repeat
+                    return result
+                end if
+            end tell
+        `;
+        try {
+            const { stdout } = await execAsync(`osascript -e '${script.replace(/'/g, "'\"'\"'")}'`);
+            return { windows: stdout.trim(), fallback: true };
+        } catch {
+            return { error: "AppleScript fallback failed", fallback: true };
+        }
+    }
+
+    if (cmd === 'find-action') {
+        // For find-action we return limited info
+        return { message: "Native helper not available. Use AppleScript directly for UI actions.", fallback: true };
+    }
+
+    return { error: `Unknown command: ${cmd}`, fallback: true };
 }
 
 // Handle Tool Calls
