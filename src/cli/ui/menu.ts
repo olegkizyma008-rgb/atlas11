@@ -1371,8 +1371,8 @@ async function runPythonAgent(): Promise<void> {
 
     // We assume mac_assistant is in user home
     const agentPath = path.join(os.homedir(), 'mac_assistant');
-    // Use the specific python environment where dependencies are installed
-    const pythonPath = '/Users/dev/.pyenv/versions/3.11.13/bin/python3';
+    // Use the venv where dependencies are installed
+    const pythonPath = path.join(agentPath, 'venv', 'bin', 'python3');
 
     try {
         await new Promise<void>((resolve, reject) => {
