@@ -512,8 +512,8 @@ export class DeepIntegrationSystem {
     // Tetyana gets Core to drive execution
     this.tetyana = new TetyanaCapsule(this.forge, this.voiceCapsule, this.brain, this.core);
     this.grisha = new GrishaCapsule(this.brain, this.core);
-    this.reasoning = createReasoningCapsule(deepThinkingKey); // Initialize with key
-    console.log('[DEEP-INTEGRATION] 🧠 Reasoning Capsule (Gemini 3) created');
+    this.reasoning = createReasoningCapsule(); // Uses provider config
+    console.log('[DEEP-INTEGRATION] 🧠 Reasoning Capsule initialized (uses configured provider)');
 
     // Register with Unified Brain
     this.unifiedBrain.setAtlasBrain(this.brain);

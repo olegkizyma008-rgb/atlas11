@@ -1,70 +1,55 @@
 
-import { GoogleGenerativeAI } from '@google/generative-ai'; // Fallback / Types
-import { GoogleGenAI } from '@google/genai'; // New SDK for Gemini 3
 import { createPacket, KPP_Packet, PacketIntent } from '../../kontur/protocol/nexus';
 import { Core } from '../../kontur/core/dispatcher';
+import { getProviderRouter } from '../../kontur/providers/router';
+import { getProviderConfig } from '../../kontur/providers/config';
 
 /**
  * ReasoningCapsule - "The Deep Thinker"
- * Wraps Gemini 3 Pro for advanced reasoning tasks using `thinking_level`.
+ * Uses configured provider (Gemini 3, Copilot, etc.) for advanced reasoning tasks.
+ * Reads configuration from REASONING_PROVIDER / REASONING_MODEL env vars.
  */
 export class ReasoningCapsule {
-    private client: GoogleGenAI;
     private core?: Core;
     private lastThoughtSignature?: string;
 
-    constructor(apiKey: string) {
-        // Init new GenAI client (v1alpha needed for some features, but using stable if available)
-        // Note: SDK v0.1.0+ of @google/genai maps to new API
-        this.client = new GoogleGenAI({ apiKey });
-        console.log("🧠 REASONING: ReasoningCapsule (Gemini 3) initialized.");
+    constructor() {
+        const config = getProviderConfig('reasoning');
+        console.log(`🧠 REASONING: ReasoningCapsule initialized with ${config.provider} / ${config.model}`);
     }
 
     public register(core: Core) {
         this.core = core;
-        // Listen for "think" commands
-        // In a real system we'd check route.to === 'kontur://organ/reasoning'
     }
 
     /**
      * Think deeply about a problem.
-     * @param prompt The complex query or code snippet
-     * @param level 'low' | 'high' (default 'high')
+     * Uses the configured reasoning provider (Copilot, Gemini 3, etc.)
      */
     public async think(prompt: string, level: 'low' | 'high' = 'high'): Promise<string> {
         console.log(`🧠 REASONING: Thinking about "${prompt.substring(0, 50)}..." (Level: ${level})`);
 
         try {
-            // Using the new SDK structure based on docs
-            const model = "gemini-3-pro-preview";
+            const router = getProviderRouter();
+            const config = getProviderConfig('reasoning');
 
-            const config: any = {
-                thinkingConfig: {
-                    thinkingLevel: level,
-                }
-            };
-
-            const result = await this.client.models.generateContent({
-                model: model,
-                contents: [{
-                    parts: [{ text: prompt }]
-                }],
-                config: config
+            // Use provider router to send request
+            const response = await router.generateLLM('reasoning', {
+                prompt: prompt,
+                systemPrompt: `You are a deep reasoning engine. Think step-by-step and provide thorough analysis.
+Level: ${level === 'high' ? 'Deep, multi-step reasoning' : 'Quick, efficient analysis'}`,
+                model: config.model,
+                temperature: level === 'high' ? 0.3 : 0.5,
+                maxTokens: 4096
             });
 
-            // Capture signature if present (for future turns)
-            // Note: The new SDK response structure might differ, we assume standard response
-            // console.log("Response parts:", result.response.candidates?.[0]?.content?.parts);
-
-            // Extract text
-            const text = result.text || "";
+            const text = response.text || "";
             console.log(`🧠 REASONING: Thought complete. Length: ${text.length}`);
 
             return text;
 
         } catch (error: any) {
             console.error("🧠 REASONING: Thinking failed", error);
-            // Fallback?
             return `Error thinking: ${error.message}`;
         }
     }
@@ -91,7 +76,7 @@ export class ReasoningCapsule {
     }
 }
 
-// Factory for initialization
-export function createReasoningCapsule(apiKey: string): ReasoningCapsule {
-    return new ReasoningCapsule(apiKey);
+// Factory for initialization (no longer needs API key - uses config)
+export function createReasoningCapsule(): ReasoningCapsule {
+    return new ReasoningCapsule();
 }
