@@ -49,17 +49,37 @@ export class GrishaCapsule implements GrishaAPI {
         const { action, args, stepNum } = packet.payload;
 
         // Visual Verification for UI Actions
-        if (['mouse_click', 'ui_action', 'keyboard_type'].includes(action)) {
+        if (['mouse_click', 'ui_action', 'keyboard_type', 'open_application'].includes(action)) {
             console.log(`[GRISHA] 👁️ Visual Verification triggered for ${action}`);
 
             try {
-                // 1. Get Screenshot
-                const screenshot = await this.executeTool('kontur://organ/mcp/os', 'get_screenshot', { action: 'screen' });
+                let sourceId: string | undefined = undefined;
 
-                if (screenshot.content && screenshot.content[1] && screenshot.content[1].type === 'image') {
-                    const base64 = screenshot.content[1].data;
+                // 1. Context Awareness: Switch to specific window if app is specified
+                if (args.appName) {
+                    try {
+                        const sourcesRes = await this.executeTool('kontur://organ/vision', 'get_sources', {});
+                        if (sourcesRes.sources) {
+                            const match = sourcesRes.sources.find((s: any) =>
+                                s.name.toLowerCase().includes(args.appName.toLowerCase())
+                            );
+                            if (match) {
+                                sourceId = match.id;
+                                console.log(`[GRISHA] 🎯 Switching vision focus to window: ${match.name}`);
+                            }
+                        }
+                    } catch (err) {
+                        console.warn('[GRISHA] Failed to resolve sources:', err);
+                    }
+                }
 
-                    // 2. Analyze
+                // 2. Get Screenshot from Vision Organ (Electron-native)
+                const visionRes = await this.executeTool('kontur://organ/vision', 'capture', { sourceId });
+
+                if (visionRes && visionRes.image) {
+                    const base64 = visionRes.image;
+
+                    // 3. Analyze
                     const visionReport = await this.vision.analyzeScreenshot(base64);
                     this.lastVisualAnalysis = visionReport; // Store for audit
 

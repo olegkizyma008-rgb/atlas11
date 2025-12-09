@@ -199,6 +199,52 @@ export class DeepIntegrationSystem {
     // Expose services globally for debugging
     (global as any).grishaVision = this.grishaVision;
 
+    // Register Vision Organ for KPP (Grisha's Eyes)
+    this.core.register('kontur://organ/vision', {
+      send: async (packet: any) => {
+        const { op_code } = packet.instruction;
+        const args = packet.payload || {};
+
+        try {
+          let result: any = {};
+
+          if (op_code === 'get_sources') {
+            result = { sources: await this.grishaVision.getSources() };
+          } else if (op_code === 'capture') {
+            // Support passing sourceId in payload or args
+            const sourceId = args.sourceId || args.id;
+            const image = await this.grishaVision.captureFrame(sourceId);
+            result = { image };
+          } else if (op_code === 'select_source') {
+            this.grishaVision.selectSource(args.sourceId, args.sourceName || 'Unknown');
+            result = { success: true };
+          }
+
+          if (packet.route.reply_to) {
+            const response = createPacket(
+              'kontur://organ/vision',
+              packet.route.reply_to,
+              PacketIntent.RESPONSE,
+              result
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
+          }
+        } catch (e: any) {
+          if (packet.route.reply_to) {
+            const response = createPacket(
+              'kontur://organ/vision',
+              packet.route.reply_to,
+              PacketIntent.ERROR,
+              { error: e.message }
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id;
+            this.core.ingest(response);
+          }
+        }
+      }
+    });
+
     console.log(`[DEEP-INTEGRATION] ✅ Vision System ready [${visionConfig.mode}]`);
   }
 

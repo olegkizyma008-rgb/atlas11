@@ -296,25 +296,25 @@ export class GrishaVisionService extends EventEmitter {
     /**
      * Capture a single frame from selected source or screen
      */
-    async captureFrame(): Promise<string | null> {
+    async captureFrame(overrideSourceId?: string): Promise<string | null> {
         try {
-            let sources;
+            const targetId = overrideSourceId || this.selectedSourceId;
 
-            if (this.selectedSourceId) {
-                // Capture specific window
-                sources = await desktopCapturer.getSources({
+            if (targetId) {
+                // Capture specific window/screen
+                const sources = await desktopCapturer.getSources({
                     types: ['window', 'screen'],
-                    thumbnailSize: { width: 1280, height: 720 } // Higher res for on-demand
+                    thumbnailSize: { width: 1280, height: 720 }
                 });
-                const source = sources.find(s => s.id === this.selectedSourceId);
+                const source = sources.find(s => s.id === targetId);
                 if (source) {
                     const jpegBuffer = source.thumbnail.toJPEG(85);
                     return jpegBuffer.toString('base64');
                 }
             }
 
-            // Fallback to full screen
-            sources = await desktopCapturer.getSources({
+            // Fallback to full screen (first screen)
+            const sources = await desktopCapturer.getSources({
                 types: ['screen'],
                 thumbnailSize: { width: 1280, height: 720 }
             });
