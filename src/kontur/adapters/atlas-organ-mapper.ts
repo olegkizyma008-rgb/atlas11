@@ -17,7 +17,7 @@ import { AtlasAPI } from '../../modules/atlas/contract';
 import { TetyanaAPI } from '../../modules/tetyana/contract';
 import { GrishaAPI } from '../../modules/grisha/contract';
 import { MemoryAPI } from '../../modules/memory/contract';
-import { VoiceAPI } from '../../modules/voice/contract';
+import { VoiceAPI } from '../../kontur/voice/contract';
 import { ForgeAPI } from '../../modules/forge/contract';
 import { BrainAPI } from '../../modules/brain/contract';
 

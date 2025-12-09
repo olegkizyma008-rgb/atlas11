@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { VoiceAPI } from '../../kontur/voice/contract';
 
 export const TetyanaContract = {
     // Methods

@@ -30,6 +30,6 @@ export const VoiceContract = {
 };
 
 export type VoiceAPI = {
-    speak: (args: z.infer<typeof VoiceContract.speak.args>) => Promise<void>;
-    listen: (args: z.infer<typeof VoiceContract.listen.args>) => Promise<{ text?: string; error?: string }>;
+    speak: (args: { text: string; voice?: string; speed?: number }) => Promise<any>;
+    listen: (args: { timeout?: number }) => Promise<{ text?: string; error?: string }>;
 };

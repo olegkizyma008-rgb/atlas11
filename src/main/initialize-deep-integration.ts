@@ -26,7 +26,7 @@ import { createReasoningCapsule, ReasoningCapsule } from '../modules/reasoning';
 import { TetyanaExecutor } from '../modules/tetyana/executor';
 import { MemoryCapsule } from '../modules/memory/index';
 import { ForgeGhost } from '../modules/forge/ghost';
-import { VoiceGhost } from '../modules/voice/ghost';
+// VoiceGhost removed - using real VoiceCapsule
 import { BrainCapsule } from '../modules/brain/index';
 
 // Import Real Implementations for IO
@@ -55,7 +55,7 @@ export class DeepIntegrationSystem {
 
   public memory: MemoryCapsule | null = null;
   public forge: ForgeGhost | null = null;
-  public voiceGhost: VoiceGhost | null = null;
+  // public voiceGhost: VoiceGhost | null = null; // Removed
   public brain: BrainCapsule | null = null;
 
   // Real IO Capsules
@@ -424,13 +424,16 @@ export class DeepIntegrationSystem {
     // Initialize Dependencies (Real Memory + Real Brain)
     this.memory = new MemoryCapsule();
     this.forge = new ForgeGhost(); // Internal logic
-    this.voiceGhost = new VoiceGhost(); // Internal logic
+    // this.voiceGhost = new VoiceGhost(); // Removed
     this.brain = new BrainCapsule(deepThinkingKey);
+
+    // Ensure VoiceCapsule is ready for Tetyana
+    if (!this.voiceCapsule) this.voiceCapsule = new VoiceCapsule();
 
     // Initialize Capsules
     this.atlas = new AtlasCapsule(this.memory, this.brain);
     // Tetyana gets Core to drive execution
-    this.tetyana = new TetyanaCapsule(this.forge, this.voiceGhost, this.brain, this.core);
+    this.tetyana = new TetyanaCapsule(this.forge, this.voiceCapsule, this.brain, this.core);
     this.grisha = new GrishaCapsule(this.brain, this.core);
     this.reasoning = createReasoningCapsule(deepThinkingKey); // Initialize with key
     console.log('[DEEP-INTEGRATION] 🧠 Reasoning Capsule (Gemini 3) created');
@@ -450,7 +453,7 @@ export class DeepIntegrationSystem {
   private async spawnOrgans(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Spawning KONTUR organs...');
 
-    if (!this.memory || !this.forge || !this.voiceGhost || !this.brain) {
+    if (!this.memory || !this.forge || !this.brain) {
       throw new Error('Atlas Capsules not initialized');
     }
 

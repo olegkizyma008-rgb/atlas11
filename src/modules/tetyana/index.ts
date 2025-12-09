@@ -1,6 +1,6 @@
 import { TetyanaAPI } from './contract';
 import { ForgeAPI } from '../forge/contract';
-import { VoiceAPI } from '../voice/contract';
+import { VoiceAPI } from '../../kontur/voice/contract';
 import { BrainAPI } from '../brain/contract';
 import { TetyanaExecutor } from './executor';
 import { Core } from '../../kontur/core/dispatcher';
