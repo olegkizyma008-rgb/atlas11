@@ -37,6 +37,6 @@ export const AtlasContract = {
 };
 
 export type AtlasAPI = {
-    plan: (args: z.infer<typeof AtlasContract.plan.args>) => Promise<z.infer<typeof PlanSchema>>;
+    plan: (args: Parameters<z.infer<typeof AtlasContract.plan>>[0]) => Promise<z.infer<typeof PlanSchema>>;
     dream: () => Promise<{ insights: string[] }>;
 };

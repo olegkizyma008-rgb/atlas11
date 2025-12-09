@@ -10,7 +10,8 @@ import './main.css'
 export const trpc = createTRPCReact<AppRouter>()
 const queryClient = new QueryClient()
 const trpcClient = trpc.createClient({
-    links: [ipcLink()]
+    links: [ipcLink()],
+    transformer: undefined as any,
 })
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(

@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { initializeDeepIntegration } from '../main/initialize-deep-integration';
 import { createPacket, PacketIntent } from './protocol/nexus';
 import { synapse } from './synapse';
-import { UnifiedBrain } from '../modules/brain/unifiedBrain';
+import { UnifiedBrain } from './cortex/unified-brain';
 import { createReasoningCapsule } from '../modules/reasoning'; // Import factory
 
 async function run() {

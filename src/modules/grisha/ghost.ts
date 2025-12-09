@@ -8,8 +8,10 @@ export class GrishaGhost implements GrishaAPI {
     async observe() {
         console.log("👁️ GrishaGhost: Observing environment...");
         return {
-            summary: "Everything seems normal.",
-            threats: []
+            summary: "Ghost Observation (Not Implemented)",
+            threats: [],
+            level: 'low' as 'low',
+            timestamp: Date.now()
         };
     }
 

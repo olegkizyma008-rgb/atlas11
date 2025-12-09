@@ -28,6 +28,6 @@ export const TetyanaContract = {
 };
 
 export type TetyanaAPI = {
-    execute: (args: z.infer<typeof TetyanaContract.execute.args>) => Promise<{ success: boolean; output: any }>;
-    forge_tool: (args: z.infer<typeof TetyanaContract.forge_tool.args>) => Promise<string>;
+    execute: z.infer<typeof TetyanaContract.execute>;
+    forge_tool: z.infer<typeof TetyanaContract.forge_tool>;
 };

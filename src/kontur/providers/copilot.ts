@@ -141,7 +141,8 @@ export class VSCodeCopilotProvider implements ILLMProvider {
             const text = data.choices[0]?.message?.content || '';
 
             return {
-                text,
+                text: data.choices[0]?.message?.content || '',
+                provider: 'copilot',
                 usage: {
                     promptTokens: 0,
                     completionTokens: 0,

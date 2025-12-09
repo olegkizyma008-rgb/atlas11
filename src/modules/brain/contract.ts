@@ -23,7 +23,7 @@ export const BrainContract = {
 };
 
 export type BrainAPI = {
-    think: (args: z.infer<typeof BrainContract.think.args>) => Promise<{
+    think: (args: Parameters<z.infer<typeof BrainContract.think>>[0]) => Promise<{
         text?: string;
         tool_calls?: { name: string; args: Record<string, any> }[];
         usage?: { input_tokens?: number; output_tokens?: number };

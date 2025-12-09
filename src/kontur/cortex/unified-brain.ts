@@ -188,7 +188,7 @@ export class UnifiedBrain extends CortexBrain {
 
     console.log('[UNIFIED-BRAIN] Falling back to Atlas Brain...');
 
-    return await this.atlasAPI.think(request);
+    return await this.atlasAPI.think(request as any);
   }
 
   /**
@@ -207,7 +207,7 @@ export class UnifiedBrain extends CortexBrain {
       const atlasResponse = await this.atlasAPI.think({
         ...request,
         system_prompt: `${request.system_prompt}. Also provide Atlas architectural perspective.`,
-      });
+      } as any);
 
       // Merge responses
       return {

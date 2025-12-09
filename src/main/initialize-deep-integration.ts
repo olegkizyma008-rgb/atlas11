@@ -26,7 +26,6 @@ import { createReasoningCapsule, ReasoningCapsule } from '../modules/reasoning';
 import { TetyanaExecutor } from '../modules/tetyana/executor';
 import { MemoryCapsule } from '../modules/memory/index';
 import { ForgeGhost } from '../modules/forge/ghost';
-// VoiceGhost removed - using real VoiceCapsule
 import { BrainCapsule } from '../modules/brain/index';
 
 // Import Real Implementations for IO
@@ -55,7 +54,6 @@ export class DeepIntegrationSystem {
 
   public memory: MemoryCapsule | null = null;
   public forge: ForgeGhost | null = null;
-  // public voiceGhost: VoiceGhost | null = null; // Removed
   public brain: BrainCapsule | null = null;
 
   // Real IO Capsules
@@ -424,7 +422,6 @@ export class DeepIntegrationSystem {
     // Initialize Dependencies (Real Memory + Real Brain)
     this.memory = new MemoryCapsule();
     this.forge = new ForgeGhost(); // Internal logic
-    // this.voiceGhost = new VoiceGhost(); // Removed
     this.brain = new BrainCapsule(deepThinkingKey);
 
     // Ensure VoiceCapsule is ready for Tetyana

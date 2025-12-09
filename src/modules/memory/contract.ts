@@ -44,7 +44,7 @@ export const MemoryContract = {
 };
 
 export type MemoryAPI = {
-    store: (args: z.infer<typeof MemoryContract.store.args>) => Promise<void>;
-    recall: (args: z.infer<typeof MemoryContract.recall.args>) => Promise<z.infer<typeof MemoryContract.recall.returns>>;
+    store: (args: Parameters<z.infer<typeof MemoryContract.store>>[0]) => Promise<void>;
+    recall: (args: Parameters<z.infer<typeof MemoryContract.recall>>[0]) => Promise<Awaited<ReturnType<z.infer<typeof MemoryContract.recall>>>>;
     optimize: () => Promise<{ nodes_merged: number }>;
 };

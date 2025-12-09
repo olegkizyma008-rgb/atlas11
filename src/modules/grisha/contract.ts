@@ -28,5 +28,5 @@ export type SafetyReport = {
 
 export type GrishaAPI = {
     observe: () => Promise<SafetyReport>;
-    audit: (args: z.infer<typeof GrishaContract.audit.args>) => Promise<{ allowed: boolean; reason?: string }>;
+    audit: (args: Parameters<z.infer<typeof GrishaContract.audit>>[0]) => Promise<{ allowed: boolean; reason?: string }>;
 };
