@@ -211,8 +211,8 @@ export class DeepIntegrationSystem {
     // Filesystem
     this.core.register('kontur://organ/mcp/filesystem', {
       send: async (packet: any) => {
-        const tool = packet.payload.tool || packet.payload.action;
-        const args = packet.payload.args;
+        const tool = packet.instruction.op_code || packet.payload.tool || packet.payload.action;
+        const args = packet.payload.args || packet.payload; // fallback if payload IS the args
         try {
           const result = await this.unifiedBrain.executeTool(tool, args); // Use unifiedBrain methods
           if (packet.route.reply_to) {
@@ -239,8 +239,8 @@ export class DeepIntegrationSystem {
     // OS
     this.core.register('kontur://organ/mcp/os', {
       send: async (packet: any) => {
-        const tool = packet.payload.tool || packet.payload.action;
-        const args = packet.payload.args;
+        const tool = packet.instruction.op_code || packet.payload.tool || packet.payload.action;
+        const args = packet.payload.args || packet.payload;
         try {
           const result = await this.unifiedBrain.executeTool(tool, args);
           if (packet.route.reply_to) {
