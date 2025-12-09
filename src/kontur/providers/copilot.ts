@@ -6,6 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import crypto from 'crypto';
 import { ILLMProvider, LLMRequest, LLMResponse, ProviderName } from './types';
 
 export class VSCodeCopilotProvider implements ILLMProvider {
@@ -114,13 +115,19 @@ export class VSCodeCopilotProvider implements ILLMProvider {
             const sessionToken = tokenData.token;
             const apiEndpoint = tokenData.endpoints?.api || 'https://api.githubcopilot.com';
 
+            console.log(`[COPILOT PROVIDER] 🔗 Using API endpoint: ${apiEndpoint}`);
+
             // Step 2: Chat Completion (using dynamic endpoint from token)
             const response = await fetch(`${apiEndpoint}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${sessionToken}`,
                     'Content-Type': 'application/json',
-                    'Editor-Version': 'vscode/1.85.0'
+                    'Editor-Version': 'vscode/1.96.0',
+                    'Editor-Plugin-Version': 'copilot-chat/0.23.0',
+                    'User-Agent': 'GitHubCopilotChat/0.23.0',
+                    'Openai-Organization': 'github-copilot',
+                    'X-Request-Id': crypto.randomUUID(),
                 },
                 body: JSON.stringify({
                     model: model,

@@ -1289,8 +1289,10 @@ class VSCodeCopilotProvider {
       if (!tokenResponse.ok) {
         throw new Error(`Failed to authenticate with Copilot: ${tokenResponse.status}`);
       }
-      const { token: sessionToken } = await tokenResponse.json();
-      const response = await fetch("https://api.githubcopilot.com/chat/completions", {
+      const tokenData = await tokenResponse.json();
+      const sessionToken = tokenData.token;
+      const apiEndpoint = tokenData.endpoints?.api || "https://api.githubcopilot.com";
+      const response = await fetch(`${apiEndpoint}/chat/completions`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${sessionToken}`,
@@ -4911,29 +4913,27 @@ class ForgeGhost {
   }
 }
 class BrainCapsule {
-  genAI;
-  constructor(apiKey) {
-    if (!apiKey) {
-      console.warn("⚠️ BrainCapsule initialized without API Key! Will fail on real requests.");
-    }
-    this.genAI = new generativeAi.GoogleGenerativeAI(apiKey || "mock-key");
+  constructor(_apiKey) {
+    const config2 = getProviderConfig("brain");
+    console.log(`🧠 BrainCapsule: Using ${config2.provider} / ${config2.model}`);
   }
   async think(args) {
-    console.log(`🧠 BrainCapsule: calling ${args.model || "default model"}`);
+    const config2 = getProviderConfig("brain");
+    console.log(`🧠 BrainCapsule: calling ${args.model || config2.model || "default model"}`);
     try {
-      const model = this.genAI.getGenerativeModel({
-        model: args.model || process.env.GEMINI_MODEL || "gemini-2.5-flash",
-        systemInstruction: args.system_prompt
+      const router2 = getProviderRouter();
+      const response = await router2.generateLLM("brain", {
+        prompt: args.user_prompt,
+        systemPrompt: args.system_prompt,
+        model: args.model || config2.model,
+        temperature: 0.7,
+        maxTokens: 4096
       });
-      const result = await model.generateContent(args.user_prompt);
-      const response = await result.response;
-      const text = response.text();
       return {
-        text,
+        text: response.text,
         usage: {
-          // Mock usage for now as experimental models might not return it consistently
-          input_tokens: 0,
-          output_tokens: 0
+          input_tokens: response.usage?.promptTokens || 0,
+          output_tokens: response.usage?.completionTokens || 0
         }
       };
     } catch (error) {
