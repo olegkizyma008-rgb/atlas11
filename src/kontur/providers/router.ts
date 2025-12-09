@@ -161,21 +161,55 @@ export class ProviderRouter {
     }
 
     /**
-     * Generate LLM response
+     * Generate LLM response with automatic fallback
      */
     async generateLLM(service: ServiceType, request: LLMRequest): Promise<LLMResponse> {
-        const provider = this.getProvider(service, this.llmProviders, p => p.isAvailable());
         const config = getProviderConfig(service);
+
+        // Get primary provider
+        const primaryProvider = this.llmProviders.get(config.provider);
 
         // Use configured model if not specified
         if (!request.model) request.model = config.model;
 
-        try {
-            return await provider.generate(request);
-        } catch (error) {
-            // Simple retry logic or fallback could go here
-            throw error;
+        // Try primary provider first
+        if (primaryProvider && primaryProvider.isAvailable()) {
+            try {
+                return await primaryProvider.generate(request);
+            } catch (error: any) {
+                console.warn(`[PROVIDER ROUTER] ⚠️ Primary provider (${config.provider}) failed: ${error.message}`);
+
+                // Check for fallback
+                if (config.fallbackProvider) {
+                    const fallbackProvider = this.llmProviders.get(config.fallbackProvider);
+                    if (fallbackProvider && fallbackProvider.isAvailable()) {
+                        console.log(`[PROVIDER ROUTER] 🔄 Switching to fallback: ${config.fallbackProvider}`);
+
+                        // Update model for fallback provider if needed
+                        const fallbackConfig = getProviderConfig(service);
+                        if (config.fallbackProvider === 'gemini') {
+                            request.model = fallbackConfig.model || 'gemini-2.5-flash';
+                        }
+
+                        return await fallbackProvider.generate(request);
+                    }
+                }
+
+                // No fallback or fallback also failed
+                throw error;
+            }
         }
+
+        // Primary not available, try fallback directly
+        if (config.fallbackProvider) {
+            const fallbackProvider = this.llmProviders.get(config.fallbackProvider);
+            if (fallbackProvider && fallbackProvider.isAvailable()) {
+                console.log(`[PROVIDER ROUTER] 🔄 Primary unavailable, using fallback: ${config.fallbackProvider}`);
+                return await fallbackProvider.generate(request);
+            }
+        }
+
+        throw new Error(`No available provider for ${service}`);
     }
 
     /**

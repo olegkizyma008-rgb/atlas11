@@ -1292,12 +1292,17 @@ class VSCodeCopilotProvider {
       const tokenData = await tokenResponse.json();
       const sessionToken = tokenData.token;
       const apiEndpoint = tokenData.endpoints?.api || "https://api.githubcopilot.com";
+      console.log(`[COPILOT PROVIDER] 🔗 Using API endpoint: ${apiEndpoint}`);
       const response = await fetch(`${apiEndpoint}/chat/completions`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${sessionToken}`,
           "Content-Type": "application/json",
-          "Editor-Version": "vscode/1.85.0"
+          "Editor-Version": "vscode/1.96.0",
+          "Editor-Plugin-Version": "copilot-chat/0.23.0",
+          "User-Agent": "GitHubCopilotChat/0.23.0",
+          "Openai-Organization": "github-copilot",
+          "X-Request-Id": crypto$1.randomUUID()
         },
         body: JSON.stringify({
           model,
