@@ -3165,9 +3165,15 @@ LANGUAGE RULES:
    * Handle incoming KPP Packet
    */
   async processPacket(packet) {
-    if (packet.instruction.op_code === "PLAN" || packet.instruction.op_code === "ATLAS_PLAN") {
+    if (packet.instruction.op_code === "PLAN" || packet.instruction.op_code === "ATLAS_PLAN" || packet.instruction.op_code === "REPLAN") {
+      console.log(`ATLAS: Received specific instruction: ${packet.instruction.op_code}`);
+      let planGoal = packet.payload.goal || packet.payload.prompt || "Do something";
+      if (packet.instruction.op_code === "REPLAN") {
+        console.log(`ATLAS: ⚠️ REPLAN REQUESTED. Error: ${packet.payload.error}`);
+        planGoal = `REPLANNING REQUIRED. Original Goal: "${packet.payload.original_goal}". Failure: "${packet.payload.error}". Context: ${JSON.stringify(packet.payload.context || {})}. Create a NEW, BETTER plan.`;
+      }
       const result = await this.plan({
-        goal: packet.payload.goal || packet.payload.prompt || "Do something",
+        goal: planGoal,
         context: packet.payload.context
       });
       return result;
@@ -3258,6 +3264,71 @@ class OpenInterpreterBridge {
     return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
   }
 }
+class TrinityChannel extends events.EventEmitter {
+  static instance;
+  core = null;
+  constructor() {
+    super();
+  }
+  static getInstance() {
+    if (!TrinityChannel.instance) {
+      TrinityChannel.instance = new TrinityChannel();
+    }
+    return TrinityChannel.instance;
+  }
+  /**
+   * Connect to the Core dispatcher to emit UI packets
+   */
+  setCore(core) {
+    this.core = core;
+  }
+  /**
+   * The main method for Agents to speak.
+   * @param actor The persona speaking (ATLAS, TETYANA, GRISHA)
+   * @param messageUA The message in UKRAINIAN for the user
+   * @param logEN (Optional) Technical english log for debugging
+   */
+  talk(actor, messageUA, logEN) {
+    this.emit("message", { actor, messageUA, logEN, timestamp: Date.now() });
+    if (logEN) {
+      console.log(`[${actor}] 🗣️ ${logEN}`);
+    } else {
+      console.log(`[${actor}] 🗣️ ${messageUA}`);
+    }
+    if (this.core) {
+      this.sendUIPacket("chat", `**${actor}**: ${messageUA}`);
+      if (logEN) {
+        this.sendUIPacket("log", `[${actor}] ${logEN}`);
+      }
+    }
+  }
+  /**
+   * Send heartbeat/status update
+   */
+  heartbeat(actor, statusUA) {
+    if (this.core) {
+      this.sendUIPacket("status", `${actor}: ${statusUA}`);
+    }
+  }
+  sendUIPacket(type, msg) {
+    if (!this.core)
+      return;
+    try {
+      const packet = createPacket(
+        "kontur://organ/trinity",
+        // From Trinity Channel
+        "kontur://organ/ui/shell",
+        // To UI
+        PacketIntent.EVENT,
+        { type, msg }
+      );
+      this.core.ingest(packet);
+    } catch (e) {
+      console.error("[TRINITY] Failed to emit packet:", e);
+    }
+  }
+}
+const getTrinity = () => TrinityChannel.getInstance();
 class GrishaVisionService extends events.EventEmitter {
   isObserving = false;
   isPaused = false;
@@ -3291,10 +3362,10 @@ class GrishaVisionService extends events.EventEmitter {
       geminiLive.on("audio", (audio) => {
         if (!this.isSpeaking) {
           this.isSpeaking = true;
-          console.log("[GRISHA VISION] 🔇 Audio started - pausing frame capture");
+          getTrinity().talk("GRISHA", "...", "Audio started - pausing frame capture");
           setTimeout(() => {
             if (this.isSpeaking) {
-              console.log("[GRISHA VISION] ⏱️ Audio timeout - resuming");
+              getTrinity().talk("GRISHA", "...", "Audio timeout - resuming");
               this.isSpeaking = false;
             }
           }, 5e3);
@@ -3302,7 +3373,7 @@ class GrishaVisionService extends events.EventEmitter {
         this.emit("audio", audio);
       });
       geminiLive.on("turnComplete", () => {
-        console.log("[GRISHA VISION] 🎤 Turn complete");
+        getTrinity().talk("GRISHA", "Дякую.", "Turn complete");
         this.isSpeaking = false;
         this.emitResult("confirmation", "Grisha finished speaking", true);
       });
@@ -3334,7 +3405,7 @@ class GrishaVisionService extends events.EventEmitter {
   selectSource(sourceId, sourceName) {
     this.selectedSourceId = sourceId;
     this.selectedSourceName = sourceName;
-    console.log(`[GRISHA VISION] 🎯 Selected source: ${sourceName} (${sourceId})`);
+    getTrinity().talk("GRISHA", `Бачу вікно "${sourceName}".`, `Selected source: ${sourceName} (${sourceId})`);
     this.emit("source_changed", { id: sourceId, name: sourceName });
   }
   /**
@@ -3380,12 +3451,8 @@ class GrishaVisionService extends events.EventEmitter {
     const externalSources = sources.filter(
       (s) => !s.name.toLowerCase().includes("electron") && !s.name.toLowerCase().includes("atlas") && !s.name.toLowerCase().includes("kontur")
     );
-    console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
-    if (externalSources.length === 0) {
-      console.log("[GRISHA VISION] ⚠️ No external windows found via desktopCapturer.");
-    } else {
-      console.log("[GRISHA VISION] 📋 Available Windows: " + externalSources.map((s) => `"${s.name}"`).join(", "));
-    }
+    if (externalSources.length === 0)
+      ;
     const normalize = (s) => s.toLowerCase().trim().replace(/[\u2013\u2014]/g, "-");
     const target = normalize(appName);
     const ALIASES = {
@@ -3408,22 +3475,18 @@ class GrishaVisionService extends events.EventEmitter {
     for (const name of potentialAppNames) {
       const trueWindowTitle = await this.findWindowTitleForApp(name);
       if (trueWindowTitle) {
-        console.log(`[GRISHA VISION] 🍏 AppleScript found Title "${trueWindowTitle}" for app "${name}"`);
         const exactMatch = externalSources.find((s) => normalize(s.name) === normalize(trueWindowTitle));
         if (exactMatch) {
-          console.log(`[GRISHA VISION] ✅ Exact Title Match: "${exactMatch.name}"`);
           this.selectSource(exactMatch.id, exactMatch.name);
           return true;
         }
         const partialMatch = externalSources.find((s) => normalize(s.name).includes(normalize(trueWindowTitle)) || normalize(trueWindowTitle).includes(normalize(s.name)));
         if (partialMatch) {
-          console.log(`[GRISHA VISION] ✅ Partial Title Match: "${partialMatch.name}" matches "${trueWindowTitle}"`);
           this.selectSource(partialMatch.id, partialMatch.name);
           return true;
         }
       }
     }
-    console.log(`[GRISHA VISION] ⚠️ Title Lookup failed, falling back to title matching...`);
     const searchTerms = [target, ...(ALIASES[target] || []).map((s) => normalize(s))];
     let matched = externalSources.find(
       (s) => searchTerms.some((term) => normalize(s.name) === term)
@@ -3447,11 +3510,10 @@ class GrishaVisionService extends events.EventEmitter {
       );
     }
     if (matched) {
-      console.log(`[GRISHA VISION] ✅ Found window via Title: "${matched.name}" (matched for "${appName}")`);
       this.selectSource(matched.id, matched.name);
       return true;
     }
-    console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}".`);
+    getTrinity().talk("GRISHA", `Не можу знайти вікно "${appName}".`, `Window not found for: "${appName}".`);
     return false;
   }
   /**
@@ -3460,7 +3522,7 @@ class GrishaVisionService extends events.EventEmitter {
   clearSourceSelection() {
     this.selectedSourceId = null;
     this.selectedSourceName = null;
-    console.log("[GRISHA VISION] 🖥️ Using full screen capture");
+    getTrinity().talk("GRISHA", "Дивлюсь на весь екран.", "Using full screen capture");
   }
   /**
    * Start observation (works for both modes)
@@ -3469,7 +3531,7 @@ class GrishaVisionService extends events.EventEmitter {
     if (this.isObserving)
       return;
     const currentMode = this.mode;
-    console.log(`[GRISHA VISION] 👁️ Starting observation [${currentMode.toUpperCase()}]...`);
+    getTrinity().talk("GRISHA", "Починаю спостереження.", `Starting observation [${currentMode.toUpperCase()}]`);
     this.isObserving = true;
     this.frameCount = 0;
     this.selectedSourceId = null;
@@ -3486,7 +3548,6 @@ class GrishaVisionService extends events.EventEmitter {
   stopObservation() {
     if (!this.isObserving)
       return;
-    console.log(`[GRISHA VISION] 👁️ Observation stopped after ${this.frameCount} frames`);
     this.isObserving = false;
     this.isSpeaking = false;
     this.isPaused = false;
@@ -3502,7 +3563,6 @@ class GrishaVisionService extends events.EventEmitter {
   pauseCapture() {
     if (!this.isPaused) {
       this.isPaused = true;
-      console.log("[GRISHA VISION] ⏸️ Capture paused");
     }
   }
   /**
@@ -3511,7 +3571,6 @@ class GrishaVisionService extends events.EventEmitter {
   resumeCapture() {
     if (this.isPaused) {
       this.isPaused = false;
-      console.log("[GRISHA VISION] ▶️ Capture resumed");
       if (this.mode === "live") {
         this.captureAndSendLiveFrame();
       }
@@ -3525,7 +3584,7 @@ class GrishaVisionService extends events.EventEmitter {
    * Verify a step was executed
    */
   async verifyStep(stepAction, stepDetails, globalContext, targetApp) {
-    console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
+    getTrinity().talk("GRISHA", "Перевіряю виконання...", `Verifying step: ${stepAction}`);
     if (this.mode === "on-demand") {
       return this.verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp);
     }
@@ -3543,7 +3602,7 @@ class GrishaVisionService extends events.EventEmitter {
       this.on("observation", responseHandler);
       setTimeout(async () => {
         cleanup();
-        console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode). Falling back to On-Demand verification...");
+        getTrinity().talk("GRISHA", "Gemini Live не відповідає, переключаюсь на ручну перевірку...", "Verification timeout (Live Mode). Falling back to On-Demand verification...");
         try {
           const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp);
           resolve(fallbackResult);
@@ -3572,28 +3631,23 @@ class GrishaVisionService extends events.EventEmitter {
         objectName = objectMatch ? objectMatch[1].trim() : this.selectedSourceName || stepAction;
       }
       const visibilityPrompt = `
-АНАЛІЗ ВИДИМОСТІ:
-Завдання: "${stepAction}"
-Об'єкт/вікно для пошуку: "${objectName}"
+ANALYZE VISIBILITY:
+Task: "${stepAction}"
+Target Object/Window: "${objectName}"
 
-ВАЖЛИВО:
-- Ігноруй текстові логи, консоль або чат, де написано про цей об'єкт.
-- Ти повинен бачити САМ ІНТЕРФЕЙС програми (кнопки, поля, вікно).
-- Якщо ти бачиш тільки текст "Calculator opened" або подібне в логах - це invisible.
-- Якщо вікно перекрито іншим (наприклад ATLAS KONTUR) - це invisible.
+CRITICAL:
+- Ignore text logs or chat windows. Look for the ACTUAL APP INTERFACE (buttons, inputs).
+- If you only see text "Calculator opened" in a terminal -> INVISIBLE.
+- If obscured -> INVISIBLE.
 
-ВІДПОВІДЬ НА ПИТАННЯ:
-1. Чи бачиш ти ІНТЕРФЕЙС програми "${objectName}"?
-2. Якщо так - опиши як він виглядає (колір, елементи)?
-3. Якщо ні - що саме перекриває його?
-
-Формат відповіді JSON:
+OUTPUT FORMAT:
+Return valid JSON:
 {
-  "visible": true/false,
-  "location": "опис де знаходиться" або null,
-  "screen_content": "що видно на екрані",
-  "is_obscured_by_atlas": true/false
-}`;
+  "visible": boolean,
+  "description": "string (what you see)",
+  "message_ua": "string (Ukrainian description for user)"
+}
+`;
       const response = await router2.analyzeVision({
         image: base64Image,
         mimeType: "image/jpeg",
@@ -3603,41 +3657,22 @@ class GrishaVisionService extends events.EventEmitter {
       try {
         const analysis = response.analysis;
         const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+        let visible = false;
+        let message = `Не бачу "${objectName}".`;
         if (jsonMatch) {
           const parsed = JSON.parse(jsonMatch[0]);
-          const visible = parsed.visible === true;
-          if (visible) {
-            const location = parsed.location || "на екрані";
-            return {
-              visible: true,
-              message: `Бачу "${objectName}" ${location}`
-            };
-          } else {
-            const screenContent = parsed.screen_content || "інший вміст";
-            return {
-              visible: false,
-              message: `Не бачу "${objectName}" на екрані. Видно: ${screenContent}`
-            };
-          }
+          visible = parsed.visible === true;
+          message = parsed.message_ua || parsed.description;
+        } else {
+          const analysisLower = analysis.toLowerCase();
+          if (analysisLower.includes("visible") || analysisLower.includes("true"))
+            visible = true;
+          message = analysis;
         }
+        return { visible, message };
       } catch (parseErr) {
-        console.warn("[GRISHA VISION] Could not parse visibility JSON, analyzing text:", response.analysis);
+        return { visible: false, message: response.analysis };
       }
-      const analysisLower = response.analysis.toLowerCase();
-      const positiveIndicators = ["бачу", "yes", "visible", "відкрито", "opened", "present"];
-      const negativeIndicators = ["не бачу", "no", "not visible", "закрито", "hidden", "absent", "missing"];
-      const hasPositive = positiveIndicators.some((ind) => analysisLower.includes(ind));
-      const hasNegative = negativeIndicators.some((ind) => analysisLower.includes(ind));
-      if (hasNegative || !hasPositive) {
-        return {
-          visible: false,
-          message: `Не бачу "${objectName}" на екрані. ${response.analysis.slice(0, 100)}`
-        };
-      }
-      return {
-        visible: true,
-        message: `Бачу "${objectName}". ${response.analysis.slice(0, 100)}`
-      };
     } catch (error) {
       console.error("[GRISHA VISION] Visibility check failed:", error);
       return {
@@ -3656,10 +3691,9 @@ class GrishaVisionService extends events.EventEmitter {
       if (!base64Image) {
         return this.errorResult("Не вдалося захопити екран");
       }
-      console.log("[GRISHA VISION] 👁️ Checking object visibility first...");
       const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image, targetApp);
       if (!visibilityCheck.visible) {
-        console.warn(`[GRISHA VISION] ⚠️ Object not visible: ${visibilityCheck.message}`);
+        getTrinity().talk("GRISHA", `Не бачу потрібного об'єкта. ${visibilityCheck.message}`, `Object not visible: ${visibilityCheck.message}`);
         const result2 = {
           type: "alert",
           message: visibilityCheck.message,
@@ -3672,25 +3706,26 @@ class GrishaVisionService extends events.EventEmitter {
         this.emit("observation", result2);
         return result2;
       }
-      console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
       const router2 = getProviderRouter();
-      const stepMatch = stepDetails?.match(/Крок (\d+)/);
-      const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
       const verificationPrompt = `
 STEP VERIFICATION
-
 Action performed: "${stepAction}"
 Details: ${stepDetails || "none"}
 Target: ${targetApp || "screen"}
 ${globalContext ? `Goal: "${globalContext}"` : ""}
 
-Look at the screenshot and verify:
+Verify:
 1. Did this action complete successfully?
 2. Is the result correct?
 
-Respond in Ukrainian:
-- Success: "ВЕРИФІКОВАНО: [what you see]"
-- Failure: "ПОМИЛКА: [what went wrong]"
+OUTPUT FORMAT:
+Return valid JSON:
+{
+  "verified": boolean,
+  "confidence": number (0-1),
+  "analysis": "string (technical reasoning)",
+  "message_ua": "string (Ukrainian report for user. Start with 'ВЕРИФІКОВАНО:' or 'ПОМИЛКА:')"
+}
 `;
       const response = await router2.analyzeVision({
         image: base64Image,
@@ -3699,17 +3734,30 @@ Respond in Ukrainian:
         prompt: verificationPrompt
       });
       this.frameCount++;
+      let verified = response.verified;
+      let message = response.analysis;
+      let confidence = response.confidence;
+      const jsonMatch = response.analysis.match(/\{[\s\S]*\}/);
+      if (jsonMatch) {
+        try {
+          const parsed = JSON.parse(jsonMatch[0]);
+          verified = parsed.verified === true;
+          message = parsed.message_ua || parsed.analysis;
+          confidence = parsed.confidence || 0.8;
+        } catch (e) {
+        }
+      }
+      getTrinity().talk("GRISHA", message, `Verification result: ${verified}`);
       const result = {
-        type: response.verified ? "verification" : "alert",
-        message: response.analysis,
-        verified: response.verified,
-        confidence: response.confidence,
+        type: verified ? "verification" : "alert",
+        message,
+        verified,
+        confidence,
         anomalies: response.anomalies,
         timestamp: Date.now(),
         mode: "on-demand"
       };
       this.emit("observation", result);
-      console.log(`[GRISHA VISION] ${response.verified ? "✅" : "⚠️"} Step verified (On-Demand): ${response.analysis.slice(0, 100)}`);
       return result;
     } catch (error) {
       console.error("[GRISHA VISION] Verification failed:", error);
@@ -3739,7 +3787,6 @@ Respond in Ukrainian:
             (s) => s.name.toLowerCase().includes(this.selectedSourceName.toLowerCase())
           );
           if (source && source.id !== targetId) {
-            console.log(`[GRISHA VISION] 🔄 Source ID changed for "${this.selectedSourceName}": ${targetId} -> ${source.id}`);
             this.selectedSourceId = source.id;
           }
         }
@@ -3802,7 +3849,7 @@ Respond in Ukrainian:
    */
   async notifyActionLive(action, details) {
     if (this.geminiLive?.sendText) {
-      console.log(`[GRISHA VISION] 🗣️ Prompting verification: ${action}`);
+      getTrinity().talk("GRISHA", "Дивлюсь...", `Prompting verification: ${action}`);
       this.geminiLive.sendText(`Система: Виконано дію "${action}" (${details}). Підтвердь словом "Виконано" або повідом про помилку.`);
       await this.captureAndSendLiveFrame();
     }
@@ -3825,7 +3872,7 @@ Respond in Ukrainian:
       timestamp: Date.now(),
       mode: "live"
     };
-    console.log(`[GRISHA VISION] 🔍 ${resultType.toUpperCase()}: ${text}`);
+    getTrinity().talk("GRISHA", text, `Live Response: ${text}`);
     this.emit("observation", result);
   }
   /**
@@ -3878,13 +3925,14 @@ class TetyanaExecutor extends events.EventEmitter {
   constructor(core) {
     super();
     this.core = core;
+    this.pendingRequests = /* @__PURE__ */ new Map();
   }
   /**
    * Set Vision Service (for main process integration)
    */
   setVisionService(service) {
     this.visionService = service;
-    console.log("[TETYANA] 👁️ Vision service connected");
+    getTrinity().talk("TETYANA", "Підключаюсь до зору Гріши.", "Vision service connected");
   }
   /**
    * Start executing a plan
@@ -3898,7 +3946,7 @@ class TetyanaExecutor extends events.EventEmitter {
     }
     this.active = true;
     this.currentPlan = plan;
-    console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps) [Engine: ${usePythonBridge ? "HYBRID (Python+Native)" : "NATIVE"}]`);
+    getTrinity().talk("TETYANA", `Виконую план "${plan.goal}".`, `Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
     await this.startVisionObservation(plan.goal);
     const registry = getToolRegistry();
     if (!usePythonBridge && registry.isInitialized()) {
@@ -3909,11 +3957,10 @@ class TetyanaExecutor extends events.EventEmitter {
           const similar = registry.findSimilarTools(toolName);
           return similar.length > 0 ? `${err}. Did you mean: ${similar.join(", ")}?` : err;
         }).join("; ");
-        console.error(`[TETYANA] ❌ Plan validation failed: ${errorDetail}`);
+        getTrinity().talk("TETYANA", `Помилка валідації: ${errorDetail}`, `Plan validation failed: ${errorDetail}`);
         this.emitStatus("error", `Невідомі інструменти: ${errorDetail}`);
         throw new Error(`Plan validation failed: ${errorDetail}`);
       }
-      console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
     } else if (!usePythonBridge) {
       console.warn("[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation");
     }
@@ -3924,7 +3971,7 @@ class TetyanaExecutor extends events.EventEmitter {
           break;
         const step = plan.steps[i];
         const stepNum = i + 1;
-        console.log(`[TETYANA] ▶️ Step ${stepNum}: ${step.action}`);
+        getTrinity().talk("TETYANA", `Крок ${stepNum}: ${this.getHumanReadableAction(step, null)}`, `Step ${stepNum}: ${step.action}`);
         if (plan.steps.length > 3 && i === 0) {
           this.emitStatus("thinking", "🤔 Аналізую план дій (Gemini 3)...");
           await this.consultReasoning(plan);
@@ -3935,7 +3982,7 @@ class TetyanaExecutor extends events.EventEmitter {
         while (!verified && attempts < MAX_RETRIES) {
           attempts++;
           if (attempts > 1) {
-            console.warn(`[TETYANA] 🔄 Retry Attempt ${attempts}/${MAX_RETRIES} for Step ${stepNum}...`);
+            getTrinity().talk("TETYANA", `Спроба ${attempts} для кроку ${stepNum}...`, `Retry Attempt ${attempts}/${MAX_RETRIES}`);
             this.emitStatus("warning", `Корекція кроку ${stepNum} (Спроба ${attempts})...`);
           }
           const vision = this.visionService || getGrishaVisionService();
@@ -3974,47 +4021,48 @@ class TetyanaExecutor extends events.EventEmitter {
             }
           }
           if (appName) {
-            console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
             this.lastActiveApp = appName;
             await vision.autoSelectSource(appName);
           } else if (this.lastActiveApp) {
-            console.log(`[TETYANA] 👁️ Re-selecting last app: ${this.lastActiveApp}`);
             await vision.autoSelectSource(this.lastActiveApp);
           } else {
-            console.warn(`[TETYANA] ⚠️ Unknown target app. Vision might lose context.`);
           }
           if (attempts === 1)
             await this.validateStep(step, stepNum);
-          console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
           await this.executeStepViaBridge(step, stepNum, feedbackContext);
           vision.resumeCapture();
-          console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
           if (this.lastActiveApp) {
-            console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
           }
+          const heartbeatInterval = setInterval(() => {
+            getTrinity().heartbeat("TETYANA", "Чекаю вердикт Гріши...");
+          }, 3e3);
           const visionResult = await this.verifyStepWithVision(step, stepNum);
+          clearInterval(heartbeatInterval);
           if (visionResult && visionResult.verified) {
-            console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
             verified = true;
           } else {
             const reason = visionResult?.message || "Unknown verification failure";
-            console.warn(`[TETYANA] ⚠️ Grisha Rejected Step ${stepNum}: ${reason}`);
+            getTrinity().talk("TETYANA", `Гріша відхилив: ${reason}`, `Verification Failed: ${reason}`);
             feedbackContext = `PREVIOUS ATTEMPT FAILED. 
 Vision Feedback: "${reason}". 
 CORRECTION REQUIRED: Please analyze what went wrong and try a different approach/keys/command.`;
           }
         }
         if (!verified) {
-          throw new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
+          getTrinity().talk("TETYANA", "Я не можу виконати цей крок. Гріша не дає добро. Атлас, потрібен новий план.", "Step failed after retries. Escalating to Atlas.");
+          const error = new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
+          this.triggerReplan(error, plan);
+          return;
         }
         this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
       }
       this.stopVisionObservation();
       if (this.active) {
+        getTrinity().talk("TETYANA", "Завдання виконано.", "Plan completed successfully.");
         this.emitStatus("completed", `План успішно завершено.`);
       }
     } catch (error) {
-      console.error(`[TETYANA] 💥 Execution Failed: ${error.message}`);
+      getTrinity().talk("TETYANA", `Критична помилка: ${error.message}`, `Execution Error: ${error.message}`);
       this.stopVisionObservation();
       this.handleFailure(error, plan);
     } finally {
@@ -4027,7 +4075,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
    */
   stop() {
     if (this.active) {
-      console.log("[TETYANA] 🛑 Emergency Stop requested");
+      getTrinity().talk("TETYANA", "Зупиняюсь!", "Emergency Stop requested");
       this.active = false;
       this.stopVisionObservation();
       this.emitStatus("stopped", "Виконання зупинено.");
@@ -4038,8 +4086,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
    */
   async startVisionObservation(goal) {
     const vision = this.visionService || getGrishaVisionService();
-    const config2 = getVisionConfig();
-    console.log(`[TETYANA] 👁️ Starting Vision observation[${config2.mode.toUpperCase()}]`);
+    getVisionConfig();
     try {
       await vision.startObservation(goal);
     } catch (e) {
@@ -4117,12 +4164,11 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
    */
   async consultReasoning(plan) {
     return new Promise((resolve, reject) => {
-      console.log(`[TETYANA] 🧠 Consulting Reasoning Organ...`);
+      getTrinity().talk("TETYANA", "Раджусь з Gemini 3...", "Consulting Reasoning Organ...");
       const reqId = `reason-${Date.now()}`;
       const handler = (packet2) => {
         if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.nexus.correlation_id === reqId) {
           this.core.removeListener("ingest", handlerWrapper);
-          console.log(`[TETYANA] 🧠 Advice Received:`, packet2.payload.result);
           resolve();
         }
       };
@@ -4143,7 +4189,6 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
       this.core.ingest(packet);
       setTimeout(() => {
         this.core.removeListener("ingest", handlerWrapper);
-        console.warn("[TETYANA] 🧠 Reasoning Timeout. Proceeding anyway.");
         resolve();
       }, 15e3);
     });
@@ -4153,13 +4198,13 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
    */
   async validateStep(step, stepNum) {
     return new Promise((resolve, reject) => {
-      console.log(`[TETYANA] 🛡️ Asking Grisha to validate step ${stepNum}...`);
+      getTrinity().talk("TETYANA", "Гріша, чи безпечний цей крок?", `Asking Grisha to validate step ${stepNum}...`);
       const verifId = `verif-${Date.now()}-${Math.random()}`;
       const responseHandler = (packet2) => {
         if (packet2.instruction.intent === PacketIntent.RESPONSE && packet2.nexus.correlation_id === verifId) {
           this.core.removeListener("ingest", responseHandlerWrapper);
           if (packet2.payload.allowed) {
-            console.log(`[TETYANA] ✅ Grisha Approved.`);
+            getTrinity().talk("TETYANA", "Дякую, виконую.", "Grisha Approved.");
             resolve();
           } else {
             reject(new Error(`Security Restriction: ${packet2.payload.reason}`));
@@ -4205,7 +4250,6 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
         reject(new Error(`Tool execution failed: No target URI found for tool '${toolName}'. Is it registered?`));
         return;
       }
-      console.log(`[TETYANA] 🚀 Executing '${toolName}' via ${targetURI} (ID: ${cmdId})`);
       const packet = createPacket(
         "kontur://organ/tetyana",
         targetURI,
@@ -4236,19 +4280,33 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
     }
   }
   handleFailure(error, plan) {
+    getTrinity().talk("TETYANA", `Сталася помилка. ${error.message}`, `Handling failure: ${error.message}`);
+    this.emitStatus("error", `Помилка: ${error.message}`);
+  }
+  /**
+   * TRIGGER REPLANNING (Deadlock Breaker)
+   * Instead of crashing, we ask Atlas for help.
+   */
+  triggerReplan(error, plan) {
+    getTrinity().talk("TETYANA", `Атлас, потрібна допомога! План провалився: ${error.message}`, `Triggering REPLAN. Error: ${error.message}`);
     const replanPacket = createPacket(
       "kontur://organ/tetyana",
-      "kontur://cortex/ai/main",
-      PacketIntent.QUERY,
+      "kontur://organ/atlas",
+      // Send to Atlas directly (or Brain)
+      PacketIntent.CMD,
+      // Use CMD to force action
       {
         original_goal: plan.goal,
         error: error.message,
-        context: { failure_reason: "Tetyana Execution Failed" }
+        completed_steps: plan.steps.filter((_, i) => i < (this.currentPlan?.steps.indexOf(this.currentPlan.steps.find((s) => s === plan.steps[0])) || 0)),
+        // Approximation
+        context: { failure_reason: "Deadlock / Verification Rejected" }
       }
     );
-    replanPacket.payload.prompt = `PLAN FAILED. Goal: "${plan.goal}". Error: ${error.message}. Fix it.`;
+    replanPacket.instruction.op_code = "REPLAN";
+    replanPacket.payload.prompt = `PLAN FAILED. Goal: "${plan.goal}". Error: ${error.message}. Please generate a NEW strategy.`;
     this.core.ingest(replanPacket);
-    this.emitStatus("error", `Помилка: ${error.message}. Запит нового плану...`);
+    this.emitStatus("error", `Критична помилка. Перепланування...`);
   }
   emitStatus(type, msg) {
     const packet = createPacket(
@@ -4265,7 +4323,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
    */
   async executeStepViaBridge(step, stepNum, feedbackContext = "") {
     return new Promise(async (resolve, reject) => {
-      console.log(`[TETYANA] 🐍 Executing Step ${stepNum} via Python Bridge: ${step.action}`);
+      getTrinity().talk("TETYANA", `[Python] Виконую крок ${stepNum}...`, `[Bridge] Executing Step ${stepNum}: ${step.action}`);
       const bridge = new OpenInterpreterBridge();
       if (!OpenInterpreterBridge.checkEnvironment()) {
         reject(new Error("Python environment not found"));
@@ -4326,13 +4384,7 @@ RULES:
     });
   }
   speak(text) {
-    const packet = createPacket(
-      "kontur://organ/tetyana",
-      "kontur://organ/ui/shell",
-      PacketIntent.EVENT,
-      { type: "chat", msg: text }
-    );
-    this.core.ingest(packet);
+    getTrinity().talk("TETYANA", text);
   }
 }
 class TetyanaCapsule {

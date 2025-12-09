@@ -96,9 +96,20 @@ LANGUAGE RULES:
         // Handle Planning Requests
         // Intent: 'CMD' with op_code 'PLAN' or 'ATLAS_PLAN'
         // OR Intent: 'QUERY'
-        if (packet.instruction.op_code === 'PLAN' || packet.instruction.op_code === 'ATLAS_PLAN') {
+        if (packet.instruction.op_code === 'PLAN' || packet.instruction.op_code === 'ATLAS_PLAN' || packet.instruction.op_code === 'REPLAN') {
+            console.log(`ATLAS: Received specific instruction: ${packet.instruction.op_code}`);
+
+            // If REPLAN, we might want to prioritize it or add context
+            let planGoal = packet.payload.goal || packet.payload.prompt || 'Do something';
+
+            if (packet.instruction.op_code === 'REPLAN') {
+                console.log(`ATLAS: ⚠️ REPLAN REQUESTED. Error: ${packet.payload.error}`);
+                // Enhance prompt for replanning
+                planGoal = `REPLANNING REQUIRED. Original Goal: "${packet.payload.original_goal}". Failure: "${packet.payload.error}". Context: ${JSON.stringify(packet.payload.context || {})}. Create a NEW, BETTER plan.`;
+            }
+
             const result = await this.plan({
-                goal: packet.payload.goal || packet.payload.prompt || 'Do something',
+                goal: planGoal,
                 context: packet.payload.context
             });
             // Send back the plan? Or the Core handles it?

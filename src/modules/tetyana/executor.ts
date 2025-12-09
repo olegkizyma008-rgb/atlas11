@@ -8,6 +8,7 @@ import { EventEmitter } from 'events';
 import { getGrishaVisionService, GrishaVisionService, VisionObservationResult } from '../../kontur/vision/GrishaVisionService';
 import { getVisionConfig, getExecutionConfig } from '../../kontur/providers/config';
 import { getToolRegistry } from '../../kontur/core/ToolRegistry';
+import { getTrinity } from '../../kontur/intercom/TrinityChannel';
 
 export class TetyanaExecutor extends EventEmitter {
     private core: Core;
@@ -19,6 +20,7 @@ export class TetyanaExecutor extends EventEmitter {
     constructor(core: Core) {
         super();
         this.core = core;
+        this.pendingRequests = new Map();
     }
 
     /**
@@ -26,7 +28,7 @@ export class TetyanaExecutor extends EventEmitter {
      */
     setVisionService(service: GrishaVisionService) {
         this.visionService = service;
-        console.log('[TETYANA] 👁️ Vision service connected');
+        getTrinity().talk('TETYANA', 'Підключаюсь до зору Гріши.', 'Vision service connected');
     }
 
     /**
@@ -43,10 +45,7 @@ export class TetyanaExecutor extends EventEmitter {
 
         this.active = true;
         this.currentPlan = plan;
-        console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps) [Engine: ${usePythonBridge ? 'HYBRID (Python+Native)' : 'NATIVE'}]`);
-
-        // Notify UI of start
-        // this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
+        getTrinity().talk('TETYANA', `Виконую план "${plan.goal}".`, `Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
 
         // Start Vision observation
         await this.startVisionObservation(plan.goal);
@@ -65,11 +64,11 @@ export class TetyanaExecutor extends EventEmitter {
                         : err;
                 }).join('; ');
 
-                console.error(`[TETYANA] ❌ Plan validation failed: ${errorDetail}`);
+                getTrinity().talk('TETYANA', `Помилка валідації: ${errorDetail}`, `Plan validation failed: ${errorDetail}`);
                 this.emitStatus("error", `Невідомі інструменти: ${errorDetail}`);
                 throw new Error(`Plan validation failed: ${errorDetail}`);
             }
-            console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
+            // console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
         } else if (!usePythonBridge) { // Only warn if not using Python bridge and registry isn't initialized
             console.warn('[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation');
         }
@@ -83,7 +82,8 @@ export class TetyanaExecutor extends EventEmitter {
 
                 const step = plan.steps[i];
                 const stepNum = i + 1;
-                console.log(`[TETYANA] ▶️ Step ${stepNum}: ${step.action}`);
+
+                getTrinity().talk('TETYANA', `Крок ${stepNum}: ${this.getHumanReadableAction(step, null)}`, `Step ${stepNum}: ${step.action}`);
 
                 // 🛑 SYSTEM 2 THINKING (Gemini 3)
                 if (plan.steps.length > 3 && i === 0) {
@@ -99,7 +99,7 @@ export class TetyanaExecutor extends EventEmitter {
                 while (!verified && attempts < MAX_RETRIES) {
                     attempts++;
                     if (attempts > 1) {
-                        console.warn(`[TETYANA] 🔄 Retry Attempt ${attempts}/${MAX_RETRIES} for Step ${stepNum}...`);
+                        getTrinity().talk('TETYANA', `Спроба ${attempts} для кроку ${stepNum}...`, `Retry Attempt ${attempts}/${MAX_RETRIES}`);
                         this.emitStatus("warning", `Корекція кроку ${stepNum} (Спроба ${attempts})...`);
                     }
 
@@ -148,41 +148,52 @@ export class TetyanaExecutor extends EventEmitter {
                     }
 
                     if (appName) {
-                        console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
+                        // console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
                         this.lastActiveApp = appName;
                         await vision.autoSelectSource(appName);
                     } else if (this.lastActiveApp) {
-                        console.log(`[TETYANA] 👁️ Re-selecting last app: ${this.lastActiveApp}`);
+                        // console.log(`[TETYANA] 👁️ Re-selecting last app: ${this.lastActiveApp}`);
                         await vision.autoSelectSource(this.lastActiveApp);
                     } else {
-                        console.warn(`[TETYANA] ⚠️ Unknown target app. Vision might lose context.`);
+                        // console.warn(`[TETYANA] ⚠️ Unknown target app. Vision might lose context.`);
                     }
 
                     // 1. Validate with Grisha (security check)
                     if (attempts === 1) await this.validateStep(step, stepNum);
 
                     // 2. Execute Step (Via Bridge)
-                    console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
+                    // console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
                     await this.executeStepViaBridge(step, stepNum, feedbackContext);
 
                     // 👁️ VISION RESUME
                     vision.resumeCapture();
 
                     // 3. Vision Verification
-                    console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
+                    // console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
                     if (this.lastActiveApp) {
-                        console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
+                        // console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
                     }
+
+                    // HEARTBEAT WHILE WAITING FOR VERIFICATION
+                    const heartbeatInterval = setInterval(() => {
+                        getTrinity().heartbeat("TETYANA", "Чекаю вердикт Гріши...");
+                    }, 3000);
 
                     const visionResult = await this.verifyStepWithVision(step, stepNum);
 
+                    clearInterval(heartbeatInterval);
+
                     // 4. Check Verification Result
                     if (visionResult && visionResult.verified) {
-                        console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
+                        // console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
                         verified = true;
                     } else {
                         const reason = visionResult?.message || "Unknown verification failure";
-                        console.warn(`[TETYANA] ⚠️ Grisha Rejected Step ${stepNum}: ${reason}`);
+                        getTrinity().talk('TETYANA', `Гріша відхилив: ${reason}`, `Verification Failed: ${reason}`);
+
+                        // DEADLOCK BREAKER: 
+                        // If logic suggests this is a fundamental error (e.g. "App crashed", "Access denied"), don't retry blindly.
+                        // For now, we retry 3 times. But if reason contains "CRITICAL", we stop.
 
                         feedbackContext = `PREVIOUS ATTEMPT FAILED. 
 Vision Feedback: "${reason}". 
@@ -191,7 +202,13 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
                 } // End Retry Loop
 
                 if (!verified) {
-                    throw new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
+                    // DEADLOCK BREAKER: ESCALATE TO ATLAS
+                    getTrinity().talk('TETYANA', 'Я не можу виконати цей крок. Гріша не дає добро. Атлас, потрібен новий план.', 'Step failed after retries. Escalating to Atlas.');
+
+                    // Trigger Replan
+                    const error = new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
+                    this.triggerReplan(error, plan);
+                    return; // Stop execution of THIS plan
                 }
 
                 // 5. Report Success
@@ -202,13 +219,14 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
             this.stopVisionObservation();
 
             if (this.active) {
+                getTrinity().talk('TETYANA', 'Завдання виконано.', 'Plan completed successfully.');
                 this.emitStatus("completed", `План успішно завершено.`);
             }
 
         } catch (error: any) {
-            console.error(`[TETYANA] 💥 Execution Failed: ${error.message}`);
+            getTrinity().talk('TETYANA', `Критична помилка: ${error.message}`, `Execution Error: ${error.message}`);
             this.stopVisionObservation();
-            this.handleFailure(error, plan);
+            this.handleFailure(error, plan); // This usually just logs error, but we added triggerReplan above for logic breaks
         } finally {
             this.active = false;
             this.currentPlan = null;
@@ -220,7 +238,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
      */
     public stop() {
         if (this.active) {
-            console.log('[TETYANA] 🛑 Emergency Stop requested');
+            getTrinity().talk('TETYANA', 'Зупиняюсь!', 'Emergency Stop requested');
             this.active = false;
             this.stopVisionObservation();
             this.emitStatus("stopped", "Виконання зупинено.");
@@ -234,7 +252,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
         const vision = this.visionService || getGrishaVisionService();
         const config = getVisionConfig();
 
-        console.log(`[TETYANA] 👁️ Starting Vision observation[${config.mode.toUpperCase()}]`);
+        // console.log(`[TETYANA] 👁️ Starting Vision observation[${config.mode.toUpperCase()}]`);
 
         try {
             await vision.startObservation(goal);
@@ -324,7 +342,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
      */
     private async consultReasoning(plan: Plan): Promise<void> {
         return new Promise((resolve, reject) => {
-            console.log(`[TETYANA] 🧠 Consulting Reasoning Organ...`);
+            getTrinity().talk('TETYANA', 'Раджусь з Gemini 3...', 'Consulting Reasoning Organ...');
 
             const reqId = `reason-${Date.now()}`;
 
@@ -332,7 +350,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
             const handler = (packet: KPP_Packet) => {
                 if (packet.instruction.intent === PacketIntent.RESPONSE && packet.nexus.correlation_id === reqId) {
                     this.core.removeListener('ingest', handlerWrapper);
-                    console.log(`[TETYANA] 🧠 Advice Received:`, packet.payload.result);
+                    // console.log(`[TETYANA] 🧠 Advice Received:`, packet.payload.result);
                     // Just log for now, but in future we could modify plan
                     resolve();
                 }
@@ -358,7 +376,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
             // Timeout (don't block forever)
             setTimeout(() => {
                 this.core.removeListener('ingest', handlerWrapper);
-                console.warn("[TETYANA] 🧠 Reasoning Timeout. Proceeding anyway.");
+                // console.warn("[TETYANA] 🧠 Reasoning Timeout. Proceeding anyway.");
                 resolve();
             }, 15000); // 15s for deep thinking
         });
@@ -369,7 +387,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
      */
     private async validateStep(step: PlanStep, stepNum: number): Promise<void> {
         return new Promise((resolve, reject) => {
-            console.log(`[TETYANA] 🛡️ Asking Grisha to validate step ${stepNum}...`);
+            getTrinity().talk('TETYANA', 'Гріша, чи безпечний цей крок?', `Asking Grisha to validate step ${stepNum}...`);
 
             // Generate unique ID for this verification request
             const verifId = `verif-${Date.now()}-${Math.random()}`;
@@ -380,7 +398,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
                     this.core.removeListener('ingest', responseHandlerWrapper);
 
                     if (packet.payload.allowed) {
-                        console.log(`[TETYANA] ✅ Grisha Approved.`);
+                        getTrinity().talk('TETYANA', 'Дякую, виконую.', 'Grisha Approved.');
                         resolve();
                     } else {
                         reject(new Error(`Security Restriction: ${packet.payload.reason}`));
@@ -451,7 +469,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
                 return;
             }
 
-            console.log(`[TETYANA] 🚀 Executing '${toolName}' via ${targetURI} (ID: ${cmdId})`);
+            // console.log(`[TETYANA] 🚀 Executing '${toolName}' via ${targetURI} (ID: ${cmdId})`);
 
             const packet = createPacket(
                 'kontur://organ/tetyana',
@@ -494,22 +512,35 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
 
 
     private handleFailure(error: Error, plan: Plan) {
-        // Auto-replan request
+        // Legacy: kept for simple errors. Critical errors use triggerReplan
+        getTrinity().talk('TETYANA', `Сталася помилка. ${error.message}`, `Handling failure: ${error.message}`);
+        this.emitStatus("error", `Помилка: ${error.message}`);
+    }
+
+    /**
+     * TRIGGER REPLANNING (Deadlock Breaker)
+     * Instead of crashing, we ask Atlas for help.
+     */
+    private triggerReplan(error: Error, plan: Plan) {
+        getTrinity().talk('TETYANA', `Атлас, потрібна допомога! План провалився: ${error.message}`, `Triggering REPLAN. Error: ${error.message}`);
+
         const replanPacket = createPacket(
             'kontur://organ/tetyana',
-            'kontur://cortex/ai/main',
-            PacketIntent.QUERY,
+            'kontur://organ/atlas', // Send to Atlas directly (or Brain)
+            PacketIntent.CMD, // Use CMD to force action
             {
                 original_goal: plan.goal,
                 error: error.message,
-                context: { failure_reason: "Tetyana Execution Failed" }
+                completed_steps: plan.steps.filter((_, i) => i < (this.currentPlan?.steps.indexOf(this.currentPlan.steps.find(s => s === plan.steps[0])!) || 0)), // Approximation
+                context: { failure_reason: "Deadlock / Verification Rejected" }
             }
         );
-        replanPacket.payload.prompt = `PLAN FAILED. Goal: "${plan.goal}". Error: ${error.message}. Fix it.`;
+        replanPacket.instruction.op_code = 'REPLAN'; // Special OpCode
+        replanPacket.payload.prompt = `PLAN FAILED. Goal: "${plan.goal}". Error: ${error.message}. Please generate a NEW strategy.`;
 
         this.core.ingest(replanPacket);
 
-        this.emitStatus("error", `Помилка: ${error.message}. Запит нового плану...`);
+        this.emitStatus("error", `Критична помилка. Перепланування...`);
     }
 
     private emitStatus(type: string, msg: string) {
@@ -528,7 +559,7 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
      */
     private async executeStepViaBridge(step: PlanStep, stepNum: number, feedbackContext: string = ""): Promise<any> {
         return new Promise(async (resolve, reject) => {
-            console.log(`[TETYANA] 🐍 Executing Step ${stepNum} via Python Bridge: ${step.action}`);
+            getTrinity().talk('TETYANA', `[Python] Виконую крок ${stepNum}...`, `[Bridge] Executing Step ${stepNum}: ${step.action}`);
 
             const bridge = new OpenInterpreterBridge();
             if (!OpenInterpreterBridge.checkEnvironment()) {
@@ -599,12 +630,7 @@ RULES:
     }
 
     private speak(text: string) {
-        const packet = createPacket(
-            'kontur://organ/tetyana',
-            'kontur://organ/ui/shell',
-            PacketIntent.EVENT,
-            { type: 'chat', msg: text }
-        );
-        this.core.ingest(packet);
+        // DEPRECATED: Use TrinityChannel instead
+        getTrinity().talk('TETYANA', text);
     }
 }

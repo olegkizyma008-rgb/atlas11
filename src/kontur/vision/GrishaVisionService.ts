@@ -13,6 +13,7 @@ import { desktopCapturer } from 'electron';
 import { getVisionConfig } from '../providers/config';
 import { getProviderRouter } from '../providers/router';
 import { VisionResponse } from '../providers/types';
+import { getTrinity } from '../intercom/TrinityChannel';
 
 export interface VisionObservationResult {
     type: 'confirmation' | 'alert' | 'observation' | 'verification';
@@ -73,10 +74,12 @@ export class GrishaVisionService extends EventEmitter {
             geminiLive.on('audio', (audio: any) => {
                 if (!this.isSpeaking) {
                     this.isSpeaking = true;
-                    console.log('[GRISHA VISION] 🔇 Audio started - pausing frame capture');
+                    // console.log('[GRISHA VISION] 🔇 Audio started - pausing frame capture');
+                    getTrinity().talk('GRISHA', '...', 'Audio started - pausing frame capture');
                     setTimeout(() => {
                         if (this.isSpeaking) {
-                            console.log('[GRISHA VISION] ⏱️ Audio timeout - resuming');
+                            // console.log('[GRISHA VISION] ⏱️ Audio timeout - resuming');
+                            getTrinity().talk('GRISHA', '...', 'Audio timeout - resuming');
                             this.isSpeaking = false;
                         }
                     }, 5000);
@@ -85,7 +88,8 @@ export class GrishaVisionService extends EventEmitter {
             });
 
             geminiLive.on('turnComplete', () => {
-                console.log('[GRISHA VISION] 🎤 Turn complete');
+                // console.log('[GRISHA VISION] 🎤 Turn complete');
+                getTrinity().talk('GRISHA', 'Дякую.', 'Turn complete');
                 this.isSpeaking = false;
                 this.emitResult('confirmation', 'Grisha finished speaking', true);
             });
@@ -120,7 +124,7 @@ export class GrishaVisionService extends EventEmitter {
     selectSource(sourceId: string, sourceName: string) {
         this.selectedSourceId = sourceId;
         this.selectedSourceName = sourceName;
-        console.log(`[GRISHA VISION] 🎯 Selected source: ${sourceName} (${sourceId})`);
+        getTrinity().talk('GRISHA', `Бачу вікно "${sourceName}".`, `Selected source: ${sourceName} (${sourceId})`);
         this.emit('source_changed', { id: sourceId, name: sourceName });
     }
 
@@ -173,12 +177,12 @@ export class GrishaVisionService extends EventEmitter {
             !s.name.toLowerCase().includes('kontur')
         );
 
-        console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
+        // console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
 
         if (externalSources.length === 0) {
-            console.log('[GRISHA VISION] ⚠️ No external windows found via desktopCapturer.');
+            // console.log('[GRISHA VISION] ⚠️ No external windows found via desktopCapturer.');
         } else {
-            console.log('[GRISHA VISION] 📋 Available Windows: ' + externalSources.map(s => `"${s.name}"`).join(', '));
+            // console.log('[GRISHA VISION] 📋 Available Windows: ' + externalSources.map(s => `"${s.name}"`).join(', '));
         }
 
         const normalize = (s: string) => s.toLowerCase().trim().replace(/[\u2013\u2014]/g, "-");
@@ -209,12 +213,12 @@ export class GrishaVisionService extends EventEmitter {
         for (const name of potentialAppNames) {
             const trueWindowTitle = await this.findWindowTitleForApp(name);
             if (trueWindowTitle) {
-                console.log(`[GRISHA VISION] 🍏 AppleScript found Title "${trueWindowTitle}" for app "${name}"`);
+                // console.log(`[GRISHA VISION] 🍏 AppleScript found Title "${trueWindowTitle}" for app "${name}"`);
 
                 const exactMatch = externalSources.find(s => normalize(s.name) === normalize(trueWindowTitle));
 
                 if (exactMatch) {
-                    console.log(`[GRISHA VISION] ✅ Exact Title Match: "${exactMatch.name}"`);
+                    // console.log(`[GRISHA VISION] ✅ Exact Title Match: "${exactMatch.name}"`);
                     this.selectSource(exactMatch.id, exactMatch.name);
                     return true;
                 }
@@ -222,7 +226,7 @@ export class GrishaVisionService extends EventEmitter {
                 // Partial match on title if exact fails (e.g. specialized chars)
                 const partialMatch = externalSources.find(s => normalize(s.name).includes(normalize(trueWindowTitle)) || normalize(trueWindowTitle).includes(normalize(s.name)));
                 if (partialMatch) {
-                    console.log(`[GRISHA VISION] ✅ Partial Title Match: "${partialMatch.name}" matches "${trueWindowTitle}"`);
+                    // console.log(`[GRISHA VISION] ✅ Partial Title Match: "${partialMatch.name}" matches "${trueWindowTitle}"`);
                     this.selectSource(partialMatch.id, partialMatch.name);
                     return true;
                 }
@@ -230,7 +234,7 @@ export class GrishaVisionService extends EventEmitter {
         }
 
         // --- STRATEGY 2: Fuzzy Title Matching (Fallback) ---
-        console.log(`[GRISHA VISION] ⚠️ Title Lookup failed, falling back to title matching...`);
+        // console.log(`[GRISHA VISION] ⚠️ Title Lookup failed, falling back to title matching...`);
 
         const searchTerms = [target, ...(ALIASES[target] || []).map(s => normalize(s))];
 
@@ -264,12 +268,12 @@ export class GrishaVisionService extends EventEmitter {
         }
 
         if (matched) {
-            console.log(`[GRISHA VISION] ✅ Found window via Title: "${matched.name}" (matched for "${appName}")`);
+            // console.log(`[GRISHA VISION] ✅ Found window via Title: "${matched.name}" (matched for "${appName}")`);
             this.selectSource(matched.id, matched.name);
             return true;
         }
 
-        console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}".`);
+        getTrinity().talk('GRISHA', `Не можу знайти вікно "${appName}".`, `Window not found for: "${appName}".`);
         return false;
     }
 
@@ -279,7 +283,7 @@ export class GrishaVisionService extends EventEmitter {
     clearSourceSelection() {
         this.selectedSourceId = null;
         this.selectedSourceName = null;
-        console.log('[GRISHA VISION] 🖥️ Using full screen capture');
+        getTrinity().talk('GRISHA', 'Дивлюсь на весь екран.', 'Using full screen capture');
     }
 
     /**
@@ -289,7 +293,8 @@ export class GrishaVisionService extends EventEmitter {
         if (this.isObserving) return;
 
         const currentMode = this.mode;
-        console.log(`[GRISHA VISION] 👁️ Starting observation [${currentMode.toUpperCase()}]...`);
+        getTrinity().talk('GRISHA', 'Починаю спостереження.', `Starting observation [${currentMode.toUpperCase()}]`);
+
         this.isObserving = true;
         this.frameCount = 0;
 
@@ -311,7 +316,7 @@ export class GrishaVisionService extends EventEmitter {
     stopObservation() {
         if (!this.isObserving) return;
 
-        console.log(`[GRISHA VISION] 👁️ Observation stopped after ${this.frameCount} frames`);
+        // console.log(`[GRISHA VISION] 👁️ Observation stopped after ${this.frameCount} frames`);
         this.isObserving = false;
         this.isSpeaking = false;
         this.isPaused = false;
@@ -330,7 +335,7 @@ export class GrishaVisionService extends EventEmitter {
     pauseCapture() {
         if (!this.isPaused) {
             this.isPaused = true;
-            console.log('[GRISHA VISION] ⏸️ Capture paused');
+            // console.log('[GRISHA VISION] ⏸️ Capture paused');
         }
     }
 
@@ -340,7 +345,7 @@ export class GrishaVisionService extends EventEmitter {
     resumeCapture() {
         if (this.isPaused) {
             this.isPaused = false;
-            console.log('[GRISHA VISION] ▶️ Capture resumed');
+            // console.log('[GRISHA VISION] ▶️ Capture resumed');
             // Send immediate frame on resume for verification
             if (this.mode === 'live') {
                 this.captureAndSendLiveFrame();
@@ -356,7 +361,8 @@ export class GrishaVisionService extends EventEmitter {
      * Verify a step was executed
      */
     async verifyStep(stepAction: string, stepDetails?: string, globalContext?: string, targetApp?: string): Promise<VisionObservationResult> {
-        console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
+
+        getTrinity().talk('GRISHA', 'Перевіряю виконання...', `Verifying step: ${stepAction}`);
 
         // If ON-DEMAND mode, run directly
         if (this.mode === 'on-demand') {
@@ -384,7 +390,8 @@ export class GrishaVisionService extends EventEmitter {
             // Timeout with FALLBACK
             setTimeout(async () => {
                 cleanup();
-                console.warn('[GRISHA VISION] ⚠️ Verification timeout (Live Mode). Falling back to On-Demand verification...');
+
+                getTrinity().talk('GRISHA', 'Gemini Live не відповідає, переключаюсь на ручну перевірку...', 'Verification timeout (Live Mode). Falling back to On-Demand verification...');
 
                 try {
                     // FALLBACK: Try GPT-4o / Copilot analysis as backup
@@ -423,28 +430,23 @@ export class GrishaVisionService extends EventEmitter {
             }
 
             const visibilityPrompt = `
-АНАЛІЗ ВИДИМОСТІ:
-Завдання: "${stepAction}"
-Об'єкт/вікно для пошуку: "${objectName}"
+ANALYZE VISIBILITY:
+Task: "${stepAction}"
+Target Object/Window: "${objectName}"
 
-ВАЖЛИВО:
-- Ігноруй текстові логи, консоль або чат, де написано про цей об'єкт.
-- Ти повинен бачити САМ ІНТЕРФЕЙС програми (кнопки, поля, вікно).
-- Якщо ти бачиш тільки текст "Calculator opened" або подібне в логах - це invisible.
-- Якщо вікно перекрито іншим (наприклад ATLAS KONTUR) - це invisible.
+CRITICAL:
+- Ignore text logs or chat windows. Look for the ACTUAL APP INTERFACE (buttons, inputs).
+- If you only see text "Calculator opened" in a terminal -> INVISIBLE.
+- If obscured -> INVISIBLE.
 
-ВІДПОВІДЬ НА ПИТАННЯ:
-1. Чи бачиш ти ІНТЕРФЕЙС програми "${objectName}"?
-2. Якщо так - опиши як він виглядає (колір, елементи)?
-3. Якщо ні - що саме перекриває його?
-
-Формат відповіді JSON:
+OUTPUT FORMAT:
+Return valid JSON:
 {
-  "visible": true/false,
-  "location": "опис де знаходиться" або null,
-  "screen_content": "що видно на екрані",
-  "is_obscured_by_atlas": true/false
-}`;
+  "visible": boolean,
+  "description": "string (what you see)",
+  "message_ua": "string (Ukrainian description for user)"
+}
+`;
 
             const response = await router.analyzeVision({
                 image: base64Image,
@@ -457,47 +459,27 @@ export class GrishaVisionService extends EventEmitter {
             try {
                 const analysis = response.analysis;
                 const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+
+                let visible = false;
+                let message = `Не бачу "${objectName}".`;
+
                 if (jsonMatch) {
                     const parsed = JSON.parse(jsonMatch[0]);
-                    const visible = parsed.visible === true;
-
-                    if (visible) {
-                        const location = parsed.location || 'на екрані';
-                        return {
-                            visible: true,
-                            message: `Бачу "${objectName}" ${location}`
-                        };
-                    } else {
-                        const screenContent = parsed.screen_content || 'інший вміст';
-                        return {
-                            visible: false,
-                            message: `Не бачу "${objectName}" на екрані. Видно: ${screenContent}`
-                        };
-                    }
+                    visible = parsed.visible === true;
+                    message = parsed.message_ua || parsed.description;
+                } else {
+                    // Fallback heuristics
+                    const analysisLower = analysis.toLowerCase();
+                    if (analysisLower.includes('visible') || analysisLower.includes('true')) visible = true;
+                    message = analysis;
                 }
+
+                return { visible, message };
+
             } catch (parseErr) {
-                console.warn('[GRISHA VISION] Could not parse visibility JSON, analyzing text:', response.analysis);
+                // console.warn('[GRISHA VISION] Could not parse visibility JSON, analyzing text:', response.analysis);
+                return { visible: false, message: response.analysis };
             }
-
-            // Fallback: analyze text response
-            const analysisLower = response.analysis.toLowerCase();
-            const positiveIndicators = ['бачу', 'yes', 'visible', 'відкрито', 'opened', 'present'];
-            const negativeIndicators = ['не бачу', 'no', 'not visible', 'закрито', 'hidden', 'absent', 'missing'];
-
-            const hasPositive = positiveIndicators.some(ind => analysisLower.includes(ind));
-            const hasNegative = negativeIndicators.some(ind => analysisLower.includes(ind));
-
-            if (hasNegative || !hasPositive) {
-                return {
-                    visible: false,
-                    message: `Не бачу "${objectName}" на екрані. ${response.analysis.slice(0, 100)}`
-                };
-            }
-
-            return {
-                visible: true,
-                message: `Бачу "${objectName}". ${response.analysis.slice(0, 100)}`
-            };
 
         } catch (error: any) {
             console.error('[GRISHA VISION] Visibility check failed:', error);
@@ -520,11 +502,12 @@ export class GrishaVisionService extends EventEmitter {
             }
 
             // STEP 1: Check if object is visible
-            console.log('[GRISHA VISION] 👁️ Checking object visibility first...');
+            // console.log('[GRISHA VISION] 👁️ Checking object visibility first...');
             const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image, targetApp);
 
             if (!visibilityCheck.visible) {
-                console.warn(`[GRISHA VISION] ⚠️ Object not visible: ${visibilityCheck.message}`);
+                getTrinity().talk('GRISHA', `Не бачу потрібного об'єкта. ${visibilityCheck.message}`, `Object not visible: ${visibilityCheck.message}`);
+
                 const result: VisionObservationResult = {
                     type: 'alert',
                     message: visibilityCheck.message,
@@ -537,31 +520,30 @@ export class GrishaVisionService extends EventEmitter {
                 return result;
             }
 
-            console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
+            // console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
 
-            // STEP 2: Simple verification with 3 components
+            // STEP 2: Verify Action
             const router = getProviderRouter();
-
-            // Build execution history from previous steps (passed via stepDetails)
-            // Format: "Крок N: action {args}" - extract step number and previous completed steps
-            const stepMatch = stepDetails?.match(/Крок (\d+)/);
-            const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
 
             const verificationPrompt = `
 STEP VERIFICATION
-
 Action performed: "${stepAction}"
 Details: ${stepDetails || 'none'}
 Target: ${targetApp || 'screen'}
 ${globalContext ? `Goal: "${globalContext}"` : ''}
 
-Look at the screenshot and verify:
+Verify:
 1. Did this action complete successfully?
 2. Is the result correct?
 
-Respond in Ukrainian:
-- Success: "ВЕРИФІКОВАНО: [what you see]"
-- Failure: "ПОМИЛКА: [what went wrong]"
+OUTPUT FORMAT:
+Return valid JSON:
+{
+  "verified": boolean,
+  "confidence": number (0-1),
+  "analysis": "string (technical reasoning)",
+  "message_ua": "string (Ukrainian report for user. Start with 'ВЕРИФІКОВАНО:' or 'ПОМИЛКА:')"
+}
 `;
 
             const response = await router.analyzeVision({
@@ -573,19 +555,34 @@ Respond in Ukrainian:
 
             this.frameCount++;
 
+            let verified = response.verified;
+            let message = response.analysis;
+            let confidence = response.confidence;
+
+            // Try parse JSON
+            const jsonMatch = response.analysis.match(/\{[\s\S]*\}/);
+            if (jsonMatch) {
+                try {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    verified = parsed.verified === true;
+                    message = parsed.message_ua || parsed.analysis;
+                    confidence = parsed.confidence || 0.8;
+                } catch (e) { }
+            }
+
+            getTrinity().talk('GRISHA', message, `Verification result: ${verified}`);
+
             const result: VisionObservationResult = {
-                type: response.verified ? 'verification' : 'alert',
-                message: response.analysis,
-                verified: response.verified,
-                confidence: response.confidence,
+                type: verified ? 'verification' : 'alert',
+                message: message,
+                verified: verified,
+                confidence: confidence,
                 anomalies: response.anomalies,
                 timestamp: Date.now(),
                 mode: 'on-demand'
             };
 
             this.emit('observation', result);
-            console.log(`[GRISHA VISION] ${response.verified ? '✅' : '⚠️'} Step verified (On-Demand): ${response.analysis.slice(0, 100)}`);
-
             return result;
 
         } catch (error: any) {
@@ -625,7 +622,7 @@ Respond in Ukrainian:
                         s.name.toLowerCase().includes(this.selectedSourceName!.toLowerCase())
                     );
                     if (source && source.id !== targetId) {
-                        console.log(`[GRISHA VISION] 🔄 Source ID changed for "${this.selectedSourceName}": ${targetId} -> ${source.id}`);
+                        // console.log(`[GRISHA VISION] 🔄 Source ID changed for "${this.selectedSourceName}": ${targetId} -> ${source.id}`);
                         this.selectedSourceId = source.id;
                     }
                 }
@@ -700,7 +697,9 @@ Respond in Ukrainian:
      */
     private async notifyActionLive(action: string, details: string) {
         if (this.geminiLive?.sendText) {
-            console.log(`[GRISHA VISION] 🗣️ Prompting verification: ${action}`);
+            // console.log(`[GRISHA VISION] 🗣️ Prompting verification: ${action}`);
+            getTrinity().talk('GRISHA', 'Дивлюсь...', `Prompting verification: ${action}`);
+
             this.geminiLive.sendText(`Система: Виконано дію "${action}" (${details}). Підтвердь словом "Виконано" або повідом про помилку.`);
 
             // Also send a fresh frame
@@ -729,7 +728,8 @@ Respond in Ukrainian:
             mode: 'live'
         };
 
-        console.log(`[GRISHA VISION] 🔍 ${resultType.toUpperCase()}: ${text}`);
+        // console.log(`[GRISHA VISION] 🔍 ${resultType.toUpperCase()}: ${text}`);
+        getTrinity().talk('GRISHA', text, `Live Response: ${text}`);
         this.emit('observation', result);
     }
 
@@ -773,3 +773,4 @@ export function getGrishaVisionService(): GrishaVisionService {
     }
     return visionServiceInstance;
 }
+
