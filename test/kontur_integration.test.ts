@@ -5,7 +5,7 @@ import { synapse } from '../src/kontur/synapse';
 import { AtlasCapsule } from '../src/modules/atlas/index';
 import { TetyanaCapsule } from '../src/modules/tetyana/index';
 import { GrishaCapsule } from '../src/modules/grisha/index';
-import { VoiceCapsule } from '../src/modules/voice/index'; // Or Ghost if voice logic is simple
+import { VoiceCapsule } from '../src/kontur/voice/VoiceCapsule'; // KONTUR 2.0 Native Capsule
 
 // Use Ghosts for Dependencies (Data/IO)
 import { MemoryGhost } from '../src/modules/memory/ghost';
