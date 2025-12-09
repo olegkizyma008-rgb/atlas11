@@ -145,7 +145,8 @@ Return JSON:
                 headers: {
                     'Authorization': `Bearer ${sessionToken}`,
                     'Content-Type': 'application/json',
-                    'Editor-Version': 'vscode/1.85.0'
+                    'Editor-Version': 'vscode/1.85.0',
+                    'Copilot-Vision-Request': 'true' // REQUIRED for vision!
                 },
                 body: JSON.stringify({
                     model: this.model,
