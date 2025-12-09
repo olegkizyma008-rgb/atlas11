@@ -417,6 +417,10 @@ class Core extends events.EventEmitter {
     // Grisha needs root to post events
     ["kontur://organ/tetyana", SecurityScope.SYSTEM],
     ["kontur://organ/grisha", SecurityScope.SYSTEM],
+    ["kontur://organ/reasoning", SecurityScope.SYSTEM],
+    // Reasoning Organ (Gemini 3)
+    ["kontur://organ/vision", SecurityScope.SYSTEM],
+    // Vision Organ (Grisha's Eyes)
     ["kontur://organ/mcp/filesystem", SecurityScope.SYSTEM],
     ["kontur://organ/mcp/os", SecurityScope.SYSTEM],
     ["kontur://organ/atlas", SecurityScope.ROOT],
@@ -3304,13 +3308,24 @@ class GrishaVisionService extends events.EventEmitter {
    */
   async autoSelectSource(appName) {
     const sources = await this.getSources();
-    const matched = sources.find(
-      (s) => s.name.toLowerCase().includes(appName.toLowerCase())
+    const externalSources = sources.filter(
+      (s) => !s.name.toLowerCase().includes("electron") && !s.name.toLowerCase().includes("atlas") && !s.name.toLowerCase().includes("kontur")
     );
+    console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
+    let matched = externalSources.find(
+      (s) => s.name.toLowerCase() === appName.toLowerCase()
+    );
+    if (!matched) {
+      matched = externalSources.find(
+        (s) => s.name.toLowerCase().includes(appName.toLowerCase())
+      );
+    }
     if (matched) {
+      console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}"`);
       this.selectSource(matched.id, matched.name);
       return true;
     }
+    console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}". Available: ${externalSources.map((s) => s.name).join(", ")}`);
     return false;
   }
   /**
@@ -4676,38 +4691,33 @@ Assess system security threats. Return JSON: { threats: string[], level: 'low'|'
   }
 }
 class ReasoningCapsule {
-  client;
   core;
   lastThoughtSignature;
-  constructor(apiKey) {
-    this.client = new genai.GoogleGenAI({ apiKey });
-    console.log("🧠 REASONING: ReasoningCapsule (Gemini 3) initialized.");
+  constructor() {
+    const config2 = getProviderConfig("reasoning");
+    console.log(`🧠 REASONING: ReasoningCapsule initialized with ${config2.provider} / ${config2.model}`);
   }
   register(core) {
     this.core = core;
   }
   /**
    * Think deeply about a problem.
-   * @param prompt The complex query or code snippet
-   * @param level 'low' | 'high' (default 'high')
+   * Uses the configured reasoning provider (Copilot, Gemini 3, etc.)
    */
   async think(prompt, level = "high") {
     console.log(`🧠 REASONING: Thinking about "${prompt.substring(0, 50)}..." (Level: ${level})`);
     try {
-      const model = "gemini-3-pro-preview";
-      const config2 = {
-        thinkingConfig: {
-          thinkingLevel: level
-        }
-      };
-      const result = await this.client.models.generateContent({
-        model,
-        contents: [{
-          parts: [{ text: prompt }]
-        }],
-        config: config2
+      const router2 = getProviderRouter();
+      const config2 = getProviderConfig("reasoning");
+      const response = await router2.generateLLM("reasoning", {
+        prompt,
+        systemPrompt: `You are a deep reasoning engine. Think step-by-step and provide thorough analysis.
+Level: ${level === "high" ? "Deep, multi-step reasoning" : "Quick, efficient analysis"}`,
+        model: config2.model,
+        temperature: level === "high" ? 0.3 : 0.5,
+        maxTokens: 4096
       });
-      const text = result.text || "";
+      const text = response.text || "";
       console.log(`🧠 REASONING: Thought complete. Length: ${text.length}`);
       return text;
     } catch (error) {
@@ -4733,8 +4743,8 @@ class ReasoningCapsule {
     }
   }
 }
-function createReasoningCapsule(apiKey) {
-  return new ReasoningCapsule(apiKey);
+function createReasoningCapsule() {
+  return new ReasoningCapsule();
 }
 const memories = sqliteCore.sqliteTable("memories", {
   id: sqliteCore.text("id").primaryKey(),
@@ -5367,10 +5377,16 @@ class DeepIntegrationSystem {
         setTimeout(async () => {
           try {
             const sources = await this.grishaVision.getSources();
-            const primaryScreen = sources.find((s) => s.name.includes("Screen") || s.name.includes("Entire"));
+            const externalSources = sources.filter(
+              (s) => !s.name.toLowerCase().includes("electron") && !s.name.toLowerCase().includes("atlas") && !s.name.toLowerCase().includes("kontur")
+            );
+            const primaryScreen = externalSources.find((s) => s.name.includes("Screen") || s.name.includes("Entire"));
             if (primaryScreen) {
               this.grishaVision.selectSource(primaryScreen.id, primaryScreen.name);
               console.log("[DEEP-INTEGRATION] 🖥️ Auto-selected default source:", primaryScreen.name);
+            } else if (externalSources.length > 0) {
+              this.grishaVision.selectSource(externalSources[0].id, externalSources[0].name);
+              console.log("[DEEP-INTEGRATION] 🖥️ Fallback to first available:", externalSources[0].name);
             }
           } catch (e) {
             console.warn("[DEEP-INTEGRATION] Failed to auto-select default source");
@@ -5632,8 +5648,8 @@ class DeepIntegrationSystem {
     this.atlas = new AtlasCapsule(this.memory, this.brain);
     this.tetyana = new TetyanaCapsule(this.forge, this.voiceCapsule, this.brain, this.core);
     this.grisha = new GrishaCapsule(this.brain, this.core);
-    this.reasoning = createReasoningCapsule(deepThinkingKey);
-    console.log("[DEEP-INTEGRATION] 🧠 Reasoning Capsule (Gemini 3) created");
+    this.reasoning = createReasoningCapsule();
+    console.log("[DEEP-INTEGRATION] 🧠 Reasoning Capsule initialized (uses configured provider)");
     this.unifiedBrain.setAtlasBrain(this.brain);
     this.unifiedBrain.setAtlasOrgan(this.atlas);
     console.log("[DEEP-INTEGRATION] ✅ Atlas Capsules initialized");
