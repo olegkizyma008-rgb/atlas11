@@ -97,6 +97,7 @@ export class GrishaCapsule implements GrishaAPI {
                 }
             );
             response.route.reply_to = originalPacket.route.reply_to;
+            response.nexus.correlation_id = originalPacket.nexus.correlation_id; // CRITICAL: Preserve correlation ID for Tetyana
             this.core.ingest(response);
             console.log(`[GRISHA] 🛡️ Verdict Sent: ${allowed ? 'APPROVED' : 'DENIED'} for ${originalPacket.payload.action}`);
         }

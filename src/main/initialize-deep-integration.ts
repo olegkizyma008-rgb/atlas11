@@ -216,17 +216,21 @@ export class DeepIntegrationSystem {
         try {
           const result = await this.unifiedBrain.executeTool(tool, args); // Use unifiedBrain methods
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               'kontur://organ/mcp/filesystem', packet.route.reply_to, PacketIntent.RESPONSE,
               { msg: `MCP Logic Executed. Result: ${JSON.stringify(result)}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id; // Preserve ID
+            this.core.ingest(response);
           }
         } catch (e: any) {
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               'kontur://organ/mcp/filesystem', packet.route.reply_to, PacketIntent.ERROR,
               { error: e.message, msg: `Failed: ${e.message}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id; // Preserve ID
+            this.core.ingest(response);
           }
         }
       }
@@ -240,17 +244,21 @@ export class DeepIntegrationSystem {
         try {
           const result = await this.unifiedBrain.executeTool(tool, args);
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               'kontur://organ/mcp/os', packet.route.reply_to, PacketIntent.RESPONSE,
               { msg: `OS Command Executed: ${JSON.stringify(result)}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id; // Preserve ID
+            this.core.ingest(response);
           }
         } catch (e: any) {
           if (packet.route.reply_to) {
-            this.core.ingest(createPacket(
+            const response = createPacket(
               'kontur://organ/mcp/os', packet.route.reply_to, PacketIntent.ERROR,
               { error: e.message, msg: `Failed: ${e.message}` }
-            ));
+            );
+            response.nexus.correlation_id = packet.nexus.correlation_id; // Preserve ID
+            this.core.ingest(response);
           }
         }
       }
@@ -498,8 +506,11 @@ export class DeepIntegrationSystem {
     // 5. Register Reasoning Capsule (The Deep Thinker)
     if (this.reasoning) {
       const reasoningUrn = 'kontur://organ/reasoning';
-      this.core.register(reasoningUrn, async (packet) => {
-        return this.reasoning?.handlePacket(packet);
+      this.core.register(reasoningUrn, {
+        send: async (packet: any) => {
+          return this.reasoning?.handlePacket(packet);
+        },
+        isAlive: () => true
       });
 
       // Let it know about Core if needed
