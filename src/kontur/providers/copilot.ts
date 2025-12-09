@@ -110,10 +110,12 @@ export class VSCodeCopilotProvider implements ILLMProvider {
                 throw new Error(`Failed to authenticate with Copilot: ${tokenResponse.status}`);
             }
 
-            const { token: sessionToken } = await tokenResponse.json();
+            const tokenData = await tokenResponse.json();
+            const sessionToken = tokenData.token;
+            const apiEndpoint = tokenData.endpoints?.api || 'https://api.githubcopilot.com';
 
-            // Step 2: Chat Completion
-            const response = await fetch('https://api.githubcopilot.com/chat/completions', {
+            // Step 2: Chat Completion (using dynamic endpoint from token)
+            const response = await fetch(`${apiEndpoint}/chat/completions`, {
                 method: 'POST',
                 headers: {
                     'Authorization': `Bearer ${sessionToken}`,
