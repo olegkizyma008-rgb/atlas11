@@ -180,6 +180,20 @@ export class DeepIntegrationSystem {
         (global as any).grishaObserver = this.grishaVision;
 
         console.log('[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active');
+
+        // Auto-select primary screen on startup so UI shows something by default
+        setTimeout(async () => {
+          try {
+            const sources = await this.grishaVision.getSources();
+            const primaryScreen = sources.find((s: any) => s.name.includes('Screen') || s.name.includes('Entire'));
+            if (primaryScreen) {
+              this.grishaVision.selectSource(primaryScreen.id, primaryScreen.name);
+              console.log('[DEEP-INTEGRATION] 🖥️ Auto-selected default source:', primaryScreen.name);
+            }
+          } catch (e) {
+            console.warn('[DEEP-INTEGRATION] Failed to auto-select default source');
+          }
+        }, 2000); // Delay to allow UI to initialize
       } catch (error) {
         console.error('[DEEP-INTEGRATION] Failed to init Gemini Live:', error);
       }
