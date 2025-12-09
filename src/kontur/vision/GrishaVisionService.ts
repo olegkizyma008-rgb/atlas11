@@ -548,36 +548,36 @@ export class GrishaVisionService extends EventEmitter {
             const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
 
             const verificationPrompt = `
-АНАЛІЗ ВИКОНАННЯ КРОКУ
+STEP EXECUTION ANALYSIS
 
 ═══════════════════════════════════════════════════════
-📍 КОМПОНЕНТ 1: ЩО ЩОЙНО ЗРОБИЛА ТЕТЯНА
-Дія: "${stepAction}"
-Деталі: ${stepDetails || 'немає'}
-Цільова програма: ${targetApp || 'невідома'}
+📍 COMPONENT 1: WHAT TETYANA JUST DID
+Action: "${stepAction}"
+Details: ${stepDetails || 'none'}
+Target Application: ${targetApp || 'unknown'}
 ═══════════════════════════════════════════════════════
 
-📍 КОМПОНЕНТ 2: ЩО ТИ БАЧИШ НА ЕКРАНІ
-Проаналізуй скріншот. Опиши що РЕАЛЬНО видно.
-
-═══════════════════════════════════════════════════════
-
-📍 КОМПОНЕНТ 3: ГЛОБАЛЬНА МЕТА
-${globalContext ? `"${globalContext}"` : 'Не задана.'}
+📍 COMPONENT 2: WHAT YOU SEE ON SCREEN
+Analyze the screenshot. Describe what is ACTUALLY visible.
 
 ═══════════════════════════════════════════════════════
 
-🎯 ПРЯМЕ ЗАПИТАННЯ:
-Чи виконано крок "${stepAction}" успішно?
+📍 COMPONENT 3: GLOBAL GOAL
+${globalContext ? `"${globalContext}"` : 'Not specified.'}
 
-Порівняй:
-- Що МАЛО статися (Компонент 1)
-- Що РЕАЛЬНО сталося (Компонент 2)
-- Чи це наближає до мети (Компонент 3)
+═══════════════════════════════════════════════════════
 
-ВІДПОВІДЬ:
-Якщо ТАК — напиши "ВЕРИФІКОВАНО: [короткий опис]"
-Якщо НІ — напиши "ПОМИЛКА: [причина]"
+🎯 DIRECT QUESTION:
+Was step "${stepAction}" executed successfully?
+
+Compare:
+- What SHOULD have happened (Component 1)
+- What ACTUALLY happened (Component 2)
+- Does this move toward the goal (Component 3)
+
+ANSWER (respond in Ukrainian):
+If YES — write "ВЕРИФІКОВАНО: [brief description]"
+If NO — write "ПОМИЛКА: [reason]"
 `;
 
             const response = await router.analyzeVision({
