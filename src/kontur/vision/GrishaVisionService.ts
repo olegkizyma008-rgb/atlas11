@@ -355,12 +355,12 @@ export class GrishaVisionService extends EventEmitter {
     /**
      * Verify a step was executed
      */
-    async verifyStep(stepAction: string, stepDetails?: string, globalContext?: string): Promise<VisionObservationResult> {
+    async verifyStep(stepAction: string, stepDetails?: string, globalContext?: string, targetApp?: string): Promise<VisionObservationResult> {
         console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
 
         // If ON-DEMAND mode, run directly
         if (this.mode === 'on-demand') {
-            return this.verifyStepOnDemand(stepAction, stepDetails, globalContext);
+            return this.verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp);
         }
 
         // Live mode with fallback
@@ -388,7 +388,7 @@ export class GrishaVisionService extends EventEmitter {
 
                 try {
                     // FALLBACK: Try GPT-4o / Copilot analysis as backup
-                    const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails, globalContext);
+                    const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails, globalContext, targetApp);
                     resolve(fallbackResult);
                 } catch (e) {
                     resolve({
@@ -407,16 +407,20 @@ export class GrishaVisionService extends EventEmitter {
      * Check if an object/window is visible on screen
      * Returns visibility check result
      */
-    private async checkObjectVisibility(stepAction: string, base64Image: string): Promise<{ visible: boolean, message: string }> {
+    private async checkObjectVisibility(stepAction: string, base64Image: string, explicitTarget?: string): Promise<{ visible: boolean, message: string }> {
         try {
             const router = getProviderRouter();
 
-            // Extract object/app name from step action
-            const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
-            // Use matched name, or selected source name, or the action itself
-            const objectName = objectMatch
-                ? objectMatch[1].trim()
-                : (this.selectedSourceName || stepAction);
+            // Use explicit target if available, otherwise try to extract
+            let objectName = explicitTarget;
+
+            if (!objectName) {
+                // Extract object/app name from step action
+                const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
+                objectName = objectMatch
+                    ? objectMatch[1].trim()
+                    : (this.selectedSourceName || stepAction);
+            }
 
             const visibilityPrompt = `
 АНАЛІЗ ВИДИМОСТІ:
@@ -508,7 +512,7 @@ export class GrishaVisionService extends EventEmitter {
      * Private: On-Demand Verification Logic
      * NOW WITH VISIBILITY CHECK FIRST AND GLOBAL CONTEXT
      */
-    private async verifyStepOnDemand(stepAction: string, stepDetails?: string, globalContext?: string): Promise<VisionObservationResult> {
+    private async verifyStepOnDemand(stepAction: string, stepDetails?: string, globalContext?: string, targetApp?: string): Promise<VisionObservationResult> {
         try {
             const base64Image = await this.captureFrame();
             if (!base64Image) {
@@ -517,7 +521,7 @@ export class GrishaVisionService extends EventEmitter {
 
             // STEP 1: Check if object is visible
             console.log('[GRISHA VISION] 👁️ Checking object visibility first...');
-            const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image);
+            const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image, targetApp);
 
             if (!visibilityCheck.visible) {
                 console.warn(`[GRISHA VISION] ⚠️ Object not visible: ${visibilityCheck.message}`);
@@ -542,13 +546,17 @@ export class GrishaVisionService extends EventEmitter {
                 ? `ГЛОБАЛЬНА МЕТА КОРИСТУВАЧА: "${globalContext}".\nПеревір, чи крок наближає нас до цієї мети.\n\n`
                 : '';
 
+            const targetPrompt = targetApp
+                ? `ЦIЛЬОВА ПРОГРАМА: "${targetApp}" (Вікно має бути активним)\n`
+                : '';
+
             const response = await router.analyzeVision({
                 image: base64Image,
                 mimeType: 'image/jpeg',
                 taskContext: stepAction,
                 prompt: `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
 
-${contextPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ''}
+${contextPrompt}${targetPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ''}
 
 ПЕРЕВІРКА:
 1. Чи виконано цю дію успішно?

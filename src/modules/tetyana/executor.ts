@@ -252,15 +252,63 @@ export class TetyanaExecutor extends EventEmitter {
         const vision = this.visionService || getGrishaVisionService();
 
         try {
+            // Enhanced Context: Explicitly tell Grisha about the target app and human-readable action
+            const humanReadable = this.getHumanReadableAction(step, this.lastActiveApp);
+            const targetApp = this.lastActiveApp || undefined;
+
             const result = await vision.verifyStep(
-                step.action,
+                humanReadable,
                 `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`,
-                this.currentPlan ? this.currentPlan.goal : undefined
+                this.currentPlan ? this.currentPlan.goal : undefined,
+                targetApp
             );
             return result;
         } catch (e) {
             console.warn('[TETYANA] Vision verification failed:', e);
             return null;
+        }
+    }
+
+    /**
+     * Helper: Convert PlanStep to Human Readable String
+     */
+    private getHumanReadableAction(step: PlanStep, targetApp: string | null): string {
+        try {
+            const args = step.args || {};
+            const app = targetApp || args.appName || args.app || "Application";
+
+            switch (step.action.toLowerCase()) {
+                case 'input':
+                case 'type':
+                    if (args.arg1 === '=') return `Press '=' in ${app}`;
+                    if (args.arg1 && args.arg1.length === 1 && /[^a-zA-Z0-9]/.test(args.arg1)) {
+                        return `Type Symbol '${args.arg1}' in ${app}`;
+                    }
+                    if (args.text || args.arg1) {
+                        return `Type '${args.text || args.arg1}' in ${app}`;
+                    }
+                    return `Type in ${app}`;
+
+                case 'launch':
+                case 'open':
+                case 'open_application':
+                    return `Open ${app}`;
+
+                case 'click':
+                    if (args.element) return `Click ${args.element} in ${app}`;
+                    if (args.text) return `Click text '${args.text}' in ${app}`;
+                    return `Click in ${app}`;
+
+                case 'press':
+                case 'hotkey':
+                    return `Press Hotkey ${args.keys || args.key || args.arg1} in ${app}`;
+
+                default:
+                    // Default fallback
+                    return `${step.action} in ${app}`;
+            }
+        } catch (e) {
+            return step.action;
         }
     }
 

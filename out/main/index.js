@@ -3524,10 +3524,10 @@ class GrishaVisionService extends events.EventEmitter {
   /**
    * Verify a step was executed
    */
-  async verifyStep(stepAction, stepDetails) {
+  async verifyStep(stepAction, stepDetails, globalContext) {
     console.log(`[GRISHA VISION] 🔍 Verifying step: ${stepAction}`);
     if (this.mode === "on-demand") {
-      return this.verifyStepOnDemand(stepAction, stepDetails);
+      return this.verifyStepOnDemand(stepAction, stepDetails, globalContext);
     }
     return new Promise(async (resolve) => {
       await this.notifyActionLive(stepAction, stepDetails || "");
@@ -3545,7 +3545,7 @@ class GrishaVisionService extends events.EventEmitter {
         cleanup();
         console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode). Falling back to On-Demand verification...");
         try {
-          const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails);
+          const fallbackResult = await this.verifyStepOnDemand(stepAction, stepDetails, globalContext);
           resolve(fallbackResult);
         } catch (e) {
           resolve({
@@ -3645,9 +3645,9 @@ class GrishaVisionService extends events.EventEmitter {
   }
   /**
    * Private: On-Demand Verification Logic
-   * NOW WITH VISIBILITY CHECK FIRST
+   * NOW WITH VISIBILITY CHECK FIRST AND GLOBAL CONTEXT
    */
-  async verifyStepOnDemand(stepAction, stepDetails) {
+  async verifyStepOnDemand(stepAction, stepDetails, globalContext) {
     try {
       const base64Image = await this.captureFrame();
       if (!base64Image) {
@@ -3671,15 +3671,25 @@ class GrishaVisionService extends events.EventEmitter {
       }
       console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
       const router2 = getProviderRouter();
+      const contextPrompt = globalContext ? `ГЛОБАЛЬНА МЕТА КОРИСТУВАЧА: "${globalContext}".
+Перевір, чи крок наближає нас до цієї мети.
+
+` : "";
       const response = await router2.analyzeVision({
         image: base64Image,
         mimeType: "image/jpeg",
         taskContext: stepAction,
         prompt: `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
 
-Тепер перевір виконання кроку: "${stepAction}". ${stepDetails || ""}
+${contextPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ""}
 
-Чи виконано цю дію успішно? Що саме змінилось або відбулось?`
+ПЕРЕВІРКА:
+1. Чи виконано цю дію успішно?
+2. Який результат ти бачиш? (числа, текст, стан вікна).
+3. Чи відповідає цей результат очікуванням глобальної мети (якщо задана)?
+
+Якщо дія виконана правильно - відповідай "ВЕРИФІКОВАНО: [деталі]".
+Якщо є помилка або невідповідність меті - відповідай "ПОМИЛКА: [причина]".`
       });
       this.frameCount++;
       const result = {
@@ -4028,7 +4038,8 @@ class TetyanaExecutor extends events.EventEmitter {
     try {
       const result = await vision.verifyStep(
         step.action,
-        `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`
+        `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`,
+        this.currentPlan ? this.currentPlan.goal : void 0
       );
       return result;
     } catch (e) {
@@ -4285,7 +4296,7 @@ class TetyanaCapsule {
         user_response_ua: packet.payload.user_response_ua,
         status: "pending"
       };
-      this.executor.execute(plan);
+      this.executor.execute(plan, packet);
       return;
     }
     if (packet.instruction.intent === PacketIntent.RESPONSE || packet.instruction.intent === PacketIntent.ERROR) {
