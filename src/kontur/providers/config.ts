@@ -1,9 +1,9 @@
 /**
  * Provider Config - Reads provider configuration from environment
- * Supports Vision mode (live vs on-demand)
+ * Supports Vision with separate Live and On-Demand configurations
  */
 
-import { ProviderName, ServiceType, ProviderConfig, VisionConfig, VisionMode, ServiceConfig } from './types';
+import { ProviderName, ServiceType, ProviderConfig, VisionConfig, VisionMode, VisionModeConfig, ServiceConfig } from './types';
 
 // Default configurations for standard services
 const DEFAULTS: Record<Exclude<ServiceType, 'vision'>, ProviderConfig> = {
@@ -29,12 +29,17 @@ const DEFAULTS: Record<Exclude<ServiceType, 'vision'>, ProviderConfig> = {
     }
 };
 
-// Vision-specific defaults
-const VISION_DEFAULTS: VisionConfig = {
+// Vision-specific defaults - SEPARATE for Live and On-Demand
+const VISION_LIVE_DEFAULTS: VisionModeConfig = {
     provider: 'gemini',
-    fallbackProvider: 'copilot',
-    model: 'gemini-2.5-flash-native-audio-preview-09-2025',
-    mode: 'live' // Default to Gemini Live streaming
+    fallbackProvider: undefined, // Live is Gemini-only for now
+    model: 'gemini-2.5-flash-native-audio-preview-09-2025'
+};
+
+const VISION_ONDEMAND_DEFAULTS: VisionModeConfig = {
+    provider: 'copilot',
+    fallbackProvider: 'gemini',
+    model: 'gpt-4o'
 };
 
 /**
@@ -42,8 +47,10 @@ const VISION_DEFAULTS: VisionConfig = {
  */
 export function getProviderConfig(service: ServiceType): ProviderConfig {
     if (service === 'vision') {
-        // For vision, return base config (use getVisionConfig for full config)
-        return getVisionConfig();
+        // For vision, return the active mode's config as ProviderConfig
+        const visionConfig = getVisionConfig();
+        const activeConfig = visionConfig.mode === 'live' ? visionConfig.live : visionConfig.onDemand;
+        return activeConfig;
     }
 
     const prefix = service.toUpperCase();
@@ -72,30 +79,42 @@ export function getProviderConfig(service: ServiceType): ProviderConfig {
 }
 
 /**
- * Get Vision-specific configuration with mode support
+ * Get Vision-specific configuration with separate Live and On-Demand settings
  */
 export function getVisionConfig(): VisionConfig {
-    const provider = (process.env.VISION_PROVIDER as ProviderName) || VISION_DEFAULTS.provider;
-    const fallbackProviderRaw = process.env.VISION_FALLBACK_PROVIDER;
-    // Empty string means user explicitly removed fallback
-    const fallbackProvider = fallbackProviderRaw === '' ? undefined : (fallbackProviderRaw as ProviderName) || VISION_DEFAULTS.fallbackProvider;
-    const model = process.env.VISION_MODEL || VISION_DEFAULTS.model;
-    const mode = (process.env.VISION_MODE as VisionMode) || VISION_DEFAULTS.mode;
+    const mode = (process.env.VISION_MODE as VisionMode) || 'live';
 
-    // API Key fallback chain for Vision
-    const apiKey =
-        process.env.VISION_API_KEY ||
-        process.env.GEMINI_LIVE_API_KEY ||
-        process.env.GEMINI_API_KEY ||
-        process.env.GOOGLE_API_KEY ||
-        '';
+    // === LIVE MODE CONFIG ===
+    const liveProviderRaw = process.env.VISION_LIVE_PROVIDER;
+    const liveFallbackRaw = process.env.VISION_LIVE_FALLBACK_PROVIDER;
+
+    const live: VisionModeConfig = {
+        provider: (liveProviderRaw as ProviderName) || VISION_LIVE_DEFAULTS.provider,
+        fallbackProvider: liveFallbackRaw === '' ? undefined : (liveFallbackRaw as ProviderName) || VISION_LIVE_DEFAULTS.fallbackProvider,
+        model: process.env.VISION_LIVE_MODEL || VISION_LIVE_DEFAULTS.model,
+        apiKey: process.env.VISION_LIVE_API_KEY ||
+            process.env.GEMINI_LIVE_API_KEY ||
+            process.env.GEMINI_API_KEY ||
+            process.env.GOOGLE_API_KEY || ''
+    };
+
+    // === ON-DEMAND MODE CONFIG ===
+    const onDemandProviderRaw = process.env.VISION_ONDEMAND_PROVIDER;
+    const onDemandFallbackRaw = process.env.VISION_ONDEMAND_FALLBACK_PROVIDER;
+
+    const onDemand: VisionModeConfig = {
+        provider: (onDemandProviderRaw as ProviderName) || VISION_ONDEMAND_DEFAULTS.provider,
+        fallbackProvider: onDemandFallbackRaw === '' ? undefined : (onDemandFallbackRaw as ProviderName) || VISION_ONDEMAND_DEFAULTS.fallbackProvider,
+        model: process.env.VISION_ONDEMAND_MODEL || VISION_ONDEMAND_DEFAULTS.model,
+        apiKey: process.env.VISION_ONDEMAND_API_KEY ||
+            process.env.COPILOT_API_KEY ||
+            process.env.GEMINI_API_KEY || ''
+    };
 
     return {
-        provider,
-        fallbackProvider,
-        model,
-        apiKey,
-        mode
+        mode,
+        live,
+        onDemand
     };
 }
 
@@ -118,15 +137,21 @@ export function getAllConfigs(): ServiceConfig {
 export function logProviderConfig(): void {
     const configs = getAllConfigs();
     console.log('[PROVIDER CONFIG] Current configuration:');
+
     for (const [service, config] of Object.entries(configs)) {
-        let line = `  ${service}: ${config.provider} (model: ${config.model})`;
-        if (config.fallbackProvider) {
-            line += ` -> fallback: ${config.fallbackProvider}`;
+        if (service === 'vision') {
+            const visionConfig = config as VisionConfig;
+            console.log(`  vision [mode: ${visionConfig.mode}]:`);
+            console.log(`    live: ${visionConfig.live.provider} (${visionConfig.live.model})${visionConfig.live.fallbackProvider ? ` -> fallback: ${visionConfig.live.fallbackProvider}` : ''}`);
+            console.log(`    on-demand: ${visionConfig.onDemand.provider} (${visionConfig.onDemand.model})${visionConfig.onDemand.fallbackProvider ? ` -> fallback: ${visionConfig.onDemand.fallbackProvider}` : ''}`);
+        } else {
+            const providerConfig = config as ProviderConfig;
+            let line = `  ${service}: ${providerConfig.provider} (model: ${providerConfig.model})`;
+            if (providerConfig.fallbackProvider) {
+                line += ` -> fallback: ${providerConfig.fallbackProvider}`;
+            }
+            console.log(line);
         }
-        // Vision-specific mode
-        if (service === 'vision' && 'mode' in config) {
-            line += ` [mode: ${(config as VisionConfig).mode}]`;
-        }
-        console.log(line);
     }
 }
+

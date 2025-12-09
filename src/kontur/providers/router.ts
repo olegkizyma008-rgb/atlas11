@@ -173,15 +173,18 @@ export class ProviderRouter {
     async analyzeVision(request: VisionRequest): Promise<VisionResponse> {
         const visionConfig = getVisionConfig();
 
+        // On-demand mode uses visionConfig.onDemand settings
+        const onDemandConfig = visionConfig.onDemand;
+
         // Try primary provider
-        let provider = this.visionProviders.get(visionConfig.provider);
+        let provider = this.visionProviders.get(onDemandConfig.provider);
 
         if (!provider || !provider.isAvailable()) {
             // Try fallback
-            if (visionConfig.fallbackProvider) {
-                provider = this.visionProviders.get(visionConfig.fallbackProvider);
+            if (onDemandConfig.fallbackProvider) {
+                provider = this.visionProviders.get(onDemandConfig.fallbackProvider);
                 if (provider && provider.isAvailable()) {
-                    console.log(`[PROVIDER ROUTER] 🔄 Using fallback Vision provider: ${visionConfig.fallbackProvider}`);
+                    console.log(`[PROVIDER ROUTER] 🔄 Using fallback Vision provider: ${onDemandConfig.fallbackProvider}`);
                 }
             }
         }
@@ -206,10 +209,20 @@ export class ProviderRouter {
      */
     isVisionOnDemandAvailable(): boolean {
         const config = getVisionConfig();
-        const primary = this.visionProviders.get(config.provider);
-        const fallback = config.fallbackProvider ? this.visionProviders.get(config.fallbackProvider) : null;
+        const onDemandConfig = config.onDemand;
+        const primary = this.visionProviders.get(onDemandConfig.provider);
+        const fallback = onDemandConfig.fallbackProvider ? this.visionProviders.get(onDemandConfig.fallbackProvider) : null;
 
         return (primary?.isAvailable() ?? false) || (fallback?.isAvailable() ?? false);
+    }
+
+    /**
+     * Check if Vision live mode is available (checks if Gemini Live would work)
+     */
+    isVisionLiveAvailable(): boolean {
+        const config = getVisionConfig();
+        // Live mode requires Gemini Live API key
+        return !!config.live.apiKey;
     }
 
     /**

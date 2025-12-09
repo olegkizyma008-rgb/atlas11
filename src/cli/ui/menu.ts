@@ -120,6 +120,12 @@ async function configureService(service: string): Promise<void> {
     const serviceInfo = SERVICES.find(s => s.key === service);
     const serviceName = serviceInfo?.label || service;
 
+    // Vision has special configuration with separate Live and On-Demand
+    if (service === 'vision') {
+        await configureVision();
+        return;
+    }
+
     while (true) {
         showHeader(`Configure ${serviceName}`);
         console.log(chalk.gray(`  ${serviceInfo?.desc || ''}\n`));
@@ -138,35 +144,20 @@ async function configureService(service: string): Promise<void> {
         // Also show global key if service-specific not set
         const effectiveApiKey = currentApiKey || config[PROVIDER_API_KEYS[currentProvider || 'gemini']] || config['GEMINI_API_KEY'];
 
-        // Check if this service has mode (Vision)
-        const hasMode = serviceInfo && 'hasMode' in serviceInfo && serviceInfo.hasMode;
-        const currentMode = hasMode ? config[`${serviceUpper}_MODE`] : null;
-
-        const choices: { name: string; value: string; disabled?: boolean | string }[] = [];
-
-        // For Vision, show mode first
-        if (hasMode) {
-            const modeLabel = currentMode === 'live' ? 'Live Stream' : currentMode === 'on-demand' ? 'On-Demand' : 'not set';
-            choices.push({ name: `Mode             ${fmtVal(modeLabel)}`, value: 'mode' });
-        }
-
-        choices.push(
+        const choices: { name: string; value: string; disabled?: boolean | string }[] = [
             { name: `Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
             { name: `Model            ${fmtVal(currentModel)}`, value: 'model' },
             { name: `API Key          ${fmtKey(currentApiKey)}${!currentApiKey && effectiveApiKey ? chalk.gray(' (using global)') : ''}`, value: 'apikey' },
             { name: `Fallback         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
             { name: '─'.repeat(35), value: '_sep', disabled: true },
             { name: 'Back', value: 'back' }
-        );
+        ];
 
         const action = await select('', choices);
 
         if (action === 'back') return;
 
         switch (action) {
-            case 'mode':
-                await selectVisionMode(`${serviceUpper}_MODE`);
-                break;
             case 'provider':
                 await selectProvider(providerKey);
                 break;
@@ -178,6 +169,107 @@ async function configureService(service: string): Promise<void> {
                 break;
             case 'fallback':
                 await selectFallback(fallbackKey, config[providerKey]);
+                break;
+        }
+    }
+}
+
+/**
+ * Configure Vision - Special menu with separate Live and On-Demand settings
+ */
+async function configureVision(): Promise<void> {
+    while (true) {
+        showHeader('Configure Vision (Grisha)');
+        console.log(chalk.gray('  Visual monitoring for task verification\n'));
+
+        const config = configManager.getAll();
+        const currentMode = config['VISION_MODE'] || 'live';
+        const modeLabel = currentMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand');
+
+        // Live mode summary
+        const liveProvider = config['VISION_LIVE_PROVIDER'] || 'gemini';
+        const liveModel = config['VISION_LIVE_MODEL'] || 'gemini-2.5-flash-native-audio-preview-09-2025';
+
+        // On-Demand mode summary
+        const onDemandProvider = config['VISION_ONDEMAND_PROVIDER'] || 'copilot';
+        const onDemandModel = config['VISION_ONDEMAND_MODEL'] || 'gpt-4o';
+
+        const choices = [
+            { name: `Active Mode      ${modeLabel}`, value: 'mode' },
+            { name: '─'.repeat(35), value: '_sep1', disabled: true },
+            { name: `Live Stream      ${chalk.gray(liveProvider)} / ${chalk.cyan(liveModel.slice(0, 25))}...`, value: 'live' },
+            { name: `On-Demand        ${chalk.gray(onDemandProvider)} / ${chalk.magenta(onDemandModel)}`, value: 'ondemand' },
+            { name: '─'.repeat(35), value: '_sep2', disabled: true },
+            { name: 'Back', value: 'back' }
+        ];
+
+        const action = await select('', choices);
+
+        if (action === 'back') return;
+
+        switch (action) {
+            case 'mode':
+                await selectVisionMode('VISION_MODE');
+                break;
+            case 'live':
+                await configureVisionMode('Live Stream', 'VISION_LIVE');
+                break;
+            case 'ondemand':
+                await configureVisionMode('On-Demand', 'VISION_ONDEMAND');
+                break;
+        }
+    }
+}
+
+/**
+ * Configure a specific Vision mode (Live or On-Demand)
+ */
+async function configureVisionMode(label: string, prefix: string): Promise<void> {
+    while (true) {
+        showHeader(`Vision: ${label}`);
+
+        const config = configManager.getAll();
+        const providerKey = `${prefix}_PROVIDER`;
+        const modelKey = `${prefix}_MODEL`;
+        const fallbackKey = `${prefix}_FALLBACK_PROVIDER`;
+        const apiKeyKey = `${prefix}_API_KEY`;
+
+        const currentProvider = config[providerKey];
+        const currentModel = config[modelKey];
+        const currentFallback = config[fallbackKey];
+        const currentApiKey = config[apiKeyKey];
+
+        // Effective API key (fallback to provider-specific or global)
+        const effectiveApiKey = currentApiKey ||
+            config[PROVIDER_API_KEYS[currentProvider || 'gemini']] ||
+            config['GEMINI_API_KEY'] ||
+            config['GEMINI_LIVE_API_KEY'];
+
+        const choices = [
+            { name: `Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
+            { name: `Model            ${fmtVal(currentModel)}`, value: 'model' },
+            { name: `Fallback         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
+            { name: `API Key          ${fmtKey(currentApiKey)}${!currentApiKey && effectiveApiKey ? chalk.gray(' (using global)') : ''}`, value: 'apikey' },
+            { name: '─'.repeat(35), value: '_sep', disabled: true },
+            { name: 'Back', value: 'back' }
+        ];
+
+        const action = await select('', choices);
+
+        if (action === 'back') return;
+
+        switch (action) {
+            case 'provider':
+                await selectProvider(providerKey);
+                break;
+            case 'model':
+                await selectModel(providerKey, modelKey);
+                break;
+            case 'fallback':
+                await selectFallback(fallbackKey, config[providerKey]);
+                break;
+            case 'apikey':
+                await editApiKey(apiKeyKey, `${label} API Key`);
                 break;
         }
     }

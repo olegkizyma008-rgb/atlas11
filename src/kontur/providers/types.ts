@@ -131,8 +131,18 @@ export interface ProviderConfig {
     apiKey?: string;
 }
 
-export interface VisionConfig extends ProviderConfig {
-    mode: VisionMode; // 'live' = Gemini Live stream, 'on-demand' = screenshot after task
+// Vision has completely separate configs for Live vs On-Demand modes
+export interface VisionModeConfig {
+    provider: ProviderName;
+    fallbackProvider?: ProviderName;
+    model?: string;
+    apiKey?: string;
+}
+
+export interface VisionConfig {
+    mode: VisionMode; // Which mode is active
+    live: VisionModeConfig; // Settings for Live streaming (Gemini)
+    onDemand: VisionModeConfig; // Settings for On-Demand screenshots (Copilot/GPT-4o)
 }
 
 export interface ServiceConfig {
