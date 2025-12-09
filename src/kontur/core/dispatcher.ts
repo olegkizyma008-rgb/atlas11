@@ -63,6 +63,19 @@ export class Core extends EventEmitter {
     super();
     this.initAEDS();
     this.startHealthChecks();
+
+    // Self-register System Core
+    this.register('kontur://core/system', {
+      send: (packet: KPP_Packet) => {
+        if (packet.instruction.intent === PacketIntent.AI_PLAN) {
+          this.executePlan(packet.payload);
+        } else {
+          // Checking internal routing for specific op-codes could happen here
+          // For now, valid consumption of packet to stop "No handler" warning.
+        }
+      },
+      isAlive: () => true
+    });
   }
 
   /**
@@ -257,6 +270,7 @@ export class Core extends EventEmitter {
    * Main packet ingestion and routing logic
    */
   public ingest(packet: KPP_Packet) {
+    this.emit('ingest', packet);
     console.log(`[CORE INGEST] Processing ${packet.nexus.uid} from ${packet.route.from}`);
 
     // ACL check

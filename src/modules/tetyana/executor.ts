@@ -302,46 +302,39 @@ export class TetyanaExecutor extends EventEmitter {
         return new Promise((resolve, reject) => {
             const cmdId = `cmd-${Date.now()}-${Math.random()}`;
 
+            // Helper to handle response
             const handler = (packet: KPP_Packet) => {
-                if (packet.route.reply_to === cmdId) {
-                    this.core.removeListener('ingest_response', handler); // Custom event need
-
-                    if (packet.instruction.intent === PacketIntent.ERROR) {
-                        reject(new Error(packet.payload.msg || packet.payload.error));
-                    } else {
-                        resolve(packet.payload);
-                    }
-                }
+                // This is now handled by handleIncomingPacket, but we keep this logic 
+                // implicitly if we wanted to listen on core directly, but we use pendingRequests map.
+                // The pendingRequests map is cleaner.
             };
 
-            // Hack: Core needs to emit responses so we can capture them
-            // We will modify Core to emit 'packet_processed' or similar?
-            // Actually, Core.ingest doesn't emit 'ingest'.
-            // WE NEED TO ATTACH TO CORE. For now, let's assume TetyanaCapsule passes it.
-            // Better: active polling or specific subscription.
-            // Let's rely on `core.on('completion')` if we add it, or use the `listeners` map in DeepIntegration?
-
-            // Workaround: Tetyana is an Organ. Responses come to 'kontur://organ/tetyana'.
-            // This executor is INSIDE TetyanaCapsule. TetyanaCapsule needs to route packets here.
-
-            // For now, assume a method `startAsyncOp` exists. 
-            // We will register a temporary listener on the Core for destination 'kontur://organ/tetyana'.
-
-            // REVISION: The TetyanaCapsule should handle the packet receiving.
-            // We will pass the resolve/reject to the Capsule to map.
-            // For this file, we'll just emit the request and assume success for non-query commands if we don't block?
-            // NO, we need confirmation.
-
-            // Let's implement a `pendingRequests` map in TetyanaExecuter.
+            // Register pending request
             this.pendingRequests.set(cmdId, { resolve, reject });
+
+            // Resolve target URI
+            const registry = getToolRegistry();
+            const toolName = step.tool || step.action;
+            const targetURI = registry.getToolTarget(toolName);
+
+            if (!targetURI) {
+                // If validation passed, this shouldn't happen, but just in case
+                // Maybe it's a "native" Tetyana capability? 
+                // For now, strict enforcement.
+                this.pendingRequests.delete(cmdId);
+                reject(new Error(`Tool execution failed: No target URI found for tool '${toolName}'. Is it registered?`));
+                return;
+            }
+
+            console.log(`[TETYANA] 🚀 Executing '${toolName}' via ${targetURI} (ID: ${cmdId})`);
 
             const packet = createPacket(
                 'kontur://organ/tetyana',
-                step.tool,
+                targetURI,
                 PacketIntent.CMD,
-                step.args
+                step.args || {}
             );
-            packet.instruction.op_code = step.action;
+            packet.instruction.op_code = toolName; // MCP expects the tool name as the method
             packet.route.reply_to = 'kontur://organ/tetyana';
             packet.nexus.correlation_id = cmdId;
 
