@@ -14,6 +14,7 @@ export class TetyanaExecutor extends EventEmitter {
     private currentPlan: Plan | null = null;
     private active: boolean = false;
     private visionService: GrishaVisionService | null = null;
+    private lastActiveApp: string | null = null; // Track last focused app for vision
 
     constructor(core: Core) {
         super();
@@ -94,11 +95,30 @@ export class TetyanaExecutor extends EventEmitter {
 
                 // 🎯 Auto-select window if step targets an app
                 // Check all possible fields where an app name might be
-                const appName = step.args?.appName || step.args?.app || step.args?.name || ((step.action === 'open_application' || step.action === 'open') ? step.args?.arg1 : undefined);
+                let appName = step.args?.appName || step.args?.app || step.args?.name || step.args?.application;
+
+                // Special handling for 'open' actions
+                if (!appName && (step.action === 'open_application' || step.action === 'open' || step.action === 'launch')) {
+                    appName = step.args?.arg1 || step.args?.target;
+                }
+
+                // Try to extract from step description if still not found
+                const stepDescription = (step as any).description;
+                if (!appName && stepDescription) {
+                    // Common patterns: "відкрити Калькулятор", "open Calculator", "в програмі Safari"
+                    const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
+                    if (descMatch) {
+                        appName = descMatch[1];
+                    }
+                }
 
                 if (appName) {
                     console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
+                    this.lastActiveApp = appName; // Remember for subsequent steps
                     await vision.autoSelectSource(appName);
+                } else if (this.lastActiveApp) {
+                    // No explicit app, but we have a previous one - keep watching it
+                    console.log(`[TETYANA] 👁️ Continuing to watch: ${this.lastActiveApp}`);
                 }
 
                 // 1. Validate with Grisha (security check)
