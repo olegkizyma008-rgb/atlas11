@@ -10,6 +10,7 @@ import {
     ThreatLevel
 } from './policies';
 import { GrishaVision, VisualAnomalyReport, createGrishaVision } from './vision';
+import { getPersona } from '../../kontur/cortex/agentPersonas';
 
 export class GrishaCapsule implements GrishaAPI {
     private brain: BrainAPI;
@@ -166,9 +167,10 @@ export class GrishaCapsule implements GrishaAPI {
 
         // Query Brain for additional context
         const context = `Audit log: ${this.auditLog.length} ops. Recent threats: ${allThreats.join('; ') || 'None detected'}`;
+        const persona = getPersona('GRISHA');
 
         const response = await this.brain.think({
-            system_prompt: "You are GRISHA, the Sentinel. Assess system security threats. Return JSON: { threats: string[], level: 'low'|'medium'|'high' }.",
+            system_prompt: `${persona.systemPrompt}\n\nAssess system security threats. Return JSON: { threats: string[], level: 'low'|'medium'|'high' }.`,
             user_prompt: `Context: ${context}`
         });
 

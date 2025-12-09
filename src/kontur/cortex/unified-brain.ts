@@ -8,6 +8,7 @@
 import { EventEmitter } from 'events';
 import { getProviderRouter, logProviderConfig } from '../providers';
 import { CortexBrain } from './brain';
+import { getPersona } from './agentPersonas';
 import { BrainAPI } from '../../modules/brain/contract';
 import { AtlasAPI } from '../../modules/atlas/contract';
 import {
@@ -318,9 +319,15 @@ export class UnifiedBrain extends CortexBrain {
       // 1. Detect mode based on packet intent and prompt content
       const mode = this.detectMode(prompt, packet);
 
-      // 2. Think using the new architecture with detected mode
+      // 2. Get ATLAS persona for chat, use specialized prompt for planning
+      const atlasPersona = getPersona('ATLAS');
+      const systemPrompt = mode === 'chat'
+        ? atlasPersona.systemPrompt
+        : 'You are ATLAS, the Architect. Create a structured execution plan.';
+
+      // 3. Think using the new architecture with detected mode
       const response = await this.think({
-        system_prompt: 'You are KONTUR Unified Brain (Gemini 2.0).',
+        system_prompt: systemPrompt,
         user_prompt: prompt,
         mode,
         tools: [], // We could inject tools here if we had them in request

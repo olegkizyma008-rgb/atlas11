@@ -6,6 +6,7 @@ import { TetyanaExecutor } from './executor';
 import { Core } from '../../kontur/core/dispatcher';
 import { KPP_Packet, PacketIntent } from '../../kontur/protocol/nexus';
 import { Plan } from '../atlas/contract';
+import { getPersona } from '../../kontur/cortex/agentPersonas';
 
 export class TetyanaCapsule implements TetyanaAPI {
     private forge: ForgeAPI;
@@ -65,9 +66,10 @@ export class TetyanaCapsule implements TetyanaAPI {
 
     async forge_tool(args: { name: string; spec: string }) {
         console.log(`TETYANA: Forging tool ${args.name}...`);
+        const persona = getPersona('TETYANA');
 
         const response = await this.brain.think({
-            system_prompt: `You are TETYANA, the Builder. Generate a TypeScript tool named "${args.name}". Return ONLY the code.`,
+            system_prompt: `${persona.systemPrompt}\n\nGenerate a TypeScript tool named "${args.name}". Return ONLY the code.`,
             user_prompt: `Spec: ${args.spec}`
         });
 
