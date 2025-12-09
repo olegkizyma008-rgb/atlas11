@@ -165,7 +165,6 @@ export class DeepIntegrationSystem {
       try {
         this.geminiLive = new GeminiLiveService(liveApiKey);
 
-        // Only auto-connect if Live mode is active
         if (visionConfig.mode === 'live') {
           this.geminiLive.connect().catch(e => console.error("[VISION] Gemini Connect Error:", e));
         }
@@ -178,18 +177,8 @@ export class DeepIntegrationSystem {
         // Connect Gemini Live to Vision Service
         this.grishaVision.setGeminiLive(this.geminiLive);
 
-        // Initialize legacy Observer (for backward compatibility)
-        this.grishaObserver = new GrishaObserver();
-        this.grishaObserver.setGeminiLive(this.geminiLive);
-
-        // Forward observations to Synapse (UI)
-        this.grishaObserver.on('observation', (result: any) => {
-          synapse.emit('GRISHA', result.type.toUpperCase(), result.message);
-        });
-
-        this.grishaObserver.on('audio', (audioChunk: string) => {
-          synapse.emit('GRISHA', 'AUDIO_CHUNK', { chunk: audioChunk });
-        });
+        // Alias for backward compatibility if needed (but prefer removal)
+        (global as any).grishaObserver = this.grishaVision;
 
         console.log('[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active');
       } catch (error) {
@@ -209,7 +198,6 @@ export class DeepIntegrationSystem {
     });
 
     // Expose services globally for debugging
-    (global as any).grishaObserver = this.grishaObserver;
     (global as any).grishaVision = this.grishaVision;
 
     console.log(`[DEEP-INTEGRATION] ✅ Vision System ready [${visionConfig.mode}]`);

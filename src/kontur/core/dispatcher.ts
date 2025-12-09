@@ -43,6 +43,9 @@ export class Core extends EventEmitter {
     ['kontur://organ/atlas', SecurityScope.ROOT],
     ['kontur://cortex/core', SecurityScope.ROOT],
     ['kontur://atlas/ATLAS', SecurityScope.SYSTEM],
+    // Integration & System Internal
+    ['system/integration', SecurityScope.USER],
+    ['kontur://integration', SecurityScope.SYSTEM],
   ]);
 
   private limiter = new Bottleneck({
@@ -259,8 +262,11 @@ export class Core extends EventEmitter {
     }
 
     // Route packet through limiter
+    // Priority: Bottleneck 0 is highest, KPP 10 is highest. Map 10->0, 0->9
+    const bottleneckPriority = Math.max(0, Math.min(9, 10 - (packet.nexus.priority || 5)));
+
     this.limiter
-      .schedule(async () => {
+      .schedule({ priority: bottleneckPriority }, async () => {
         if (packet.route.to.includes('cortex') && this.cortex) {
           this.cortex.process(packet);
           return;

@@ -165,7 +165,7 @@ export class TetyanaExecutor extends EventEmitter {
 
             // Handler for Reasoning Response
             const handler = (packet: KPP_Packet) => {
-                if (packet.instruction.intent === PacketIntent.RESPONSE && packet.route.reply_to === reqId) {
+                if (packet.instruction.intent === PacketIntent.RESPONSE && packet.nexus.correlation_id === reqId) {
                     this.core.removeListener('ingest', handlerWrapper);
                     console.log(`[TETYANA] 🧠 Advice Received:`, packet.payload.result);
                     // Just log for now, but in future we could modify plan
@@ -184,8 +184,9 @@ export class TetyanaExecutor extends EventEmitter {
                     level: 'high'
                 }
             );
+            packet.nexus.correlation_id = reqId;
             packet.instruction.op_code = 'think';
-            packet.route.reply_to = reqId;
+            packet.route.reply_to = 'kontur://organ/tetyana';
 
             this.core.ingest(packet);
 
@@ -210,7 +211,7 @@ export class TetyanaExecutor extends EventEmitter {
 
             // Setup one-time listener for Grisha's response
             const responseHandler = (packet: KPP_Packet) => {
-                if (packet.instruction.intent === PacketIntent.RESPONSE && packet.route.reply_to === verifId) {
+                if (packet.instruction.intent === PacketIntent.RESPONSE && packet.nexus.correlation_id === verifId) {
                     this.core.removeListener('ingest', responseHandlerWrapper);
 
                     if (packet.payload.allowed) {
@@ -239,17 +240,21 @@ export class TetyanaExecutor extends EventEmitter {
                 }
             );
             packet.instruction.op_code = 'VALIDATE';
-            packet.route.reply_to = verifId;
+            packet.route.reply_to = 'kontur://organ/tetyana';
+            packet.nexus.correlation_id = verifId;
 
             this.core.ingest(packet);
 
             // Timeout
             setTimeout(() => {
                 this.core.removeListener('ingest', responseHandlerWrapper);
-                // For now, auto-approve if Grisha is offline to avoid deadlock (Development Mode)
-                // reject(new Error("Grisha Verification Timeout"));
-                console.warn("[TETYANA] ⚠️ Grisha Timeout. Proceeding (DEV MODE).");
-                resolve();
+
+                if (process.env.NODE_ENV === 'development') {
+                    console.warn("[TETYANA] ⚠️ Grisha Timeout. Proceeding (DEV MODE).");
+                    resolve();
+                } else {
+                    reject(new Error("Security validation timeout - operation rejected"));
+                }
             }, 5000);
         });
     }
@@ -301,7 +306,8 @@ export class TetyanaExecutor extends EventEmitter {
                 step.args
             );
             packet.instruction.op_code = step.action;
-            packet.route.reply_to = cmdId;
+            packet.route.reply_to = 'kontur://organ/tetyana';
+            packet.nexus.correlation_id = cmdId;
 
             this.core.ingest(packet);
         });
@@ -314,39 +320,21 @@ export class TetyanaExecutor extends EventEmitter {
      * Called by TetyanaCapsule when a packet arrives for Tetyana
      */
     public handleIncomingPacket(packet: KPP_Packet) {
-        // Check if it's a response to a pending request
-        // The `reply_to` in request becomes `payload.op_id`? Or we used `route.reply_to` as the ID?
-        // Standard KPP: Response `route.to` is original `reply_to`.
-        // Wait, `reply_to` is usually a URN. We used a randomized ID.
-        // We should probably alias the URN or rely on correlation ID (nexus.uid).
+        // Use correlation_id if available to match pending requests
+        const correlationId = packet.nexus.correlation_id;
 
-        // Let's assume the router sends it to Tetyana because route.to == 'kontur://organ/tetyana'
-        // And we look at `nexus.correlation_id` if valid, or just match context.
-        // Simplified: use a special field in payload for ID if protocol allows, or `route.to` was the ID?
-        // Valid KPP: `to` must be URN.
-
-        // Fix: Use `kontur://organ/tetyana` as `to`, and `nexus.uid` of REQUEST as the Correlation ID.
-        // But `createPacket` autogens UID.
-
-        // We will assume the system echoes the ID or we just match roughly.
-        // For robustness in this MVP: We listen to ALL responses to Tetyana.
-
-        // Actually, looking at `executeStep`:
-        // packet.route.reply_to = cmdId; -> This is WRONG. reply_to should be a URN.
-        // correct: reply_to = 'kontur://organ/tetyana'.
-        // We need to put the ID in payload or nexus.
-
-        // SKIP complex correlation for now. We execute SEQUENTIALLY.
-        // So the first response coming back to Tetyana is likely for the current step.
-
-        if (this.pendingRequests.size > 0) {
-            const [key, promise] = this.pendingRequests.entries().next().value;
+        if (correlationId && this.pendingRequests.has(correlationId)) {
+            const promise = this.pendingRequests.get(correlationId)!;
             if (packet.instruction.intent === PacketIntent.ERROR) {
                 promise.reject(new Error(packet.payload.msg || "Unknown Error"));
             } else {
                 promise.resolve(packet.payload);
             }
-            this.pendingRequests.delete(key);
+            this.pendingRequests.delete(correlationId);
+        } else {
+            // Fallback: If no correlation ID, logic for processing unrequested packets (e.g. events)
+            // or if we rely on FIFO (not recommended but legacy fallback)
+            // console.warn("[TETYANA] Received packet with no matching correlation ID:", packet.nexus.uid);
         }
     }
 

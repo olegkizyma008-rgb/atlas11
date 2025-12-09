@@ -51,6 +51,7 @@ export const KPP_Schema = z.object({
     quantum_state: z.record(z.number()).optional(),
     gen_prompt: z.string().optional(),
     gravity_factor: z.number().min(0).max(1).default(1),
+    correlation_id: z.string().optional(),
   }),
   route: z.object({
     from: z.string(),
@@ -80,9 +81,15 @@ export type KPP_Packet = z.infer<typeof KPP_Schema>;
  * @returns true if integrity check passes
  */
 export function verifyPacket(packet: KPP_Packet): boolean {
-  const payloadStr = JSON.stringify(packet.payload);
-  const hash = crypto.createHash('sha256').update(payloadStr).digest('hex');
-  return hash === packet.nexus.integrity;
+  let expectedHash = packet.nexus.integrity;
+  if (expectedHash.startsWith('sha256-')) {
+    expectedHash = expectedHash.slice(7);
+  }
+
+  const payloadStr = sortedStringify(packet.payload);
+  const computedHash = crypto.createHash('sha256').update(payloadStr).digest('hex');
+
+  return expectedHash === computedHash;
 }
 
 /**
@@ -91,8 +98,26 @@ export function verifyPacket(packet: KPP_Packet): boolean {
  * @returns hex string hash
  */
 export function computeIntegrity(payload: any): string {
-  const payloadStr = JSON.stringify(payload);
+  const payloadStr = sortedStringify(payload);
   return crypto.createHash('sha256').update(payloadStr).digest('hex');
+}
+
+/**
+ * Deterministic JSON stringify (sorts keys recursively)
+ * Matches Python's json.dumps(sort_keys=True)
+ */
+function sortedStringify(obj: any): string {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(sortedStringify).join(',') + ']';
+  }
+  const keys = Object.keys(obj).sort();
+  const parts = keys.map(key => {
+    return JSON.stringify(key) + ':' + sortedStringify(obj[key]);
+  });
+  return '{' + parts.join(',') + '}';
 }
 
 /**

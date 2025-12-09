@@ -89,8 +89,15 @@ export class UnifiedBrain extends CortexBrain {
       // 3. Fallback to Atlas Brain
       return await this.thinkWithAtlas(request);
     } catch (error) {
-      console.error('[UNIFIED-BRAIN] Error:', error);
-      return this.fallbackResponse(request);
+      console.warn('[UNIFIED-BRAIN] Cortex reasoning failed, attempting fall back to Atlas...', error);
+
+      try {
+        // 3. Fallback to Atlas Brain
+        return await this.thinkWithAtlas(request);
+      } catch (atlasError) {
+        console.error('[UNIFIED-BRAIN] Atlas Fallback failed:', atlasError);
+        return this.fallbackResponse(request);
+      }
     }
   }
 
