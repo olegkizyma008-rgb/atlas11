@@ -308,92 +308,85 @@ export class UnifiedBrain extends CortexBrain {
    * Process packet with unified reasoning
    */
   /**
-   * Process packet with unified reasoning
-   * OVERRIDES CortexBrain.process to ensure we use the new 'think' logic
+   * Process packet with unified reasoning - PURE INTELLIGENCE approach
+   * Always uses ATLAS persona with JSON output
+   * LLM decides whether to create a plan or just respond
    */
   async process(packet: KPP_Packet): Promise<void> {
     const prompt = packet.payload.prompt || packet.instruction.op_code;
     console.log(`[UNIFIED-BRAIN] 🧠 Processing: "${prompt}"`);
 
     try {
-      // 1. Detect mode based on packet intent and prompt content
-      const mode = this.detectMode(prompt, packet);
-
-      // 2. Get ATLAS persona for chat, use specialized prompt for planning
+      // 1. Get ATLAS persona (always use full persona with JSON output)
       const atlasPersona = getPersona('ATLAS');
-      const systemPrompt = mode === 'chat'
-        ? atlasPersona.systemPrompt
-        : 'You are ATLAS, the Architect. Create a structured execution plan.';
 
-      // 3. Think using the new architecture with detected mode
+      // 2. Think using ATLAS persona (always expects JSON response)
       const response = await this.think({
-        system_prompt: systemPrompt,
+        system_prompt: atlasPersona.systemPrompt,
         user_prompt: prompt,
-        mode,
-        tools: [], // We could inject tools here if we had them in request
+        mode: 'planning', // Always request JSON format
+        tools: [],
       });
 
-      // 3. Handle response based on mode
       if (!response.text) throw new Error("No response text from Brain");
 
-      if (mode === 'chat') {
-        // Simple chat - emit text directly without JSON parsing
-        const chatPacket = createPacket(
+      // 3. Parse JSON response
+      let decision: { thought?: string; plan?: any[]; response?: string };
+      try {
+        // Try to parse as JSON
+        const cleanText = response.text.replace(/```json\n?|```/g, '').trim();
+        decision = JSON.parse(cleanText);
+      } catch (e) {
+        // If not JSON, treat as plain chat response (fallback for non-compliant models)
+        console.warn('[UNIFIED-BRAIN] ⚠️ Non-JSON response, treating as chat');
+        decision = { thought: 'Plain text response', plan: [], response: response.text };
+      }
+
+      console.log(`[UNIFIED-BRAIN] 📋 Decision: plan=${decision.plan?.length || 0} steps, response="${decision.response?.slice(0, 50) || 'none'}..."`);
+
+      // 4. Route based on plan presence (PURE INTELLIGENCE - LLM decides)
+      if (decision.plan && decision.plan.length > 0) {
+        // ACTION MODE: LLM created a plan → execute via Tetyana
+        console.log(`[UNIFIED-BRAIN] ⚡ Action Mode: ${decision.plan.length} steps to execute`);
+
+        const systemPacket = createPacket(
           'kontur://cortex/ai/main',
-          'kontur://organ/ui/shell',
-          PacketIntent.EVENT,
-          { msg: response.text, type: 'chat' }
-        );
-        this.emit('decision', chatPacket);
-      } else {
-        // Planning mode - parse JSON and emit structured plan
-        let decision: any;
-        try {
-          decision = JSON.parse(response.text);
-        } catch (e) {
-          // Fallback if already parsed or malformed
-          decision = { response: response.text, thought: "Raw output", plan: [] };
-        }
-
-        // If there is a plan
-        if (decision.plan && decision.plan.length > 0) {
-          const systemPacket = createPacket(
-            'kontur://cortex/ai/main',
-            'kontur://core/system',
-            PacketIntent.AI_PLAN,
-            {
-              reasoning: decision.thought,
-              user_response: decision.response,
-              steps: decision.plan.map((step: PlanStep) => ({
-                tool: step.tool,
-                action: step.action,
-                args: step.args,
-                target: step.target || 'kontur://organ/worker' // Default, router handles optimization
-              }))
-            }
-          );
-          this.emit('decision', systemPacket);
-
-          // Also emit chat if present
-          if (decision.response) {
-            const chatPacket = createPacket(
-              'kontur://cortex/ai/main',
-              'kontur://organ/ui/shell',
-              PacketIntent.EVENT,
-              { msg: decision.response, type: 'chat', reasoning: decision.thought }
-            );
-            this.emit('decision', chatPacket);
+          'kontur://core/system',
+          PacketIntent.AI_PLAN,
+          {
+            reasoning: decision.thought,
+            user_response: decision.response,
+            steps: decision.plan.map((step: PlanStep) => ({
+              tool: step.tool,
+              action: step.action,
+              args: step.args,
+              target: step.target || 'kontur://organ/worker'
+            }))
           }
-        } else {
-          // Just Chat from planning response
+        );
+        this.emit('decision', systemPacket);
+
+        // Also send chat response to user
+        if (decision.response) {
           const chatPacket = createPacket(
             'kontur://cortex/ai/main',
             'kontur://organ/ui/shell',
             PacketIntent.EVENT,
-            { msg: decision.response || response.text, type: 'chat', reasoning: decision.thought }
+            { msg: decision.response, type: 'chat', reasoning: decision.thought }
           );
           this.emit('decision', chatPacket);
         }
+      } else {
+        // CHAT MODE: LLM decided no action needed → just respond
+        console.log(`[UNIFIED-BRAIN] 💬 Chat Mode: no action needed`);
+
+        const chatPacket = createPacket(
+          'kontur://cortex/ai/main',
+          'kontur://organ/ui/shell',
+          PacketIntent.EVENT,
+          { msg: decision.response || response.text, type: 'chat' }
+        );
+        this.emit('decision', chatPacket);
       }
 
     } catch (error: any) {
@@ -402,14 +395,15 @@ export class UnifiedBrain extends CortexBrain {
         'kontur://cortex/ai/main',
         'kontur://organ/ui/shell',
         PacketIntent.ERROR,
-        { error: error.message, msg: "Brain Failure: " + error.message }
+        { error: error.message, msg: "Помилка обробки: " + error.message }
       );
       this.emit('decision', errorPacket);
     }
   }
 
   /**
-   * Detect whether request should use chat or planning mode
+   * @deprecated No longer used - mode is now determined by LLM via plan presence (Pure Intelligence approach)
+   * Kept for reference only. Will be removed in future version.
    */
   private detectMode(prompt: string, packet: KPP_Packet): 'chat' | 'planning' {
     // If intent is already AI_PLAN - this is planning
