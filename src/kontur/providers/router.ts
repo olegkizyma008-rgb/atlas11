@@ -23,6 +23,7 @@ import { GeminiTTSProvider } from './gemini-tts';
 import { OpenAIProvider } from './openai';
 import { AnthropicProvider } from './anthropic';
 import { MistralProvider } from './mistral';
+import { VSCodeCopilotProvider } from './copilot';
 
 export class ProviderRouter {
     private llmProviders: Map<ProviderName, ILLMProvider> = new Map();
@@ -63,6 +64,14 @@ export class ProviderRouter {
         const mistralKey = process.env.MISTRAL_API_KEY;
         if (mistralKey) {
             this.llmProviders.set('mistral', new MistralProvider(mistralKey));
+        }
+
+        // Copilot
+        // Copilot might be auto-detected, so we instantiate and check availability
+        const copilotKey = process.env.COPILOT_API_KEY;
+        const copilotProvider = new VSCodeCopilotProvider(copilotKey);
+        if (copilotProvider.isAvailable()) {
+            this.llmProviders.set('copilot', copilotProvider);
         }
 
         // === TTS Providers ===

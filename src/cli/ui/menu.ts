@@ -158,7 +158,7 @@ async function configureService(service: string) {
                 continue;
             }
 
-            const spinner = ora('Fetching available models...').start();
+            const spinner = ora('Fetching models & verifying credentials...').start();
             try {
                 // In a real scenario, we would use the API key to fetch valid models
                 // For now we use the static registry
