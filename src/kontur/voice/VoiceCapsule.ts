@@ -57,11 +57,8 @@ export class VoiceCapsule implements VoiceAPI {
             text = textOrArgs as string;
         }
 
-        // KONTUR SIGNAL: Notify system that TTS is requested (Intent)
-        synapse.emit('voice', 'request_tts', {
-            text,
-            voice: voiceName
-        });
+        // NOTE: Removed synapse emit - was causing unnecessary packet routing via bridge
+        // synapse.emit('voice', 'request_tts', { text, voice: voiceName });
 
         for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
             try {
