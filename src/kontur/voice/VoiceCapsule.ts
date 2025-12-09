@@ -4,6 +4,7 @@
  */
 
 import { getProviderRouter } from '../providers';
+import { synapse } from '../synapse';
 
 export interface TTSConfig {
     voiceName?: string;
