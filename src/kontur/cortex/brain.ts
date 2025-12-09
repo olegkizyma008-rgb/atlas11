@@ -8,6 +8,7 @@ import { KPP_Packet, SecurityScope, createPacket, PacketIntent } from '../protoc
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { AGENT_PERSONAS } from './agentPersonas';
 import { getToolRegistry } from '../core/ToolRegistry';
+import { getProviderConfig } from '../providers/config';
 import * as crypto from 'crypto';
 import * as path from 'path';
 import type { McpBridge } from '../mcp/McpBridge';
@@ -58,25 +59,27 @@ export class CortexBrain extends EventEmitter {
   }
 
   private initializeAI() {
-    const googleApiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    // Use centralized config for dynamic model selection
+    const brainConfig = getProviderConfig('brain');
+    const googleApiKey = brainConfig.apiKey || process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+    const modelName = brainConfig.model || 'gemini-2.5-flash';
+
     if (googleApiKey) {
       this.genAI = new GoogleGenerativeAI(googleApiKey);
       this.chatModel = this.genAI.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: modelName,
         systemInstruction: AGENT_PERSONAS.ATLAS.systemPrompt,
         generationConfig: {
           temperature: 0.7,
           responseMimeType: "application/json"
         },
-        // We will add tools dynamically if possible, or inject into prompt
-        // checks: https://ai.google.dev/gemini-api/docs/function-calling
       });
-      console.log(`[CORTEX] 🧠 Initialized with Gemini AI`);
+      console.log(`[CORTEX] 🧠 Initialized with ${brainConfig.provider} (model: ${modelName})`);
 
       // Initialize MCP Bridges
       this.initMCP();
     } else {
-      console.warn(`[CORTEX] ⚠️ No GOOGLE_API_KEY`);
+      console.warn(`[CORTEX] ⚠️ No BRAIN_API_KEY or GOOGLE_API_KEY`);
     }
   }
 
@@ -145,9 +148,10 @@ export class CortexBrain extends EventEmitter {
 `;
       const enhancedPrompt = `${AGENT_PERSONAS.ATLAS.systemPrompt}\n${systemContext}\n## AVAILABLE MCP TOOLS (Use these instead of system/worker):\n${toolDesc}`;
 
-      // Re-init model with new prompt
+      // Re-init model with new prompt (use dynamic model from config)
+      const brainConfig = getProviderConfig('brain');
       this.chatModel = this.genAI!.getGenerativeModel({
-        model: 'gemini-2.5-flash',
+        model: brainConfig.model || 'gemini-2.5-flash',
         systemInstruction: enhancedPrompt,
         generationConfig: { temperature: 0.7, responseMimeType: "application/json" }
       });
