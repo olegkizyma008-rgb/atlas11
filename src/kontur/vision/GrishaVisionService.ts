@@ -539,33 +539,80 @@ export class GrishaVisionService extends EventEmitter {
 
             console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
 
-            // STEP 2: Verify the action was completed AND matches Goal
+            // STEP 2: Verify the action was completed
+            // Be STEP-TYPE AWARE: Different actions require different verification criteria
             const router = getProviderRouter();
 
-            const contextPrompt = globalContext
-                ? `ГЛОБАЛЬНА МЕТА КОРИСТУВАЧА: "${globalContext}".\nПеревір, чи крок наближає нас до цієї мети.\n\n`
-                : '';
+            // Detect step type from action string
+            const isOpenAction = /open|launch|відкрити|запустити/i.test(stepAction);
+            const isTypeAction = /type|input|введи|надрукуй/i.test(stepAction);
+            const isSaveAction = /save|збереж/i.test(stepAction);
 
-            const targetPrompt = targetApp
-                ? `ЦIЛЬОВА ПРОГРАМА: "${targetApp}" (Вікно має бути активним)\n`
-                : '';
+            let verificationPrompt = '';
+
+            if (isOpenAction) {
+                // For OPEN actions: Only verify the app is visible and active
+                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+
+${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ''}
+Завдання Кроку: "${stepAction}".
+
+КРИТЕРІЇ УСПІХУ для дії "Відкрити":
+1. Чи бачиш ти вікно програми "${targetApp || 'application'}"?
+2. Чи це вікно активне (на передньому плані)?
+
+ІГНОРУЙ вміст вікна (числа, текст) - попередні дані НЕ мають значення для цього кроку.
+Якщо програма ВІДКРИТА і АКТИВНА - відповідай "ВЕРИФІКОВАНО: ${targetApp || 'Application'} відкрито і активно."
+Якщо програма НЕ відкрита - відповідай "ПОМИЛКА: Програму не видно."`;
+            } else if (isTypeAction) {
+                // For TYPE actions: Check if the character/text was entered
+                const expectedText = stepDetails?.match(/"([^"]+)"/)?.[1] || '';
+                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+
+${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ''}
+Завдання Кроку: "${stepAction}". ${stepDetails || ''}
+
+КРИТЕРІЇ УСПІХУ для дії "Ввести текст":
+1. Чи бачиш ти щойно введений текст/символ "${expectedText}" у вікні?
+2. Чи текст з'явився на екрані?
+
+Якщо текст введено - відповідай "ВЕРИФІКОВАНО: Текст введено."
+Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
+            } else if (isSaveAction) {
+                // For SAVE actions: This is where we check the final result
+                const contextPrompt = globalContext
+                    ? `ГЛОБАЛЬНА МЕТА: "${globalContext}"\n`
+                    : '';
+                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+
+${contextPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ''}
+
+КРИТЕРІЇ УСПІХУ для дії "Зберегти":
+1. Чи файл створено/збережено?
+2. Чи результат відповідає глобальній меті?
+
+Якщо збережено успішно - відповідай "ВЕРИФІКОВАНО: Файл збережено."
+Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
+            } else {
+                // Default: General verification
+                verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+
+${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ''}
+Завдання Кроку: "${stepAction}". ${stepDetails || ''}
+
+ПЕРЕВІРКА:
+1. Чи виконано цю дію успішно?
+2. Що ти бачиш на екрані?
+
+Якщо дія виконана - відповідай "ВЕРИФІКОВАНО: [деталі]."
+Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
+            }
 
             const response = await router.analyzeVision({
                 image: base64Image,
                 mimeType: 'image/jpeg',
                 taskContext: stepAction,
-                prompt: `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
-
-${contextPrompt}${targetPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ''}
-
-ПЕРЕВІРКА:
-1. Чи виконано цю дію успішно?
-2. Який результат ти бачиш? (числа, текст, стан вікна).
-3. Чи відповідає цей результат очікуванням глобальної мети (якщо задана)?
-
-Якщо дія виконана правильно - відповідай "ВЕРИФІКОВАНО: [деталі]".
-Якщо є помилка або невідповідність меті - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що саме треба зробити інакше?]".
-Наприклад: "ПОМИЛКА: Введено 3 замість 5. КОРЕКЦІЯ: Натисни Backspace і введи 5."`
+                prompt: verificationPrompt
             });
 
             this.frameCount++;
