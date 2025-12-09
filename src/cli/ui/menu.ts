@@ -662,15 +662,54 @@ async function runHealthCheck(): Promise<void> {
         console.log(`  ${statusSymbol} ${service.label.padEnd(12)} ${chalk.gray(provider.padEnd(10))} ${status}`);
     }
 
-    // Vision mode info
-    console.log(chalk.gray('\n  ─── Vision Details ───'));
+    // Vision mode info with BOTH modes checked
+    console.log(chalk.gray('\n  ─── Vision Configuration ───'));
     const visionMode = config['VISION_MODE'] || 'live';
     const fallbackMode = config['VISION_FALLBACK_MODE'];
-    console.log(`  Mode: ${visionMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand')}`);
-    if (fallbackMode) {
-        console.log(`  Fallback: ${fallbackMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand')}`);
+    console.log(`  Active: ${visionMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand')}`);
+    console.log(`  Fallback: ${fallbackMode ? (fallbackMode === 'live' ? chalk.cyan('Live Stream') : chalk.magenta('On-Demand')) : chalk.gray('none')}`);
+
+    // Check Live Vision
+    console.log(chalk.gray('\n  ─── Vision: Live Stream ───'));
+    const liveProvider = config['VISION_LIVE_PROVIDER'] || 'gemini';
+    const liveModel = config['VISION_LIVE_MODEL'] || 'gemini-2.5-flash-native-audio-preview';
+    let liveApiKey = config['VISION_LIVE_API_KEY'] || config['GEMINI_LIVE_API_KEY'] || config['GEMINI_API_KEY'];
+
+    if (liveApiKey) {
+        console.log(`  ${chalk.green('●')} Provider: ${liveProvider}, Model: ${liveModel.slice(0, 30)}...`);
+        console.log(`    API Key: ${chalk.green('configured')}`);
     } else {
-        console.log(`  Fallback: ${chalk.gray('none')}`);
+        console.log(`  ${chalk.yellow('△')} Provider: ${liveProvider} - ${chalk.yellow('No API key')}`);
+        warnCount++;
+    }
+
+    // Check On-Demand Vision
+    console.log(chalk.gray('\n  ─── Vision: On-Demand ───'));
+    const onDemandProvider = config['VISION_ONDEMAND_PROVIDER'] || 'copilot';
+    const onDemandModel = config['VISION_ONDEMAND_MODEL'] || 'gpt-4o';
+    let onDemandApiKey = config['VISION_ONDEMAND_API_KEY'] || config['COPILOT_API_KEY'] || config['GEMINI_API_KEY'];
+
+    if (onDemandProvider === 'copilot') {
+        // Copilot can auto-retrieve token
+        const spinner = ora({ text: 'Testing Copilot Vision...', prefixText: '  ' }).start();
+        try {
+            const { VSCodeCopilotProvider } = await import('../../kontur/providers/copilot.js');
+            const cp = new VSCodeCopilotProvider(onDemandApiKey);
+            await cp.fetchModels();
+            spinner.stop();
+            console.log(`  ${chalk.green('●')} Provider: ${onDemandProvider}, Model: ${onDemandModel}`);
+            console.log(`    ${chalk.green('Connected')}`);
+        } catch (e: any) {
+            spinner.stop();
+            console.log(`  ${chalk.red('✕')} Provider: ${onDemandProvider} - ${chalk.red(e.message?.substring(0, 30))}`);
+            errorCount++;
+        }
+    } else if (onDemandApiKey) {
+        console.log(`  ${chalk.green('●')} Provider: ${onDemandProvider}, Model: ${onDemandModel}`);
+        console.log(`    API Key: ${chalk.green('configured')}`);
+    } else {
+        console.log(`  ${chalk.yellow('△')} Provider: ${onDemandProvider} - ${chalk.yellow('No API key')}`);
+        warnCount++;
     }
 
     // Summary
