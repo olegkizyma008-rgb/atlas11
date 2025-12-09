@@ -34,8 +34,9 @@ export class Core extends EventEmitter {
     ['kontur://cortex/ai/main', SecurityScope.ROOT],
     ['kontur://core/system', SecurityScope.ROOT],
     // Whitelist for internal Atlas/Grisha components
-    ['kontur://atlas/system', SecurityScope.SYSTEM],
-    ['kontur://atlas/GRISHA', SecurityScope.SYSTEM],
+    ['kontur://atlas/SYSTEM', SecurityScope.ROOT], // Uppercase SYSTEM often used in logs
+    ['kontur://atlas/system', SecurityScope.ROOT],
+    ['kontur://atlas/GRISHA', SecurityScope.ROOT], // Grisha needs root to post events
     ['kontur://organ/tetyana', SecurityScope.SYSTEM],
     ['kontur://organ/grisha', SecurityScope.SYSTEM],
     ['kontur://organ/mcp/filesystem', SecurityScope.SYSTEM],

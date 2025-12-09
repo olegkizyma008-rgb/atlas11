@@ -3392,11 +3392,11 @@ class GrishaVisionService extends events.EventEmitter {
         cleanup();
         console.warn("[GRISHA VISION] ⚠️ Verification timeout (Live Mode)");
         resolve({
-          type: "observation",
-          // Downgrade to simple observation
-          message: "Timeout: Gemini Live did not respond in time.",
-          verified: true,
-          // Proceed cautiously (soft fail)
+          type: "alert",
+          // Treat as alert/warning
+          message: "Timeout: Gemini Live verification failed. Not confirmed.",
+          verified: false,
+          // Strict fail
           timestamp: Date.now(),
           mode: "live"
         });
@@ -3572,7 +3572,6 @@ class TetyanaExecutor extends events.EventEmitter {
     this.active = true;
     this.currentPlan = plan;
     console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps) [Engine: ${usePythonBridge ? "HYBRID (Python+Native)" : "NATIVE"}]`);
-    this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
     await this.startVisionObservation(plan.goal);
     const registry = getToolRegistry();
     if (!usePythonBridge && registry.isInitialized()) {
@@ -3867,7 +3866,8 @@ INSTRUCTIONS:
 3. You have full permission to control the OS (open apps, type text, use mouse).
 4. Use AppleScript (osascript) via python 'subprocess' or 'os.system' to open applications or control UI if needed.
 5. For "TextEditor", assume "TextEdit" on macOS.
-6. Write and run the python code to perform this specific action immediately.`;
+6. Write and run the python code to perform this specific action immediately.
+7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'. Use the app name from the context or arguments.`;
       try {
         this.core.emit("tetyana:log", { message: `[Bridge] Executing Step ${stepNum}...` });
         const result = await bridge.execute(stepPrompt);
