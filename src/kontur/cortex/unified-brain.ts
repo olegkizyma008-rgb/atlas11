@@ -351,8 +351,9 @@ export class UnifiedBrain extends CortexBrain {
           'kontur://core/system',
           PacketIntent.AI_PLAN,
           {
+            goal: prompt, // Original user request - critical for OpenInterpreter context
             reasoning: decision.thought,
-            user_response: decision.response,
+            user_response_ua: decision.response,
             steps: decision.plan.map((step: PlanStep) => ({
               tool: step.tool,
               action: step.action,

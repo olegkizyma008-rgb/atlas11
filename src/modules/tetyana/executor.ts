@@ -38,9 +38,18 @@ export class TetyanaExecutor extends EventEmitter {
         if (usePythonBridge) {
             // Experimental Open Interpreter Bridge Execution
             try {
-                // Bridge Logic
-                // Bridge Logic
-                const prompt = plan.goal;
+                // Build rich prompt with user goal and steps for context
+                const stepsDescription = plan.steps
+                    .map((s, i) => `${i + 1}. ${s.action}${s.args ? `: ${JSON.stringify(s.args)}` : ''}`)
+                    .join('\n');
+
+                const prompt = `User Request: ${plan.goal}
+
+Execution Plan:
+${stepsDescription}
+
+Execute this plan step by step. Use available tools to complete each action.`;
+
                 const bridge = new OpenInterpreterBridge();
 
                 if (OpenInterpreterBridge.checkEnvironment()) {
