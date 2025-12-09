@@ -410,17 +410,13 @@ CORRECTION REQUIRED: Please analyze what went wrong and try a different approach
 
             this.core.ingest(packet);
 
-            // Timeout
+            // Timeout - ALWAYS require Grisha approval, no DEV MODE bypass
             setTimeout(() => {
                 this.core.removeListener('ingest', responseHandlerWrapper);
-
-                if (process.env.NODE_ENV === 'development') {
-                    console.warn("[TETYANA] ⚠️ Grisha Timeout. Proceeding (DEV MODE).");
-                    resolve();
-                } else {
-                    reject(new Error("Security validation timeout - operation rejected"));
-                }
-            }, 5000);
+                // No bypass - security validation is MANDATORY
+                console.error("[TETYANA] ⏰ Grisha validation timeout after 15s - operation rejected");
+                reject(new Error("Security validation timeout - Grisha did not respond"));
+            }, 15000); // Increased to 15s for complex checks
         });
     }
 
@@ -581,7 +577,10 @@ RULES:
 4. DO NOT "be helpful" by doing more than asked.
 5. ALWAYS activate the target app first: 'tell application "AppName" to activate'.
 6. Use AppleScript via python subprocess for UI control.
-7. ⚠️ FOR CALCULATOR: If this is an "open" action for Calculator, ALSO press "Escape" key to clear any old data!
+7. ⚠️ CALCULATOR RULE: If opening Calculator, you MUST:
+   - First: 'tell application "Calculator" to activate'
+   - Then: 'tell application "System Events" to keystroke "c" using command down' (Cmd+C clears)
+   - ONLY THEN proceed with the action.
 
 VIOLATION WARNING: If you execute more than Step ${stepNum}, the entire plan will fail.
 `;

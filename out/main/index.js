@@ -3674,62 +3674,40 @@ class GrishaVisionService extends events.EventEmitter {
       }
       console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
       const router2 = getProviderRouter();
-      const isOpenAction = /open|launch|відкрити|запустити/i.test(stepAction);
-      const isTypeAction = /type|input|введи|надрукуй/i.test(stepAction);
-      const isSaveAction = /save|збереж/i.test(stepAction);
-      let verificationPrompt = "";
-      if (isOpenAction) {
-        verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+      const stepMatch = stepDetails?.match(/Крок (\d+)/);
+      const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
+      const verificationPrompt = `
+STEP EXECUTION ANALYSIS
 
-${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ""}
-Завдання Кроку: "${stepAction}".
+═══════════════════════════════════════════════════════
+📍 COMPONENT 1: WHAT TETYANA JUST DID
+Action: "${stepAction}"
+Details: ${stepDetails || "none"}
+Target Application: ${targetApp || "unknown"}
+═══════════════════════════════════════════════════════
 
-КРИТЕРІЇ УСПІХУ для дії "Відкрити":
-1. Чи бачиш ти вікно програми "${targetApp || "application"}"?
-2. Чи це вікно активне (на передньому плані)?
+📍 COMPONENT 2: WHAT YOU SEE ON SCREEN
+Analyze the screenshot. Describe what is ACTUALLY visible.
 
-ІГНОРУЙ вміст вікна (числа, текст) - попередні дані НЕ мають значення для цього кроку.
-Якщо програма ВІДКРИТА і АКТИВНА - відповідай "ВЕРИФІКОВАНО: ${targetApp || "Application"} відкрито і активно."
-Якщо програма НЕ відкрита - відповідай "ПОМИЛКА: Програму не видно."`;
-      } else if (isTypeAction) {
-        const expectedText = stepDetails?.match(/"([^"]+)"/)?.[1] || "";
-        verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+═══════════════════════════════════════════════════════
 
-${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ""}
-Завдання Кроку: "${stepAction}". ${stepDetails || ""}
+📍 COMPONENT 3: GLOBAL GOAL
+${globalContext ? `"${globalContext}"` : "Not specified."}
 
-КРИТЕРІЇ УСПІХУ для дії "Ввести текст":
-1. Чи бачиш ти щойно введений текст/символ "${expectedText}" у вікні?
-2. Чи текст з'явився на екрані?
+═══════════════════════════════════════════════════════
 
-Якщо текст введено - відповідай "ВЕРИФІКОВАНО: Текст введено."
-Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
-      } else if (isSaveAction) {
-        const contextPrompt = globalContext ? `ГЛОБАЛЬНА МЕТА: "${globalContext}"
-` : "";
-        verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+🎯 DIRECT QUESTION:
+Was step "${stepAction}" executed successfully?
 
-${contextPrompt}Завдання Кроку: "${stepAction}". ${stepDetails || ""}
+Compare:
+- What SHOULD have happened (Component 1)
+- What ACTUALLY happened (Component 2)
+- Does this move toward the goal (Component 3)
 
-КРИТЕРІЇ УСПІХУ для дії "Зберегти":
-1. Чи файл створено/збережено?
-2. Чи результат відповідає глобальній меті?
-
-Якщо збережено успішно - відповідай "ВЕРИФІКОВАНО: Файл збережено."
-Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
-      } else {
-        verificationPrompt = `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
-
-${targetApp ? `ЦІЛЬОВА ПРОГРАМА: "${targetApp}"` : ""}
-Завдання Кроку: "${stepAction}". ${stepDetails || ""}
-
-ПЕРЕВІРКА:
-1. Чи виконано цю дію успішно?
-2. Що ти бачиш на екрані?
-
-Якщо дія виконана - відповідай "ВЕРИФІКОВАНО: [деталі]."
-Якщо є помилка - відповідай "ПОМИЛКА: [причина]. КОРЕКЦІЯ: [що виправити]."`;
-      }
+ANSWER (respond in Ukrainian):
+If YES — write "ВЕРИФІКОВАНО: [brief description]"
+If NO — write "ПОМИЛКА: [reason]"
+`;
       const response = await router2.analyzeVision({
         image: base64Image,
         mimeType: "image/jpeg",
