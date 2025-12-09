@@ -552,37 +552,26 @@ INSTRUCTION: You must CORRECT your approach based on this feedback. Do not repea
             }
 
             const stepPrompt = `
-🚨 CRITICAL: SINGLE STEP EXECUTION MODE 🚨
+SINGLE STEP EXECUTION
 
-You MUST execute ONLY Step ${stepNum} and then STOP IMMEDIATELY.
-DO NOT execute any other steps. DO NOT continue to the next step.
-After completing THIS SINGLE ACTION, you MUST exit.
+Execute ONLY Step ${stepNum}, then stop.
 
-CONTEXT:
-Goal: "${this.currentPlan?.goal}"
-Full Plan (for reference only, DO NOT EXECUTE ALL):
+GOAL: "${this.currentPlan?.goal}"
+
+PLAN (reference only):
 ${fullPlanContext}
 
-═══════════════════════════════════════════════════════
-YOUR SINGLE TASK (Step ${stepNum} ONLY):
+CURRENT STEP (${stepNum}):
 Action: ${step.action}
-Arguments: ${JSON.stringify(step.args)}
-═══════════════════════════════════════════════════════
+Args: ${JSON.stringify(step.args)}
 ${correctionPrompt}
 
 RULES:
-1. Execute ONLY the action described above for Step ${stepNum}.
-2. After this ONE action, output "Step ${stepNum} done." and EXIT.
-3. DO NOT execute Steps ${stepNum + 1}, ${stepNum + 2}, etc.
-4. DO NOT "be helpful" by doing more than asked.
-5. ALWAYS activate the target app first: 'tell application "AppName" to activate'.
-6. Use AppleScript via python subprocess for UI control.
-7. ⚠️ CALCULATOR RULE: If opening Calculator, you MUST:
-   - First: 'tell application "Calculator" to activate'
-   - Then: 'tell application "System Events" to keystroke "c" using command down' (Cmd+C clears)
-   - ONLY THEN proceed with the action.
-
-VIOLATION WARNING: If you execute more than Step ${stepNum}, the entire plan will fail.
+1. Do ONLY Step ${stepNum}. Stop after.
+2. Activate target app before interacting.
+3. Use AppleScript for macOS control.
+4. If opening an app, clear its state first (Escape or Cmd+C).
+5. Output "Step ${stepNum} done." when finished.
 `;
 
             try {

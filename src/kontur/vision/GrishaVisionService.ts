@@ -548,36 +548,20 @@ export class GrishaVisionService extends EventEmitter {
             const currentStepNum = stepMatch ? parseInt(stepMatch[1]) : 1;
 
             const verificationPrompt = `
-STEP EXECUTION ANALYSIS
+STEP VERIFICATION
 
-═══════════════════════════════════════════════════════
-📍 COMPONENT 1: WHAT TETYANA JUST DID
-Action: "${stepAction}"
+Action performed: "${stepAction}"
 Details: ${stepDetails || 'none'}
-Target Application: ${targetApp || 'unknown'}
-═══════════════════════════════════════════════════════
+Target: ${targetApp || 'screen'}
+${globalContext ? `Goal: "${globalContext}"` : ''}
 
-📍 COMPONENT 2: WHAT YOU SEE ON SCREEN
-Analyze the screenshot. Describe what is ACTUALLY visible.
+Look at the screenshot and verify:
+1. Did this action complete successfully?
+2. Is the result correct?
 
-═══════════════════════════════════════════════════════
-
-📍 COMPONENT 3: GLOBAL GOAL
-${globalContext ? `"${globalContext}"` : 'Not specified.'}
-
-═══════════════════════════════════════════════════════
-
-🎯 DIRECT QUESTION:
-Was step "${stepAction}" executed successfully?
-
-Compare:
-- What SHOULD have happened (Component 1)
-- What ACTUALLY happened (Component 2)
-- Does this move toward the goal (Component 3)
-
-ANSWER (respond in Ukrainian):
-If YES — write "ВЕРИФІКОВАНО: [brief description]"
-If NO — write "ПОМИЛКА: [reason]"
+Respond in Ukrainian:
+- Success: "ВЕРИФІКОВАНО: [what you see]"
+- Failure: "ПОМИЛКА: [what went wrong]"
 `;
 
             const response = await router.analyzeVision({
