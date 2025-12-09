@@ -411,9 +411,15 @@ export class DeepIntegrationSystem {
   private async initAtlasCapsules(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Initializing Atlas Capsules...');
 
-    // API key from env
     // API key from env (Fallback chain)
-    const deepThinkingKey = process.env.ATLAS_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || '';
+    // We prioritize specific Gemini keys since BrainCapsule is Gemini-based
+    const deepThinkingKey =
+      process.env.REASONING_API_KEY ||
+      process.env.GEMINI_LIVE_API_KEY ||
+      process.env.TTS_API_KEY || // Often same as Gemini key
+      process.env.GOOGLE_API_KEY ||
+      process.env.GEMINI_API_KEY ||
+      '';
 
     // Initialize Dependencies (Real Memory + Real Brain)
     this.memory = new MemoryCapsule();
@@ -524,16 +530,7 @@ export class DeepIntegrationSystem {
       console.warn("[DEEP-INTEGRATION] Tetyana Capsule not ready!");
     }
 
-    // Legacy Mapper call removed for Tetyana to avoid duplicate registration
-    /*
-    const tetyanaOrgan = this.organMapper.createTetyanaOrgan(
-      this.forge,
-      this.voiceGhost,
-      this.brain
-    );
-    this.core.register(tetyanaOrgan.urn, tetyanaOrgan);
-    this.organs.set(tetyanaOrgan.urn, tetyanaOrgan);
-    */
+
 
     // 4. Register Grisha Capsule as Security Organ
     if (this.grisha) {
@@ -549,12 +546,7 @@ export class DeepIntegrationSystem {
       console.log(`[DEEP-INTEGRATION] 🛡️ Grisha Capsule registered as ${grishaUrn}`);
     }
 
-    // Legacy Grisha Mapper call removed
-    /*
-    const grishaOrgan = this.organMapper.createGrishaOrgan(this.brain);
-    this.core.register(grishaOrgan.urn, grishaOrgan);
-    this.organs.set(grishaOrgan.urn, grishaOrgan);
-    */
+
 
     // Note: Memory/Voice Organs mapped by mapper are often proxies.
     // Since we have specific handlers for System/Vision/MCP, we rely on those.
