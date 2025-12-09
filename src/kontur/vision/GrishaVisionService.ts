@@ -139,20 +139,37 @@ export class GrishaVisionService extends EventEmitter {
 
         console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
 
-        // Try exact match first
+        const normalize = (s: string) => s.toLowerCase().trim();
+        const target = normalize(appName);
+
+        // Common mappings (UA <-> EN)
+        const ALIASES: Record<string, string[]> = {
+            'калькулятор': ['calculator'],
+            'calculator': ['калькулятор'],
+            'термінал': ['terminal', 'iterm'],
+            'terminal': ['термінал', 'iterm'],
+            'нотатки': ['notes'],
+            'notes': ['нотатки'],
+            'сафарі': ['safari'],
+            'safari': ['сафарі'],
+            'файндер': ['finder'],
+            'finder': ['файндер']
+        };
+
+        const searchTerms = [target, ...(ALIASES[target] || [])];
+
         let matched = externalSources.find(s =>
-            s.name.toLowerCase() === appName.toLowerCase()
+            searchTerms.some(term => normalize(s.name) === term)
         );
 
-        // Then try includes match
         if (!matched) {
             matched = externalSources.find(s =>
-                s.name.toLowerCase().includes(appName.toLowerCase())
+                searchTerms.some(term => normalize(s.name).includes(term))
             );
         }
 
         if (matched) {
-            console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}"`);
+            console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}" (matched for "${appName}")`);
             this.selectSource(matched.id, matched.name);
             return true;
         }
@@ -288,7 +305,106 @@ export class GrishaVisionService extends EventEmitter {
     }
 
     /**
+     * Check if an object/window is visible on screen
+     * Returns visibility check result
+     */
+    private async checkObjectVisibility(stepAction: string, base64Image: string): Promise<{ visible: boolean, message: string }> {
+        try {
+            const router = getProviderRouter();
+
+            // Extract object/app name from step action
+            const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
+            const objectName = objectMatch ? objectMatch[1].trim() : 'об\'єкт';
+
+            const visibilityPrompt = `
+АНАЛІЗ ВИДИМОСТІ:
+Завдання: "${stepAction}"
+Об'єкт/вікно для пошуку: "${objectName}"
+
+ВАЖЛИВО:
+- Ігноруй текстові логи, консоль або чат, де написано про цей об'єкт.
+- Ти повинен бачити САМ ІНТЕРФЕЙС програми (кнопки, поля, вікно).
+- Якщо ти бачиш тільки текст "Calculator opened" або подібне в логах - це invisible.
+- Якщо вікно перекрито іншим (наприклад ATLAS KONTUR) - це invisible.
+
+ВІДПОВІДЬ НА ПИТАННЯ:
+1. Чи бачиш ти ІНТЕРФЕЙС програми "${objectName}"?
+2. Якщо так - опиши як він виглядає (колір, елементи)?
+3. Якщо ні - що саме перекриває його?
+
+Формат відповіді JSON:
+{
+  "visible": true/false,
+  "location": "опис де знаходиться" або null,
+  "screen_content": "що видно на екрані",
+  "is_obscured_by_atlas": true/false
+}`;
+
+            const response = await router.analyzeVision({
+                image: base64Image,
+                mimeType: 'image/jpeg',
+                taskContext: stepAction,
+                prompt: visibilityPrompt
+            });
+
+            // Parse visibility response
+            try {
+                const analysis = response.analysis;
+                const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                    const parsed = JSON.parse(jsonMatch[0]);
+                    const visible = parsed.visible === true;
+
+                    if (visible) {
+                        const location = parsed.location || 'на екрані';
+                        return {
+                            visible: true,
+                            message: `Бачу "${objectName}" ${location}`
+                        };
+                    } else {
+                        const screenContent = parsed.screen_content || 'інший вміст';
+                        return {
+                            visible: false,
+                            message: `Не бачу "${objectName}" на екрані. Видно: ${screenContent}`
+                        };
+                    }
+                }
+            } catch (parseErr) {
+                console.warn('[GRISHA VISION] Could not parse visibility JSON, analyzing text:', response.analysis);
+            }
+
+            // Fallback: analyze text response
+            const analysisLower = response.analysis.toLowerCase();
+            const positiveIndicators = ['бачу', 'yes', 'visible', 'відкрито', 'opened', 'present'];
+            const negativeIndicators = ['не бачу', 'no', 'not visible', 'закрито', 'hidden', 'absent', 'missing'];
+
+            const hasPositive = positiveIndicators.some(ind => analysisLower.includes(ind));
+            const hasNegative = negativeIndicators.some(ind => analysisLower.includes(ind));
+
+            if (hasNegative || !hasPositive) {
+                return {
+                    visible: false,
+                    message: `Не бачу "${objectName}" на екрані. ${response.analysis.slice(0, 100)}`
+                };
+            }
+
+            return {
+                visible: true,
+                message: `Бачу "${objectName}". ${response.analysis.slice(0, 100)}`
+            };
+
+        } catch (error: any) {
+            console.error('[GRISHA VISION] Visibility check failed:', error);
+            return {
+                visible: false,
+                message: `Помилка перевірки видимості: ${error.message}`
+            };
+        }
+    }
+
+    /**
      * Private: On-Demand Verification Logic
+     * NOW WITH VISIBILITY CHECK FIRST
      */
     private async verifyStepOnDemand(stepAction: string, stepDetails?: string): Promise<VisionObservationResult> {
         try {
@@ -297,12 +413,37 @@ export class GrishaVisionService extends EventEmitter {
                 return this.errorResult('Не вдалося захопити екран');
             }
 
+            // STEP 1: Check if object is visible
+            console.log('[GRISHA VISION] 👁️ Checking object visibility first...');
+            const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image);
+
+            if (!visibilityCheck.visible) {
+                console.warn(`[GRISHA VISION] ⚠️ Object not visible: ${visibilityCheck.message}`);
+                const result: VisionObservationResult = {
+                    type: 'alert',
+                    message: visibilityCheck.message,
+                    verified: false,
+                    confidence: 0.9, // High confidence in "not seeing"
+                    timestamp: Date.now(),
+                    mode: 'on-demand'
+                };
+                this.emit('observation', result);
+                return result;
+            }
+
+            console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
+
+            // STEP 2: Verify the action was completed
             const router = getProviderRouter();
             const response = await router.analyzeVision({
                 image: base64Image,
                 mimeType: 'image/jpeg',
                 taskContext: stepAction,
-                prompt: `Перевір виконання кроку: "${stepAction}". ${stepDetails || ''}\n\nЧи виконано цю дію успішно? Опиши що бачиш.`
+                prompt: `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
+
+Тепер перевір виконання кроку: "${stepAction}". ${stepDetails || ''}
+
+Чи виконано цю дію успішно? Що саме змінилось або відбулось?`
             });
 
             this.frameCount++;

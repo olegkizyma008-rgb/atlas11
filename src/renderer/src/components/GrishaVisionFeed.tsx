@@ -156,10 +156,16 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp, activ
         }
     }
 
-    // Auto-start based on targetApp
+    // Auto-start based on targetApp or default to screen
     useEffect(() => {
-        if (isActive && targetApp) {
-            loadSources()
+        if (isActive) {
+            if (targetApp) {
+                loadSources()
+            } else if (!streamActive && !activeSource) {
+                // Default to screen if no specific target
+                console.log("[FEED] Auto-starting default screen capture");
+                startStream('screen');
+            }
         }
     }, [isActive, targetApp])
 

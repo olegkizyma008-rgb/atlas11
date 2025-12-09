@@ -1693,9 +1693,11 @@ class ProviderRouter {
    */
   initializeProviders() {
     console.log("[PROVIDER ROUTER] 🔌 Initializing providers...");
-    const brainConfig = getProviderConfig("brain");
-    if (brainConfig.apiKey) {
-      this.llmProviders.set("gemini", new GeminiProvider(brainConfig.apiKey, brainConfig.model));
+    getProviderConfig("brain");
+    const geminiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (geminiKey) {
+      this.llmProviders.set("gemini", new GeminiProvider(geminiKey, "gemini-2.5-flash"));
+      console.log("[PROVIDER ROUTER] ✅ Gemini LLM provider initialized");
     }
     const openaiKey = process.env.OPENAI_API_KEY;
     if (openaiKey) {
@@ -1771,9 +1773,12 @@ class ProviderRouter {
           const fallbackProvider = this.llmProviders.get(config2.fallbackProvider);
           if (fallbackProvider && fallbackProvider.isAvailable()) {
             console.log(`[PROVIDER ROUTER] 🔄 Switching to fallback: ${config2.fallbackProvider}`);
-            const fallbackConfig = getProviderConfig(service);
             if (config2.fallbackProvider === "gemini") {
-              request.model = fallbackConfig.model || "gemini-2.5-flash";
+              request.model = "gemini-2.5-flash";
+            } else if (config2.fallbackProvider === "openai") {
+              request.model = "gpt-4o";
+            } else if (config2.fallbackProvider === "anthropic") {
+              request.model = "claude-3-5-sonnet-20241022";
             }
             return await fallbackProvider.generate(request);
           }
@@ -3341,16 +3346,31 @@ class GrishaVisionService extends events.EventEmitter {
       (s) => !s.name.toLowerCase().includes("electron") && !s.name.toLowerCase().includes("atlas") && !s.name.toLowerCase().includes("kontur")
     );
     console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
+    const normalize = (s) => s.toLowerCase().trim();
+    const target = normalize(appName);
+    const ALIASES = {
+      "калькулятор": ["calculator"],
+      "calculator": ["калькулятор"],
+      "термінал": ["terminal", "iterm"],
+      "terminal": ["термінал", "iterm"],
+      "нотатки": ["notes"],
+      "notes": ["нотатки"],
+      "сафарі": ["safari"],
+      "safari": ["сафарі"],
+      "файндер": ["finder"],
+      "finder": ["файндер"]
+    };
+    const searchTerms = [target, ...ALIASES[target] || []];
     let matched = externalSources.find(
-      (s) => s.name.toLowerCase() === appName.toLowerCase()
+      (s) => searchTerms.some((term) => normalize(s.name) === term)
     );
     if (!matched) {
       matched = externalSources.find(
-        (s) => s.name.toLowerCase().includes(appName.toLowerCase())
+        (s) => searchTerms.some((term) => normalize(s.name).includes(term))
       );
     }
     if (matched) {
-      console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}"`);
+      console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}" (matched for "${appName}")`);
       this.selectSource(matched.id, matched.name);
       return true;
     }
@@ -3461,7 +3481,92 @@ class GrishaVisionService extends events.EventEmitter {
     });
   }
   /**
+   * Check if an object/window is visible on screen
+   * Returns visibility check result
+   */
+  async checkObjectVisibility(stepAction, base64Image) {
+    try {
+      const router2 = getProviderRouter();
+      const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
+      const objectName = objectMatch ? objectMatch[1].trim() : "об'єкт";
+      const visibilityPrompt = `
+АНАЛІЗ ВИДИМОСТІ:
+Завдання: "${stepAction}"
+Об'єкт/вікно для пошуку: "${objectName}"
+
+ВАЖЛИВО:
+- Ігноруй текстові логи, консоль або чат, де написано про цей об'єкт.
+- Ти повинен бачити САМ ІНТЕРФЕЙС програми (кнопки, поля, вікно).
+- Якщо ти бачиш тільки текст "Calculator opened" або подібне в логах - це invisible.
+- Якщо вікно перекрито іншим (наприклад ATLAS KONTUR) - це invisible.
+
+ВІДПОВІДЬ НА ПИТАННЯ:
+1. Чи бачиш ти ІНТЕРФЕЙС програми "${objectName}"?
+2. Якщо так - опиши як він виглядає (колір, елементи)?
+3. Якщо ні - що саме перекриває його?
+
+Формат відповіді JSON:
+{
+  "visible": true/false,
+  "location": "опис де знаходиться" або null,
+  "screen_content": "що видно на екрані",
+  "is_obscured_by_atlas": true/false
+}`;
+      const response = await router2.analyzeVision({
+        image: base64Image,
+        mimeType: "image/jpeg",
+        taskContext: stepAction,
+        prompt: visibilityPrompt
+      });
+      try {
+        const analysis = response.analysis;
+        const jsonMatch = analysis.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          const visible = parsed.visible === true;
+          if (visible) {
+            const location = parsed.location || "на екрані";
+            return {
+              visible: true,
+              message: `Бачу "${objectName}" ${location}`
+            };
+          } else {
+            const screenContent = parsed.screen_content || "інший вміст";
+            return {
+              visible: false,
+              message: `Не бачу "${objectName}" на екрані. Видно: ${screenContent}`
+            };
+          }
+        }
+      } catch (parseErr) {
+        console.warn("[GRISHA VISION] Could not parse visibility JSON, analyzing text:", response.analysis);
+      }
+      const analysisLower = response.analysis.toLowerCase();
+      const positiveIndicators = ["бачу", "yes", "visible", "відкрито", "opened", "present"];
+      const negativeIndicators = ["не бачу", "no", "not visible", "закрито", "hidden", "absent", "missing"];
+      const hasPositive = positiveIndicators.some((ind) => analysisLower.includes(ind));
+      const hasNegative = negativeIndicators.some((ind) => analysisLower.includes(ind));
+      if (hasNegative || !hasPositive) {
+        return {
+          visible: false,
+          message: `Не бачу "${objectName}" на екрані. ${response.analysis.slice(0, 100)}`
+        };
+      }
+      return {
+        visible: true,
+        message: `Бачу "${objectName}". ${response.analysis.slice(0, 100)}`
+      };
+    } catch (error) {
+      console.error("[GRISHA VISION] Visibility check failed:", error);
+      return {
+        visible: false,
+        message: `Помилка перевірки видимості: ${error.message}`
+      };
+    }
+  }
+  /**
    * Private: On-Demand Verification Logic
+   * NOW WITH VISIBILITY CHECK FIRST
    */
   async verifyStepOnDemand(stepAction, stepDetails) {
     try {
@@ -3469,14 +3574,33 @@ class GrishaVisionService extends events.EventEmitter {
       if (!base64Image) {
         return this.errorResult("Не вдалося захопити екран");
       }
+      console.log("[GRISHA VISION] 👁️ Checking object visibility first...");
+      const visibilityCheck = await this.checkObjectVisibility(stepAction, base64Image);
+      if (!visibilityCheck.visible) {
+        console.warn(`[GRISHA VISION] ⚠️ Object not visible: ${visibilityCheck.message}`);
+        const result2 = {
+          type: "alert",
+          message: visibilityCheck.message,
+          verified: false,
+          confidence: 0.9,
+          // High confidence in "not seeing"
+          timestamp: Date.now(),
+          mode: "on-demand"
+        };
+        this.emit("observation", result2);
+        return result2;
+      }
+      console.log(`[GRISHA VISION] ✅ Object visible: ${visibilityCheck.message}`);
       const router2 = getProviderRouter();
       const response = await router2.analyzeVision({
         image: base64Image,
         mimeType: "image/jpeg",
         taskContext: stepAction,
-        prompt: `Перевір виконання кроку: "${stepAction}". ${stepDetails || ""}
+        prompt: `Об'єкт підтверджено видимим: "${visibilityCheck.message}".
 
-Чи виконано цю дію успішно? Опиши що бачиш.`
+Тепер перевір виконання кроку: "${stepAction}". ${stepDetails || ""}
+
+Чи виконано цю дію успішно? Що саме змінилось або відбулось?`
       });
       this.frameCount++;
       const result = {
@@ -3717,17 +3841,30 @@ class TetyanaExecutor extends events.EventEmitter {
           console.log(`[TETYANA] 👁️ Continuing to watch: ${this.lastActiveApp}`);
         }
         await this.validateStep(step, stepNum);
+        try {
+        } catch (e) {
+        }
         let result;
-        if (usePythonBridge) {
+        const useBridge = true;
+        if (useBridge) {
+          console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
           result = await this.executeStepViaBridge(step, stepNum);
-        } else {
-          result = await this.executeStep(step, stepNum);
         }
         vision.resumeCapture();
+        console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
+        if (this.lastActiveApp) {
+          console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
+        }
         const visionResult = await this.verifyStepWithVision(step, stepNum);
-        if (visionResult && !visionResult.verified && visionResult.type === "alert") {
-          console.warn(`[TETYANA] ⚠️ Vision alert: ${visionResult.message}`);
-          this.emitStatus("warning", `Grisha: ${visionResult.message}`);
+        if (visionResult) {
+          if (visionResult.verified) {
+            console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
+          } else {
+            console.warn(`[TETYANA] ⚠️ Grisha alert: ${visionResult.message}`);
+            this.emitStatus("warning", `Grisha: ${visionResult.message}`);
+          }
+        } else {
+          console.log(`[TETYANA] 👁️ Vision verification unavailable, continuing...`);
         }
         this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
       }
@@ -3954,7 +4091,7 @@ class TetyanaExecutor extends events.EventEmitter {
         reject(new Error("Python environment not found"));
         return;
       }
-      const fullPlanContext = this.currentPlan?.steps.map(
+      const fullPlanContext = (this.currentPlan?.steps || []).map(
         (s, i) => `Step ${i + 1}: ${s.action} ${JSON.stringify(s.args || {})}`
       ).join("\n");
       const stepPrompt = `
@@ -3968,21 +4105,33 @@ You are currently executing Step ${stepNum}.
 Task: ${step.action}
 Arguments: ${JSON.stringify(step.args)}
 
-INSTRUCTIONS:
-1. Do not execute previous or future steps.
-2. Do not ask for confirmation.
-3. You have full permission to control the OS (open apps, type text, use mouse).
-4. Use AppleScript (osascript) via python 'subprocess' or 'os.system' to open applications or control UI if needed.
-5. For "TextEditor", assume "TextEdit" on macOS.
-6. Write and run the python code to perform this specific action immediately.
-7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'. Use the app name from the context or arguments.
-8. FOR FILE OPERATIONS: Use standard python 'os' and 'shutil' modules. DO NOT use AppleScript (Finder) for creating, moving, or listing files as it triggers permission errors.`;
+MANDATORY RULES:
+1. CHECK PERMISSIONS FIRST: Verify you have Accessibility/ScreenRecording permissions.
+2. Do not execute previous or future steps.
+3. Do not ask for confirmation.
+4. You have full permission to control the OS.
+5. Use AppleScript (osascript) via python 'subprocess' to open applications or control UI.
+6. For "TextEditor", assume "TextEdit" on macOS.
+7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'.
+8. USE INTERNAL KNOWLEDGE (RAG) if the task is complex.
+`;
       try {
-        this.core.emit("tetyana:log", { message: `[Bridge] Executing Step ${stepNum}...` });
+        this.core.emit("ingest", createPacket(
+          "kontur://organ/tetyana",
+          "kontur://atlas/system",
+          PacketIntent.EVENT,
+          { type: "log", message: `[Bridge] Executing Step ${stepNum}...` }
+        ));
         const result = await bridge.execute(stepPrompt);
-        this.core.emit("tetyana:log", { message: `[Bridge] Step ${stepNum} Done.` });
+        this.core.emit("ingest", createPacket(
+          "kontur://organ/tetyana",
+          "kontur://atlas/system",
+          PacketIntent.EVENT,
+          { type: "log", message: `[Bridge] Step ${stepNum} Done.` }
+        ));
         resolve(result);
       } catch (e) {
+        console.error("[TETYANA] 🐍 Bridge Execution Failed:", e);
         reject(e);
       }
     });

@@ -187,10 +187,13 @@ export class ProviderRouter {
                     if (fallbackProvider && fallbackProvider.isAvailable()) {
                         console.log(`[PROVIDER ROUTER] 🔄 Switching to fallback: ${config.fallbackProvider}`);
 
-                        // Update model for fallback provider if needed
-                        const fallbackConfig = getProviderConfig(service);
+                        // Update model for fallback provider - use appropriate model for the fallback
                         if (config.fallbackProvider === 'gemini') {
-                            request.model = fallbackConfig.model || 'gemini-2.5-flash';
+                            request.model = 'gemini-2.5-flash';
+                        } else if (config.fallbackProvider === 'openai') {
+                            request.model = 'gpt-4o';
+                        } else if (config.fallbackProvider === 'anthropic') {
+                            request.model = 'claude-3-5-sonnet-20241022';
                         }
 
                         return await fallbackProvider.generate(request);

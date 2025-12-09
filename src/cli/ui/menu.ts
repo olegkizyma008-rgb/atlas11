@@ -10,7 +10,7 @@ import ora from 'ora';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 import { select, input, confirm, secret } from './prompts.js';
 import { configManager } from '../managers/config-manager.js';
 import { modelRegistry } from '../managers/model-registry.js';
@@ -105,6 +105,7 @@ export async function mainMenu(): Promise<void> {
             { name: 'App Settings', value: 'settings' },
             { name: 'System Health Check', value: 'health' },
             { name: '─'.repeat(40), value: '_sep2', disabled: true },
+            { name: chalk.magenta('Run macOS Automation Agent') + chalk.gray(' (Python)'), value: 'run_agent' },
             { name: chalk.magenta('Test Tetyana (NL Mode)'), value: 'test_tetyana' },
             { name: chalk.yellow('Exit'), value: 'exit' }
         ];
@@ -127,6 +128,8 @@ export async function mainMenu(): Promise<void> {
             await runHealthCheck();
         } else if (action === 'test_tetyana') {
             await testTetyanaMode();
+        } else if (action === 'run_agent') {
+            await runPythonAgent();
         }
     }
 }
@@ -1357,3 +1360,68 @@ async function testTetyanaMode(): Promise<void> {
         }
     }
 }
+
+/**
+ * Run the macOS Automation Agent (Python)
+ */
+async function runPythonAgent(): Promise<void> {
+    console.clear();
+    console.log(chalk.green('\n  Starting macOS Automation Agent...'));
+    console.log(chalk.gray('  Launching python3 mac_master_agent.py\n'));
+
+    // We assume mac_assistant is in user home
+    const agentPath = path.join(os.homedir(), 'mac_assistant');
+    // Use the specific python environment where dependencies are installed
+    const pythonPath = '/Users/dev/.pyenv/versions/3.11.13/bin/python3';
+
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const child = spawn(pythonPath, ['mac_master_agent.py'], {
+                cwd: agentPath,
+                stdio: 'inherit'
+            });
+
+            child.on('error', (err) => {
+                console.error(chalk.red(`\n  Failed to start agent: ${err.message}`));
+                reject(err);
+            });
+
+            child.on('exit', (code) => {
+                if (code !== 0) {
+                    console.log(chalk.yellow(`\n  Agent exited with code ${code}`));
+                } else {
+                    console.log(chalk.green('\n  Agent finished successfully.'));
+                }
+                resolve();
+            });
+        });
+
+        // Pause before returning to menu
+        console.log(chalk.gray('\n  Press Enter to return to menu...'));
+        await input('');
+    } catch (e: any) {
+        console.log(chalk.red(`\n  Error: ${e.message}`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * Run Health Check (Stub)
+ */
+/*
+async function runHealthCheck(): Promise<void> {
+     console.log(chalk.cyan('\n  Running System Health Check...'));
+     await new Promise(r => setTimeout(r, 1000));
+}
+*/
+
+/**
+ * Configure App Settings (Stub)
+ */
+/*
+async function configureAppSettings(): Promise<void> {
+    console.log(chalk.cyan('\n  Configuring App Settings...'));
+    await new Promise(r => setTimeout(r, 1000));
+}
+*/
+

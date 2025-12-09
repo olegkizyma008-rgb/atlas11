@@ -13,6 +13,47 @@ import { join, dirname } from "path";
 const execAsync = promisify(exec);
 
 /**
+ * Check if Accessibility permissions are granted
+ * Returns helpful diagnostic information
+ */
+async function checkAccessibilityPermissions(): Promise<{ granted: boolean, message: string }> {
+    try {
+        // Try to execute a simple AppleScript that requires Accessibility
+        // This will fail with specific error if permissions not granted
+        const testScript = 'tell application "System Events" to return name of first process';
+        await execAsync(`osascript -e '${testScript}'`);
+        return { granted: true, message: "Accessibility permissions OK" };
+    } catch (error: any) {
+        const errorMsg = error.message || error.toString();
+
+        // Check for specific permission error patterns
+        if (errorMsg.includes('not allowed') || errorMsg.includes('not permitted') || errorMsg.includes('-1719')) {
+            return {
+                granted: false,
+                message: `❌ Accessibility Permissions Required
+
+Please enable:
+1. Open System Settings → Privacy & Security → Accessibility
+2. Add your Terminal app or Electron app to the list
+3. Toggle the switch ON
+4. Restart this application
+
+Alternatively, you can run this in Terminal:
+  tccutil reset Accessibility
+
+Then grant permissions when prompted.`
+            };
+        }
+
+        // Other error - may still be permissions-related
+        return {
+            granted: false,
+            message: `⚠️ Unable to verify Accessibility permissions: ${errorMsg}`
+        };
+    }
+}
+
+/**
  * MCP Server for OS Automation (macOS)
  * Exposes system capabilities as standard MCP tools
  */
@@ -209,6 +250,14 @@ server.setRequestHandler(ListToolsRequestSchema, async () => {
                         path: { type: "string", description: "Parent directory path" }
                     },
                     required: ["projectName", "type", "path"]
+                }
+            },
+            {
+                name: "check_permissions",
+                description: "Check if Accessibility and automation permissions are granted",
+                inputSchema: {
+                    type: "object",
+                    properties: {}
                 }
             }
         ],
@@ -411,13 +460,43 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 
         if (name === "keyboard_type") {
             const { text } = args as { text: string };
+
+            // Check permissions first
+            const permCheck = await checkAccessibilityPermissions();
+            if (!permCheck.granted) {
+                return {
+                    content: [{ type: "text", text: permCheck.message }],
+                    isError: true
+                };
+            }
+
             const escaped = text.replace(/\\/g, '\\\\').replace(/"/g, '\\"');
-            await execAsync(`osascript -e 'tell application "System Events" to keystroke "${escaped}"'`);
-            return { content: [{ type: "text", text: `Typed: ${text}` }] };
+            try {
+                await execAsync(`osascript -e 'tell application "System Events" to keystroke "${escaped}"'`);
+                return { content: [{ type: "text", text: `Typed: ${text}` }] };
+            } catch (err: any) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Keyboard type failed: ${err.message}\n\nThis usually means Accessibility permissions are not granted.`
+                    }],
+                    isError: true
+                };
+            }
         }
 
         if (name === "keyboard_press") {
             const { key, modifiers } = args as { key: string, modifiers?: string[] };
+
+            // Check permissions first
+            const permCheck = await checkAccessibilityPermissions();
+            if (!permCheck.granted) {
+                return {
+                    content: [{ type: "text", text: permCheck.message }],
+                    isError: true
+                };
+            }
+
             const modStr = modifiers && modifiers.length ? ` using {${modifiers.join(", ")}}` : "";
             const keyCodes: Record<string, number> = {
                 'return': 36, 'enter': 36, 'tab': 48, 'space': 49, 'delete': 51,
@@ -425,12 +504,23 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
                 'f1': 122, 'f2': 120, 'f3': 99, 'f4': 118, 'f5': 96
             };
             const keyLower = key.toLowerCase();
-            if (keyCodes[keyLower] !== undefined) {
-                await execAsync(`osascript -e 'tell application "System Events" to key code ${keyCodes[keyLower]}${modStr}'`);
-            } else {
-                await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
+
+            try {
+                if (keyCodes[keyLower] !== undefined) {
+                    await execAsync(`osascript -e 'tell application "System Events" to key code ${keyCodes[keyLower]}${modStr}'`);
+                } else {
+                    await execAsync(`osascript -e 'tell application "System Events" to keystroke "${key}"${modStr}'`);
+                }
+                return { content: [{ type: "text", text: `Pressed: ${key}${modStr}` }] };
+            } catch (err: any) {
+                return {
+                    content: [{
+                        type: "text",
+                        text: `Keyboard press failed: ${err.message}\n\nThis usually means Accessibility permissions are not granted.`
+                    }],
+                    isError: true
+                };
             }
-            return { content: [{ type: "text", text: `Pressed: ${key}${modStr}` }] };
         }
 
         if (name === "mouse_click") {
@@ -551,6 +641,19 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
             } catch (e: any) {
                 return { content: [{ type: "text", text: `Scaffold failed: ${e.message}` }], isError: true };
             }
+        }
+
+        if (name === "check_permissions") {
+            const permCheck = await checkAccessibilityPermissions();
+            return {
+                content: [{
+                    type: "text",
+                    text: permCheck.granted
+                        ? "✅ Accessibility permissions are granted. Automation is ready."
+                        : permCheck.message
+                }],
+                isError: !permCheck.granted
+            };
         }
 
         throw new Error(`Unknown tool: ${name}`);
