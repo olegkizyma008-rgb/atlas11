@@ -744,10 +744,15 @@ function getEffectiveApiKey(provider: string): string {
  * Configure global API keys
  */
 async function configureAPIKeys(): Promise<void> {
+    // Get current config to show dynamic labels
+    const currentConfig = configManager.getAll();
+    const reasoningProvider = currentConfig['REASONING_PROVIDER'] || 'gemini';
+    const reasoningModel = currentConfig['REASONING_MODEL'] || 'gemini-3-pro-preview';
+
     const keysList = [
         { key: 'GEMINI_API_KEY', label: 'Gemini (Default)' },
         { key: 'GEMINI_LIVE_API_KEY', label: 'Gemini Live (Vision/Grisha)' },
-        { key: 'REASONING_API_KEY', label: 'Reasoning (Gemini 3)' },
+        { key: 'REASONING_API_KEY', label: `Reasoning (${reasoningProvider}/${reasoningModel.slice(0, 15)}...)` },
         { key: 'COPILOT_API_KEY', label: 'GitHub Copilot' },
         { key: 'OPENAI_API_KEY', label: 'OpenAI' },
         { key: 'ANTHROPIC_API_KEY', label: 'Anthropic' },
