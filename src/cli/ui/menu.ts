@@ -1,177 +1,421 @@
+/**
+ * KONTUR CLI - Main Menu
+ * Clean UI: no emojis, no borders, no circular navigation
+ * Full system configuration: services, API keys, app settings
+ */
+
 import chalk from 'chalk';
-import { select, input } from './prompts.js';
+import { select, input, confirm, secret } from './prompts.js';
 import { configManager } from '../managers/config-manager.js';
 import { modelRegistry } from '../managers/model-registry.js';
 import ora from 'ora';
 
-export async function mainMenu() {
-    while (true) {
-        console.clear();
-        console.log(chalk.bold.blue('╔═══════════════════════════════════════════════════╗'));
-        console.log(chalk.bold.blue('║            KONTUR SYSTEM CONFIGURATOR             ║'));
-        console.log(chalk.bold.blue('╚═══════════════════════════════════════════════════╝'));
-        console.log('');
+// Service definitions
+const SERVICES = [
+    { key: 'brain', label: 'Brain', desc: 'Chat and Planning' },
+    { key: 'tts', label: 'TTS', desc: 'Text-to-Speech' },
+    { key: 'stt', label: 'STT', desc: 'Speech-to-Text' },
+    { key: 'vision', label: 'Vision', desc: 'Visual Analysis (Grisha)' },
+    { key: 'reasoning', label: 'Reasoning', desc: 'Deep Thinking (Gemini 3)' }
+] as const;
 
+// Available providers
+const PROVIDERS = ['gemini', 'copilot', 'openai', 'anthropic', 'mistral'];
+
+// Provider-specific API key names
+const PROVIDER_API_KEYS: Record<string, string> = {
+    gemini: 'GEMINI_API_KEY',
+    copilot: 'COPILOT_API_KEY',
+    openai: 'OPENAI_API_KEY',
+    anthropic: 'ANTHROPIC_API_KEY',
+    mistral: 'MISTRAL_API_KEY'
+};
+
+/**
+ * Display header
+ */
+function showHeader(title: string): void {
+    console.clear();
+    console.log(chalk.bold.cyan(`\n  KONTUR SYSTEM CONFIGURATOR`));
+    console.log(chalk.gray(`  ${title}`));
+    console.log(chalk.gray(`  ${'─'.repeat(45)}`));
+    console.log('');
+}
+
+/**
+ * Format value for display: show placeholder if empty
+ */
+function fmtVal(val: string | undefined, placeholder: string = 'not set'): string {
+    return val ? chalk.green(val) : chalk.gray(placeholder);
+}
+
+/**
+ * Format API key for display (masked)
+ */
+function fmtKey(val: string | undefined): string {
+    if (!val) return chalk.red('not set');
+    if (val.length > 10) return chalk.green(val.substring(0, 8) + '...');
+    return chalk.green('***');
+}
+
+/**
+ * Main menu
+ */
+export async function mainMenu(): Promise<void> {
+    while (true) {
+        showHeader('Main Menu');
         const config = configManager.getAll();
 
+        // Build service status display
+        const serviceChoices = SERVICES.map(s => {
+            const provider = config[`${s.key.toUpperCase()}_PROVIDER`] || 'not set';
+            const model = config[`${s.key.toUpperCase()}_MODEL`] || 'not set';
+            return {
+                name: `${s.label.padEnd(12)} ${chalk.gray(provider)} / ${chalk.cyan(model)}`,
+                value: `service:${s.key}`
+            };
+        });
+
         const choices = [
-            { name: `🧠 Brain     ${chalk.gray(config.BRAIN_PROVIDER || 'not set')} / ${chalk.green(config.BRAIN_MODEL || 'not set')}`, value: 'brain' },
-            { name: `🔊 TTS       ${chalk.gray(config.TTS_PROVIDER || 'not set')} / ${chalk.green(config.TTS_MODEL || 'not set')}`, value: 'tts' },
-            { name: `🎤 STT       ${chalk.gray(config.STT_PROVIDER || 'not set')} / ${chalk.green(config.STT_MODEL || 'not set')}`, value: 'stt' },
-            { name: `👁️ Vision    ${chalk.gray(config.VISION_PROVIDER || 'not set')} / ${chalk.green(config.VISION_MODEL || 'not set')}`, value: 'vision' },
-            { name: `🤔 Reasoning ${chalk.gray(config.REASONING_PROVIDER || 'not set')} / ${chalk.green(config.REASONING_MODEL || 'not set')}`, value: 'reasoning' },
-            { name: `🔑 API Keys`, value: 'keys' },
-            { name: `🧪 Test Providers`, value: 'test' },
-            { name: chalk.red('Exit'), value: 'exit' }
+            ...serviceChoices,
+            { name: '─'.repeat(40), value: '_sep1', disabled: true },
+            { name: 'API Keys', value: 'keys' },
+            { name: 'App Settings', value: 'settings' },
+            { name: 'System Health Check', value: 'health' },
+            { name: '─'.repeat(40), value: '_sep2', disabled: true },
+            { name: chalk.yellow('Exit'), value: 'exit' }
         ];
 
-        const action = await select('Select configuration category:', choices);
+        const action = await select('', choices);
 
         if (action === 'exit') {
+            console.log(chalk.gray('\n  Exiting...\n'));
             process.exit(0);
         }
 
-        if (action === 'keys') {
-            await configureKeys();
-        } else if (action === 'test') {
+        if (action.startsWith('service:')) {
+            const serviceName = action.replace('service:', '');
+            await configureService(serviceName);
+        } else if (action === 'keys') {
+            await configureAPIKeys();
+        } else if (action === 'settings') {
+            await configureAppSettings();
+        } else if (action === 'health') {
             await runHealthCheck();
-        } else {
-            await configureService(action);
         }
     }
 }
 
-async function runHealthCheck() {
-    console.clear();
-    console.log(chalk.bold('🧪 System Health Check\n'));
-
-    const config = configManager.getAll();
-    const services = ['BRAIN', 'TTS', 'STT', 'VISION', 'REASONING'];
-
-    for (const service of services) {
-        const provider = config[`${service}_PROVIDER`];
-        const model = config[`${service}_MODEL`];
-        const apiKey = config[`${provider?.toUpperCase()}_API_KEY`];
-
-        let status = chalk.yellow('⚠️  Not Configured');
-
-        if (provider && model && apiKey) {
-            const spinner = ora(`Testing ${service} (${provider}/${model})...`).start();
-            try {
-                // Mock test - in reality we would try to generate 1 token or list models
-                // For configured Gemini, we can actually try fetching models as a connectivity test
-                if (provider === 'gemini') {
-                    // Gemini verification
-                    const { GoogleGenAI } = await import('@google/genai');
-                    const client = new GoogleGenAI({ apiKey });
-                    await client.models.list(); // Simple call to check key
-                    status = chalk.green('✅  OK');
-                } else if (provider === 'copilot') {
-                    // Copilot verification
-                    const { VSCodeCopilotProvider } = await import('../../kontur/providers/copilot.js');
-                    const cp = new VSCodeCopilotProvider(apiKey);
-                    const models = await cp.fetchModels(); // This triggers the token verification
-                    if (models.length > 0) {
-                        status = chalk.green('✅  OK (GitHub User Verified)');
-                    } else {
-                        throw new Error('Verification failed (Invalid token)');
-                    }
-                } else {
-                    // For others, try fetching models via registry (it might wrap them but better than nothing)
-                    // Actually, let's just mark others as "Configured" for now to avoid complexity without specific clients
-                    status = chalk.blue('ℹ️  Configured (Run task to verify)');
-                }
-                spinner.stop();
-            } catch (e: any) {
-                spinner.stop();
-                status = chalk.red(`❌  Failed: ${e.message}`);
-            }
-        }
-
-        console.log(`${chalk.bold(service.padEnd(10))} ${status}`);
-    }
-
-    console.log('\nPress Enter to return...');
-    await input('');
-}
-
-async function configureKeys() {
-    const keys = ['GEMINI_API_KEY', 'OPENAI_API_KEY', 'ANTHROPIC_API_KEY', 'MISTRAL_API_KEY', 'COPILOT_API_KEY'];
-
-    while (true) {
-        console.clear();
-        console.log(chalk.bold('Manage API Keys'));
-        const config = configManager.getAll();
-
-        const choices = [
-            ...keys.map(k => ({
-                name: `${k}: ${config[k] ? chalk.green('**********') : chalk.red('Checking...')}`,
-                value: k
-            })),
-            { name: 'Back', value: 'back' }
-        ];
-
-        const key = await select('Select key to edit:', choices);
-        if (key === 'back') return;
-
-        const currentValue = configManager.get(key);
-        const newValue = await input(`Enter value for ${key}:`, currentValue);
-        if (newValue) {
-            configManager.set(key, newValue);
-        }
-    }
-}
-
-async function configureService(service: string) {
+/**
+ * Configure a specific service (provider + model + API key)
+ */
+async function configureService(service: string): Promise<void> {
     const serviceUpper = service.toUpperCase();
+    const serviceInfo = SERVICES.find(s => s.key === service);
+    const serviceName = serviceInfo?.label || service;
 
     while (true) {
-        console.clear();
-        console.log(chalk.bold(`Configure ${serviceUpper}`));
+        showHeader(`Configure ${serviceName}`);
+        console.log(chalk.gray(`  ${serviceInfo?.desc || ''}\n`));
 
         const config = configManager.getAll();
         const providerKey = `${serviceUpper}_PROVIDER`;
         const modelKey = `${serviceUpper}_MODEL`;
+        const apiKeyKey = `${serviceUpper}_API_KEY`;
+        const fallbackKey = `${serviceUpper}_FALLBACK_PROVIDER`;
+
+        const currentProvider = config[providerKey];
+        const currentModel = config[modelKey];
+        const currentApiKey = config[apiKeyKey];
+        const currentFallback = config[fallbackKey];
+
+        // Also show global key if service-specific not set
+        const effectiveApiKey = currentApiKey || config[PROVIDER_API_KEYS[currentProvider || 'gemini']] || config['GEMINI_API_KEY'];
 
         const choices = [
-            { name: `Provider: ${chalk.cyan(config[providerKey] || 'None')}`, value: 'provider' },
-            { name: `Model:    ${chalk.cyan(config[modelKey] || 'None')}`, value: 'model' },
+            { name: `Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
+            { name: `Model            ${fmtVal(currentModel)}`, value: 'model' },
+            { name: `API Key          ${fmtKey(currentApiKey)}${!currentApiKey && effectiveApiKey ? chalk.gray(' (using global)') : ''}`, value: 'apikey' },
+            { name: `Fallback         ${fmtVal(currentFallback, 'none')}`, value: 'fallback' },
+            { name: '─'.repeat(35), value: '_sep', disabled: true },
             { name: 'Back', value: 'back' }
         ];
 
-        const action = await select('Edit:', choices);
+        const action = await select('', choices);
 
         if (action === 'back') return;
 
-        if (action === 'provider') {
-            const providers = ['gemini', 'openai', 'anthropic', 'mistral', 'copilot'];
-            const newProvider = await select('Select Provider:', providers.map(p => ({ name: p, value: p })));
-            configManager.set(providerKey, newProvider);
-        }
-
-        if (action === 'model') {
-            const provider = configManager.get(providerKey);
-            const providerUpper = provider?.toUpperCase() || '';
-            if (!provider) {
-                console.log(chalk.red('Please set a provider first.'));
-                await new Promise(r => setTimeout(r, 1000));
-                continue;
-            }
-
-            const spinner = ora('Fetching models & verifying credentials...').start();
-            try {
-                // In a real scenario, we would use the API key to fetch valid models
-                // For now we use the static registry
-                const models = await modelRegistry.fetchModels(provider, configManager.get(`${provider.toUpperCase()}_API_KEY`) || '');
-                spinner.stop();
-
-                const model = await select('Select Model:', models.map(m => ({ name: m.name + chalk.gray(` (${m.id})`), value: m.id })));
-                configManager.set(modelKey, model);
-                console.log(chalk.green(`\n✅ ${providerUpper} configured with model ${model}. Ready to initialize.`));
-                await new Promise(r => setTimeout(r, 1500)); // Pause to let user see
-            } catch (e) {
-                spinner.fail('Failed to fetch models');
-            }
+        switch (action) {
+            case 'provider':
+                await selectProvider(providerKey);
+                break;
+            case 'model':
+                await selectModel(providerKey, modelKey);
+                break;
+            case 'apikey':
+                await editApiKey(apiKeyKey, `${serviceName} API Key`);
+                break;
+            case 'fallback':
+                await selectFallback(fallbackKey, config[providerKey]);
+                break;
         }
     }
+}
+
+/**
+ * Select provider for a service
+ */
+async function selectProvider(providerKey: string): Promise<void> {
+    const choices = PROVIDERS.map(p => ({ name: p, value: p }));
+    choices.push({ name: 'Back', value: 'back' });
+
+    const selected = await select('Provider', choices);
+    if (selected !== 'back') {
+        configManager.set(providerKey, selected);
+    }
+}
+
+/**
+ * Select model for a service
+ */
+async function selectModel(providerKey: string, modelKey: string): Promise<void> {
+    const provider = configManager.get(providerKey);
+
+    if (!provider) {
+        console.log(chalk.red('\n  Please set a provider first.\n'));
+        await new Promise(r => setTimeout(r, 1500));
+        return;
+    }
+
+    const spinner = ora('Fetching models...').start();
+
+    try {
+        const apiKey = getEffectiveApiKey(provider);
+        const models = await modelRegistry.fetchModels(provider, apiKey);
+        spinner.stop();
+
+        if (models.length === 0) {
+            console.log(chalk.yellow('\n  No models available for this provider.\n'));
+            await new Promise(r => setTimeout(r, 1500));
+            return;
+        }
+
+        const choices = models.map(m => ({
+            name: `${m.name}${m.id !== m.name ? chalk.gray(` (${m.id})`) : ''}`,
+            value: m.id
+        }));
+        choices.push({ name: 'Back', value: 'back' });
+
+        const selected = await select('Model', choices, { pageSize: 20 });
+        if (selected !== 'back') {
+            configManager.set(modelKey, selected);
+        }
+    } catch (e: any) {
+        spinner.fail(`Failed to fetch models: ${e.message}`);
+        await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * Edit API key for a service
+ */
+async function editApiKey(keyName: string, label: string): Promise<void> {
+    const current = configManager.get(keyName);
+    console.log(chalk.gray(`\n  Current: ${current ? current.substring(0, 15) + '...' : 'not set'}`));
+
+    const value = await input(`${label}`, current);
+    if (value && value !== current) {
+        configManager.set(keyName, value);
+        console.log(chalk.green('\n  Saved!'));
+        await new Promise(r => setTimeout(r, 800));
+    }
+}
+
+/**
+ * Select fallback provider
+ */
+async function selectFallback(fallbackKey: string, primaryProvider?: string): Promise<void> {
+    const availableProviders = PROVIDERS.filter(p => p !== primaryProvider);
+    const choices = [
+        { name: 'None', value: '' },
+        ...availableProviders.map(p => ({ name: p, value: p })),
+        { name: 'Back', value: 'back' }
+    ];
+
+    const selected = await select('Fallback Provider', choices);
+    if (selected !== 'back') {
+        if (selected === '') {
+            // Remove fallback by setting empty
+            configManager.set(fallbackKey, '');
+        } else {
+            configManager.set(fallbackKey, selected);
+        }
+    }
+}
+
+/**
+ * Get effective API key for a provider
+ */
+function getEffectiveApiKey(provider: string): string {
+    const config = configManager.getAll();
+    // Try provider-specific key
+    const providerKeyName = PROVIDER_API_KEYS[provider];
+    if (config[providerKeyName]) return config[providerKeyName];
+    // Fallback to GEMINI_API_KEY
+    return config['GEMINI_API_KEY'] || '';
+}
+
+/**
+ * Configure global API keys
+ */
+async function configureAPIKeys(): Promise<void> {
+    const keysList = [
+        { key: 'GEMINI_API_KEY', label: 'Gemini (Default)' },
+        { key: 'GEMINI_LIVE_API_KEY', label: 'Gemini Live (Vision/Grisha)' },
+        { key: 'REASONING_API_KEY', label: 'Reasoning (Gemini 3)' },
+        { key: 'COPILOT_API_KEY', label: 'GitHub Copilot' },
+        { key: 'OPENAI_API_KEY', label: 'OpenAI' },
+        { key: 'ANTHROPIC_API_KEY', label: 'Anthropic' },
+        { key: 'MISTRAL_API_KEY', label: 'Mistral' }
+    ];
+
+    while (true) {
+        showHeader('API Keys');
+        const config = configManager.getAll();
+
+        const choices: { name: string; value: string; disabled?: boolean }[] = keysList.map(k => ({
+            name: `${k.label.padEnd(28)} ${fmtKey(config[k.key])}`,
+            value: k.key
+        }));
+        choices.push({ name: '─'.repeat(35), value: '_sep', disabled: true });
+        choices.push({ name: 'Back', value: 'back' });
+
+        const selected = await select('', choices);
+        if (selected === 'back') return;
+
+        const keyInfo = keysList.find(k => k.key === selected);
+        const current = configManager.get(selected);
+        console.log(chalk.gray(`\n  Current: ${current ? current.substring(0, 20) + '...' : 'not set'}`));
+
+        const value = await input(`${keyInfo?.label || selected}`, current);
+        if (value) {
+            configManager.set(selected, value);
+            console.log(chalk.green('\n  Saved!'));
+            await new Promise(r => setTimeout(r, 600));
+        }
+    }
+}
+
+/**
+ * Configure application settings
+ */
+async function configureAppSettings(): Promise<void> {
+    while (true) {
+        showHeader('App Settings');
+        const config = configManager.getAll();
+
+        const choices = [
+            { name: `NODE_ENV         ${fmtVal(config['NODE_ENV'], 'development')}`, value: 'NODE_ENV' },
+            { name: `LOG_LEVEL        ${fmtVal(config['LOG_LEVEL'], 'info')}`, value: 'LOG_LEVEL' },
+            { name: `DEBUG            ${fmtVal(config['DEBUG'], 'false')}`, value: 'DEBUG' },
+            { name: '─'.repeat(35), value: '_sep', disabled: true },
+            { name: 'Back', value: 'back' }
+        ];
+
+        const selected = await select('', choices);
+        if (selected === 'back') return;
+
+        if (selected === 'NODE_ENV') {
+            const envChoices = [
+                { name: 'development', value: 'development' },
+                { name: 'production', value: 'production' },
+                { name: 'test', value: 'test' },
+                { name: 'Back', value: 'back' }
+            ];
+            const env = await select('Environment', envChoices);
+            if (env !== 'back') configManager.set('NODE_ENV', env);
+        } else if (selected === 'LOG_LEVEL') {
+            const logChoices = [
+                { name: 'debug', value: 'debug' },
+                { name: 'info', value: 'info' },
+                { name: 'warn', value: 'warn' },
+                { name: 'error', value: 'error' },
+                { name: 'Back', value: 'back' }
+            ];
+            const level = await select('Log Level', logChoices);
+            if (level !== 'back') configManager.set('LOG_LEVEL', level);
+        } else if (selected === 'DEBUG') {
+            const debugChoices = [
+                { name: 'true', value: 'true' },
+                { name: 'false', value: 'false' },
+                { name: 'Back', value: 'back' }
+            ];
+            const debug = await select('Debug Mode', debugChoices);
+            if (debug !== 'back') configManager.set('DEBUG', debug);
+        }
+    }
+}
+
+/**
+ * Run health check on all services
+ */
+async function runHealthCheck(): Promise<void> {
+    showHeader('System Health Check');
+
+    const config = configManager.getAll();
+
+    for (const service of SERVICES) {
+        const prefix = service.key.toUpperCase();
+        const provider = config[`${prefix}_PROVIDER`] || 'not set';
+        const model = config[`${prefix}_MODEL`] || 'not set';
+
+        // Determine which API key to use
+        let apiKey = config[`${prefix}_API_KEY`];
+        if (!apiKey) {
+            apiKey = config[PROVIDER_API_KEYS[provider]] || config['GEMINI_API_KEY'];
+        }
+
+        let status: string;
+
+        if (!provider || provider === 'not set') {
+            status = chalk.gray('-- Not configured');
+        } else if (!apiKey) {
+            status = chalk.yellow('No API key');
+        } else if (provider === 'gemini') {
+            const spinner = ora({ text: `Testing ${service.label}...`, prefixText: '  ' }).start();
+            try {
+                const { GoogleGenAI } = await import('@google/genai');
+                const client = new GoogleGenAI({ apiKey });
+                await client.models.list();
+                spinner.stop();
+                status = chalk.green('OK');
+            } catch (e: any) {
+                spinner.stop();
+                if (e.message?.includes('expired')) {
+                    status = chalk.red('Key Expired');
+                } else {
+                    status = chalk.red(`Error: ${e.message?.substring(0, 30)}`);
+                }
+            }
+        } else if (provider === 'copilot') {
+            const spinner = ora({ text: `Testing ${service.label}...`, prefixText: '  ' }).start();
+            try {
+                const { VSCodeCopilotProvider } = await import('../../kontur/providers/copilot.js');
+                const cp = new VSCodeCopilotProvider(apiKey);
+                const models = await cp.fetchModels();
+                spinner.stop();
+                status = models.length > 0 ? chalk.green('OK') : chalk.yellow('No models');
+            } catch (e: any) {
+                spinner.stop();
+                status = chalk.red(`Error: ${e.message?.substring(0, 30)}`);
+            }
+        } else {
+            status = chalk.blue('Configured');
+        }
+
+        console.log(`  ${service.label.padEnd(14)} ${chalk.gray(provider.padEnd(10))} ${status}`);
+    }
+
+    console.log('');
+    await input('Press Enter to return...');
 }
