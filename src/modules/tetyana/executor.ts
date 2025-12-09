@@ -45,7 +45,7 @@ export class TetyanaExecutor extends EventEmitter {
         console.log(`[TETYANA] ⚡ Taking control of Plan ${plan.id} (${plan.steps.length} steps) [Engine: ${usePythonBridge ? 'HYBRID (Python+Native)' : 'NATIVE'}]`);
 
         // Notify UI of start
-        this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
+        // this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
 
         // Start Vision observation
         await this.startVisionObservation(plan.goal);
@@ -445,7 +445,8 @@ INSTRUCTIONS:
 3. You have full permission to control the OS (open apps, type text, use mouse).
 4. Use AppleScript (osascript) via python 'subprocess' or 'os.system' to open applications or control UI if needed.
 5. For "TextEditor", assume "TextEdit" on macOS.
-6. Write and run the python code to perform this specific action immediately.`;
+6. Write and run the python code to perform this specific action immediately.
+7. IMPORTANT: If interacting with an app (typing, clicking), ALWAYS activate/focus the window first using AppleScript: 'tell application "AppName" to activate'. Use the app name from the context or arguments.`;
 
             try {
                 this.core.emit('tetyana:log', { message: `[Bridge] Executing Step ${stepNum}...` });

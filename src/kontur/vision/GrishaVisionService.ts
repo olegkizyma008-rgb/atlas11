@@ -247,9 +247,9 @@ export class GrishaVisionService extends EventEmitter {
                 cleanup();
                 console.warn('[GRISHA VISION] ⚠️ Verification timeout (Live Mode)');
                 resolve({
-                    type: 'observation', // Downgrade to simple observation
-                    message: 'Timeout: Gemini Live did not respond in time.',
-                    verified: true, // Proceed cautiously (soft fail)
+                    type: 'alert', // Treat as alert/warning
+                    message: 'Timeout: Gemini Live verification failed. Not confirmed.',
+                    verified: false, // Strict fail
                     timestamp: Date.now(),
                     mode: 'live'
                 });

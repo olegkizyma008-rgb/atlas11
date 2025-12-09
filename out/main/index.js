@@ -3604,7 +3604,7 @@ class TetyanaExecutor extends events.EventEmitter {
         }
         const vision = this.visionService || getGrishaVisionService();
         vision.pauseCapture();
-        const appName = step.args?.appName || step.args?.app;
+        const appName = step.args?.appName || step.args?.app || step.args?.name || (step.action === "open_application" || step.action === "open" ? step.args?.arg1 : void 0);
         if (appName) {
           console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
           await vision.autoSelectSource(appName);
