@@ -41,7 +41,8 @@ export interface ILLMProvider {
     readonly name: ProviderName;
     generate(request: LLMRequest): Promise<LLMResponse>;
     isAvailable(): boolean;
-    getModels?(): string[];
+    getModels?(): string[] | Promise<string[]>; // Static or fast retrieval
+    fetchModels?(): Promise<string[]>; // Dynamic/API retrieval
 }
 
 // ============ TTS Interfaces ============
@@ -63,6 +64,15 @@ export interface ITTSProvider {
     speak(request: TTSRequest): Promise<TTSResponse>;
     isAvailable(): boolean;
     getVoices?(): string[];
+    speakMulti?(request: MultiSpeakerRequest): Promise<TTSResponse>;
+}
+
+export interface MultiSpeakerRequest {
+    text: string;
+    speakers: Array<{
+        name: string;
+        voice: string;
+    }>;
 }
 
 // ============ STT Interfaces ============

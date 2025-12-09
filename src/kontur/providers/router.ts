@@ -11,6 +11,7 @@ import {
     LLMResponse,
     TTSRequest,
     TTSResponse,
+    MultiSpeakerRequest,
     STTRequest,
     STTResponse,
     ProviderName,
@@ -18,6 +19,10 @@ import {
 } from './types';
 import { getProviderConfig } from './config';
 import { GeminiProvider } from './gemini';
+import { GeminiTTSProvider } from './gemini-tts';
+import { OpenAIProvider } from './openai';
+import { AnthropicProvider } from './anthropic';
+import { MistralProvider } from './mistral';
 
 export class ProviderRouter {
     private llmProviders: Map<ProviderName, ILLMProvider> = new Map();
@@ -34,98 +39,119 @@ export class ProviderRouter {
     private initializeProviders(): void {
         console.log('[PROVIDER ROUTER] 🔌 Initializing providers...');
 
-        // Initialize Gemini provider (always available if API key exists)
+        // === LLM Providers ===
         const brainConfig = getProviderConfig('brain');
+
+        // Gemini
         if (brainConfig.apiKey) {
-            const geminiProvider = new GeminiProvider(brainConfig.apiKey, brainConfig.model);
-            this.llmProviders.set('gemini', geminiProvider);
+            this.llmProviders.set('gemini', new GeminiProvider(brainConfig.apiKey, brainConfig.model));
         }
 
-        // TODO: Initialize other providers when added
-        // this.llmProviders.set('copilot', new CopilotProvider(...));
-        // this.llmProviders.set('mistral', new MistralProvider(...));
+        // OpenAI
+        const openaiKey = process.env.OPENAI_API_KEY;
+        if (openaiKey) {
+            this.llmProviders.set('openai', new OpenAIProvider(openaiKey));
+        }
 
-        console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM providers`);
+        // Anthropic (Claude)
+        const anthropicKey = process.env.ANTHROPIC_API_KEY;
+        if (anthropicKey) {
+            this.llmProviders.set('anthropic', new AnthropicProvider(anthropicKey));
+        }
+
+        // Mistral
+        const mistralKey = process.env.MISTRAL_API_KEY;
+        if (mistralKey) {
+            this.llmProviders.set('mistral', new MistralProvider(mistralKey));
+        }
+
+        // === TTS Providers ===
+        const ttsConfig = getProviderConfig('tts');
+        if (ttsConfig.apiKey) {
+            const geminiTTS = new GeminiTTSProvider(ttsConfig.apiKey, ttsConfig.model);
+            this.ttsProviders.set('gemini', geminiTTS);
+        }
+
+        console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM, ${this.ttsProviders.size} TTS providers`);
     }
 
     /**
-     * Get LLM provider for a service
+     * Get provider configuration helper
      */
-    private getLLMProvider(service: ServiceType): ILLMProvider {
+    private getProvider<T>(
+        service: ServiceType,
+        map: Map<ProviderName, T>,
+        isAvailable: (p: T) => boolean
+    ): T {
         const config = getProviderConfig(service);
-        const provider = this.llmProviders.get(config.provider);
+        const provider = map.get(config.provider);
 
-        if (!provider || !provider.isAvailable()) {
-            // Try fallback
-            if (config.fallbackProvider) {
-                const fallback = this.llmProviders.get(config.fallbackProvider);
-                if (fallback?.isAvailable()) {
-                    console.log(`[PROVIDER ROUTER] Using fallback: ${config.fallbackProvider} for ${service}`);
-                    return fallback;
-                }
-            }
-            throw new Error(`No available provider for service: ${service}`);
+        if (provider && isAvailable(provider)) {
+            return provider;
         }
 
-        return provider;
+        if (config.fallbackProvider) {
+            const fallback = map.get(config.fallbackProvider);
+            if (fallback && isAvailable(fallback)) {
+                console.log(`[PROVIDER ROUTER] 🔄 Using fallback provider: ${config.fallbackProvider} for ${service}`);
+                return fallback;
+            }
+        }
+
+        throw new Error(`No available provider for ${service}`);
     }
 
     /**
-     * Generate LLM response with automatic fallback
+     * Generate LLM response
      */
     async generateLLM(service: ServiceType, request: LLMRequest): Promise<LLMResponse> {
+        const provider = this.getProvider(service, this.llmProviders, p => p.isAvailable());
         const config = getProviderConfig(service);
-        const primaryProvider = this.llmProviders.get(config.provider);
 
-        // Set model from config if not specified in request
-        if (!request.model) {
-            request.model = config.model;
+        // Use configured model if not specified
+        if (!request.model) request.model = config.model;
+
+        try {
+            return await provider.generate(request);
+        } catch (error) {
+            // Simple retry logic or fallback could go here
+            throw error;
         }
-
-        // Try primary provider
-        if (primaryProvider?.isAvailable()) {
-            try {
-                console.log(`[PROVIDER ROUTER] 🧠 ${service} -> ${config.provider} (${request.model})`);
-                return await primaryProvider.generate(request);
-            } catch (error: any) {
-                console.warn(`[PROVIDER ROUTER] ⚠️ ${config.provider} failed: ${error.message}`);
-
-                // Try fallback if available
-                if (config.fallbackProvider) {
-                    const fallbackProvider = this.llmProviders.get(config.fallbackProvider);
-                    if (fallbackProvider?.isAvailable()) {
-                        console.log(`[PROVIDER ROUTER] 🔄 Falling back to ${config.fallbackProvider}`);
-                        return await fallbackProvider.generate(request);
-                    }
-                }
-
-                throw error;
-            }
-        }
-
-        throw new Error(`No available LLM provider for ${service}`);
     }
 
     /**
-     * Get available providers
+     * Generate TTS audio
      */
-    getAvailableProviders(): ProviderName[] {
-        const available: ProviderName[] = [];
-        const entries = Array.from(this.llmProviders.entries());
-        for (const [name, provider] of entries) {
-            if (provider.isAvailable()) {
-                available.push(name);
-            }
-        }
-        return available;
+    async speak(service: ServiceType, request: TTSRequest): Promise<TTSResponse> {
+        const provider = this.getProvider(service, this.ttsProviders, p => p.isAvailable());
+        return await provider.speak(request);
     }
 
     /**
-     * Register a new provider dynamically
+     * Generate Multi-Speaker TTS audio
+     */
+    async speakMulti(service: ServiceType, request: MultiSpeakerRequest): Promise<TTSResponse> {
+        const provider = this.getProvider(service, this.ttsProviders, p => p.isAvailable());
+
+        if (provider.speakMulti) {
+            return await provider.speakMulti(request);
+        }
+
+        throw new Error(`Provider ${provider.name} does not support multi-speaker TTS`);
+    }
+
+    /**
+     * Register a new LLM provider
      */
     registerLLMProvider(provider: ILLMProvider): void {
         this.llmProviders.set(provider.name, provider);
-        console.log(`[PROVIDER ROUTER] ➕ Registered provider: ${provider.name}`);
+    }
+
+    /**
+     * Register a new TTS provider
+     */
+    registerTTSProvider(provider: ITTSProvider): void {
+        this.ttsProviders.set(provider.name, provider);
     }
 }
 
