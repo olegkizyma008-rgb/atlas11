@@ -3597,6 +3597,8 @@ class TetyanaExecutor extends events.EventEmitter {
   currentPlan = null;
   active = false;
   visionService = null;
+  lastActiveApp = null;
+  // Track last focused app for vision
   constructor(core) {
     super();
     this.core = core;
@@ -3652,10 +3654,23 @@ class TetyanaExecutor extends events.EventEmitter {
         }
         const vision = this.visionService || getGrishaVisionService();
         vision.pauseCapture();
-        const appName = step.args?.appName || step.args?.app || step.args?.name || (step.action === "open_application" || step.action === "open" ? step.args?.arg1 : void 0);
+        let appName = step.args?.appName || step.args?.app || step.args?.name || step.args?.application;
+        if (!appName && (step.action === "open_application" || step.action === "open" || step.action === "launch")) {
+          appName = step.args?.arg1 || step.args?.target;
+        }
+        const stepDescription = step.description;
+        if (!appName && stepDescription) {
+          const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
+          if (descMatch) {
+            appName = descMatch[1];
+          }
+        }
         if (appName) {
           console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
+          this.lastActiveApp = appName;
           await vision.autoSelectSource(appName);
+        } else if (this.lastActiveApp) {
+          console.log(`[TETYANA] 👁️ Continuing to watch: ${this.lastActiveApp}`);
         }
         await this.validateStep(step, stepNum);
         let result;
@@ -5349,6 +5364,18 @@ class DeepIntegrationSystem {
         this.grishaVision.setGeminiLive(this.geminiLive);
         global.grishaObserver = this.grishaVision;
         console.log("[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active");
+        setTimeout(async () => {
+          try {
+            const sources = await this.grishaVision.getSources();
+            const primaryScreen = sources.find((s) => s.name.includes("Screen") || s.name.includes("Entire"));
+            if (primaryScreen) {
+              this.grishaVision.selectSource(primaryScreen.id, primaryScreen.name);
+              console.log("[DEEP-INTEGRATION] 🖥️ Auto-selected default source:", primaryScreen.name);
+            }
+          } catch (e) {
+            console.warn("[DEEP-INTEGRATION] Failed to auto-select default source");
+          }
+        }, 2e3);
       } catch (error) {
         console.error("[DEEP-INTEGRATION] Failed to init Gemini Live:", error);
       }

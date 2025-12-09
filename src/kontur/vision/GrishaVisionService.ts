@@ -129,14 +129,35 @@ export class GrishaVisionService extends EventEmitter {
      */
     async autoSelectSource(appName: string): Promise<boolean> {
         const sources = await this.getSources();
-        const matched = sources.find(s =>
-            s.name.toLowerCase().includes(appName.toLowerCase())
+
+        // Filter out Atlas/Electron windows to avoid self-capture
+        const externalSources = sources.filter(s =>
+            !s.name.toLowerCase().includes('electron') &&
+            !s.name.toLowerCase().includes('atlas') &&
+            !s.name.toLowerCase().includes('kontur')
         );
 
+        console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
+
+        // Try exact match first
+        let matched = externalSources.find(s =>
+            s.name.toLowerCase() === appName.toLowerCase()
+        );
+
+        // Then try includes match
+        if (!matched) {
+            matched = externalSources.find(s =>
+                s.name.toLowerCase().includes(appName.toLowerCase())
+            );
+        }
+
         if (matched) {
+            console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}"`);
             this.selectSource(matched.id, matched.name);
             return true;
         }
+
+        console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}". Available: ${externalSources.map(s => s.name).join(', ')}`);
         return false;
     }
 

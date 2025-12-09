@@ -185,10 +185,21 @@ export class DeepIntegrationSystem {
         setTimeout(async () => {
           try {
             const sources = await this.grishaVision.getSources();
-            const primaryScreen = sources.find((s: any) => s.name.includes('Screen') || s.name.includes('Entire'));
+            // Filter out Electron/Atlas windows
+            const externalSources = sources.filter((s: any) =>
+              !s.name.toLowerCase().includes('electron') &&
+              !s.name.toLowerCase().includes('atlas') &&
+              !s.name.toLowerCase().includes('kontur')
+            );
+            // Prefer Screen over individual windows
+            const primaryScreen = externalSources.find((s: any) => s.name.includes('Screen') || s.name.includes('Entire'));
             if (primaryScreen) {
               this.grishaVision.selectSource(primaryScreen.id, primaryScreen.name);
               console.log('[DEEP-INTEGRATION] 🖥️ Auto-selected default source:', primaryScreen.name);
+            } else if (externalSources.length > 0) {
+              // Fallback to first external window
+              this.grishaVision.selectSource(externalSources[0].id, externalSources[0].name);
+              console.log('[DEEP-INTEGRATION] 🖥️ Fallback to first available:', externalSources[0].name);
             }
           } catch (e) {
             console.warn('[DEEP-INTEGRATION] Failed to auto-select default source');

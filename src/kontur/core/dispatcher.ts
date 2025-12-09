@@ -39,6 +39,8 @@ export class Core extends EventEmitter {
     ['kontur://atlas/GRISHA', SecurityScope.ROOT], // Grisha needs root to post events
     ['kontur://organ/tetyana', SecurityScope.SYSTEM],
     ['kontur://organ/grisha', SecurityScope.SYSTEM],
+    ['kontur://organ/reasoning', SecurityScope.SYSTEM], // Reasoning Organ (Gemini 3)
+    ['kontur://organ/vision', SecurityScope.SYSTEM],    // Vision Organ (Grisha's Eyes)
     ['kontur://organ/mcp/filesystem', SecurityScope.SYSTEM],
     ['kontur://organ/mcp/os', SecurityScope.SYSTEM],
     ['kontur://organ/atlas', SecurityScope.ROOT],
