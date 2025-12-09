@@ -419,6 +419,7 @@ class Core extends events.EventEmitter {
     ["kontur://organ/atlas", SecurityScope.ROOT],
     ["kontur://cortex/core", SecurityScope.ROOT],
     ["kontur://atlas/ATLAS", SecurityScope.SYSTEM],
+    ["kontur://atlas/voice", SecurityScope.SYSTEM],
     // Integration & System Internal
     ["system/integration", SecurityScope.USER],
     ["kontur://integration", SecurityScope.SYSTEM]
@@ -2377,11 +2378,10 @@ class UnifiedBrain extends CortexBrain {
     try {
       const cortexResponse = await this.thinkWithCortex(request);
       if (cortexResponse.text) {
-        const enrichedResponse = await this.enrichWithAtlasContext(
-          cortexResponse,
-          request
-        );
-        return enrichedResponse;
+        if (request.mode === "planning") {
+          return await this.enrichWithAtlasContext(cortexResponse, request);
+        }
+        return cortexResponse;
       }
       return await this.thinkWithAtlas(request);
     } catch (error) {
@@ -5367,6 +5367,11 @@ class DeepIntegrationSystem {
       });
       console.log(`[DEEP-INTEGRATION] 🛡️ Grisha Capsule registered as ${grishaUrn}`);
     }
+    this.unifiedBrain.on("decision", (decisionPacket) => {
+      console.log(`[CORE/SYSTEM] Brain decision -> ${decisionPacket.route.to}`);
+      this.core.ingest(decisionPacket);
+    });
+    console.log(`[DEEP-INTEGRATION] 🧠 UnifiedBrain decision routing enabled`);
     console.log("[DEEP-INTEGRATION] ✅ All organs spawned");
   }
   /**

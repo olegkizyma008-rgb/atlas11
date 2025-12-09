@@ -548,6 +548,15 @@ export class DeepIntegrationSystem {
     // Note: Memory/Voice Organs mapped by mapper are often proxies.
     // Since we have specific handlers for System/Vision/MCP, we rely on those.
 
+    // Subscribe to UnifiedBrain decisions and route them back through Core
+    // UnifiedBrain emits 'decision' events with packets destined for UI or Core
+    this.unifiedBrain.on('decision', (decisionPacket: any) => {
+      console.log(`[CORE/SYSTEM] Brain decision -> ${decisionPacket.route.to}`);
+      this.core.ingest(decisionPacket);
+    });
+
+    console.log(`[DEEP-INTEGRATION] 🧠 UnifiedBrain decision routing enabled`);
+
     console.log('[DEEP-INTEGRATION] ✅ All organs spawned');
   }
 
