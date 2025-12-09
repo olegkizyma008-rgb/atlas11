@@ -125,12 +125,48 @@ export class GrishaVisionService extends EventEmitter {
     }
 
     /**
+     * Helper: Find window TITLE via generic AppleScript
+     * This bridges the gap between App Name (known by user) and Window Title (known by desktopCapturer)
+     */
+    private async findWindowTitleForApp(appName: string): Promise<string | null> {
+        const script = `
+        tell application "System Events"
+            try
+                set targetApp to process "${appName}"
+                if not (exists targetApp) then return ""
+                if (count of windows of targetApp) is 0 then return ""
+                
+                set winTitle to name of window 1 of targetApp
+                return winTitle
+            on error
+                return ""
+            end try
+        end tell
+        `;
+
+        try {
+            const { exec } = require('child_process');
+            const result: string = await new Promise((resolve) => {
+                exec(`osascript -e '${script}'`, (err: any, stdout: string) => {
+                    if (err) resolve("");
+                    else resolve(stdout.trim());
+                });
+            });
+
+            return result || null;
+        } catch (e) {
+            console.warn(`[GRISHA VISION] AppleScript Lookup Failed for ${appName}:`, e);
+            return null;
+        }
+    }
+
+    /**
      * Auto-select source by app name
      */
     async autoSelectSource(appName: string): Promise<boolean> {
         const sources = await this.getSources();
 
-        // Filter out Atlas/Electron windows to avoid self-capture
+        // Debug: List all available windows for troubleshooting
         const externalSources = sources.filter(s =>
             !s.name.toLowerCase().includes('electron') &&
             !s.name.toLowerCase().includes('atlas') &&
@@ -139,42 +175,101 @@ export class GrishaVisionService extends EventEmitter {
 
         console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
 
-        const normalize = (s: string) => s.toLowerCase().trim();
+        if (externalSources.length === 0) {
+            console.log('[GRISHA VISION] ⚠️ No external windows found via desktopCapturer.');
+        } else {
+            console.log('[GRISHA VISION] 📋 Available Windows: ' + externalSources.map(s => `"${s.name}"`).join(', '));
+        }
+
+        const normalize = (s: string) => s.toLowerCase().trim().replace(/[\u2013\u2014]/g, "-");
         const target = normalize(appName);
 
         // Common mappings (UA <-> EN)
         const ALIASES: Record<string, string[]> = {
-            'калькулятор': ['calculator'],
-            'calculator': ['калькулятор'],
-            'термінал': ['terminal', 'iterm'],
-            'terminal': ['термінал', 'iterm'],
-            'нотатки': ['notes'],
-            'notes': ['нотатки'],
-            'сафарі': ['safari'],
-            'safari': ['сафарі'],
-            'файндер': ['finder'],
-            'finder': ['файндер']
+            'калькулятор': ['Calculator'],
+            'calculator': ['Calculator'],
+            'термінал': ['Terminal', 'iTerm2'],
+            'terminal': ['Terminal', 'iTerm2'],
+            'нотатки': ['Notes'],
+            'notes': ['Notes'],
+            'сафарі': ['Safari'],
+            'safari': ['Safari'],
+            'файндер': ['Finder'],
+            'finder': ['Finder'],
+            'chrome': ['Google Chrome'],
+            'google chrome': ['Google Chrome'],
+            'code': ['Code', 'Visual Studio Code'],
+            'vscode': ['Code', 'Visual Studio Code']
         };
 
-        const searchTerms = [target, ...(ALIASES[target] || [])];
+        const potentialAppNames = [appName, ...(ALIASES[target] || [])];
 
+        // --- STRATEGY 1: AppleScript Title Lookup (Most Accurate) ---
+        // Get the Window Title from the OS for the given App, then find source with that Title
+        for (const name of potentialAppNames) {
+            const trueWindowTitle = await this.findWindowTitleForApp(name);
+            if (trueWindowTitle) {
+                console.log(`[GRISHA VISION] 🍏 AppleScript found Title "${trueWindowTitle}" for app "${name}"`);
+
+                const exactMatch = externalSources.find(s => normalize(s.name) === normalize(trueWindowTitle));
+
+                if (exactMatch) {
+                    console.log(`[GRISHA VISION] ✅ Exact Title Match: "${exactMatch.name}"`);
+                    this.selectSource(exactMatch.id, exactMatch.name);
+                    return true;
+                }
+
+                // Partial match on title if exact fails (e.g. specialized chars)
+                const partialMatch = externalSources.find(s => normalize(s.name).includes(normalize(trueWindowTitle)) || normalize(trueWindowTitle).includes(normalize(s.name)));
+                if (partialMatch) {
+                    console.log(`[GRISHA VISION] ✅ Partial Title Match: "${partialMatch.name}" matches "${trueWindowTitle}"`);
+                    this.selectSource(partialMatch.id, partialMatch.name);
+                    return true;
+                }
+            }
+        }
+
+        // --- STRATEGY 2: Fuzzy Title Matching (Fallback) ---
+        console.log(`[GRISHA VISION] ⚠️ Title Lookup failed, falling back to title matching...`);
+
+        const searchTerms = [target, ...(ALIASES[target] || []).map(s => normalize(s))];
+
+        // 2.1 Exact Title Match
         let matched = externalSources.find(s =>
             searchTerms.some(term => normalize(s.name) === term)
         );
 
+        // 2.2 Starts With
+        if (!matched) {
+            matched = externalSources.find(s =>
+                searchTerms.some(term => normalize(s.name).startsWith(term))
+            );
+        }
+
+        // 2.3 Contains
         if (!matched) {
             matched = externalSources.find(s =>
                 searchTerms.some(term => normalize(s.name).includes(term))
             );
         }
 
+        // 2.4 Word Match
+        if (!matched) {
+            matched = externalSources.find(s =>
+                searchTerms.some(term => {
+                    const windowWords = normalize(s.name).split(' ');
+                    return windowWords.includes(term);
+                })
+            );
+        }
+
         if (matched) {
-            console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}" (matched for "${appName}")`);
+            console.log(`[GRISHA VISION] ✅ Found window via Title: "${matched.name}" (matched for "${appName}")`);
             this.selectSource(matched.id, matched.name);
             return true;
         }
 
-        console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}". Available: ${externalSources.map(s => s.name).join(', ')}`);
+        console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}".`);
         return false;
     }
 
@@ -197,6 +292,10 @@ export class GrishaVisionService extends EventEmitter {
         console.log(`[GRISHA VISION] 👁️ Starting observation [${currentMode.toUpperCase()}]...`);
         this.isObserving = true;
         this.frameCount = 0;
+
+        // Clear cached source from previous session
+        this.selectedSourceId = null;
+        this.selectedSourceName = null;
 
         if (currentMode === 'live') {
             await this.startLiveObservation(taskDescription);
@@ -314,7 +413,10 @@ export class GrishaVisionService extends EventEmitter {
 
             // Extract object/app name from step action
             const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
-            const objectName = objectMatch ? objectMatch[1].trim() : 'об\'єкт';
+            // Use matched name, or selected source name, or the action itself
+            const objectName = objectMatch
+                ? objectMatch[1].trim()
+                : (this.selectedSourceName || stepAction);
 
             const visibilityPrompt = `
 АНАЛІЗ ВИДИМОСТІ:
@@ -476,13 +578,35 @@ export class GrishaVisionService extends EventEmitter {
         try {
             const targetId = overrideSourceId || this.selectedSourceId;
 
+            // Always fetch fresh sources to handle newly opened windows
+            const sources = await desktopCapturer.getSources({
+                types: ['window', 'screen'],
+                thumbnailSize: { width: 1280, height: 720 }
+            });
+
+            // Emit sources update for UI
+            this.emit('sources_updated', sources.map(s => ({
+                id: s.id,
+                name: s.name,
+                thumbnail: s.thumbnail.toDataURL(),
+                isScreen: s.id.startsWith('screen:')
+            })));
+
             if (targetId) {
-                // Capture specific window/screen
-                const sources = await desktopCapturer.getSources({
-                    types: ['window', 'screen'],
-                    thumbnailSize: { width: 1280, height: 720 }
-                });
-                const source = sources.find(s => s.id === targetId);
+                // Try to find the selected source
+                let source = sources.find(s => s.id === targetId);
+
+                // If not found by ID, try by name (window IDs can change)
+                if (!source && this.selectedSourceName) {
+                    source = sources.find(s =>
+                        s.name.toLowerCase().includes(this.selectedSourceName!.toLowerCase())
+                    );
+                    if (source && source.id !== targetId) {
+                        console.log(`[GRISHA VISION] 🔄 Source ID changed for "${this.selectedSourceName}": ${targetId} -> ${source.id}`);
+                        this.selectedSourceId = source.id;
+                    }
+                }
+
                 if (source) {
                     const jpegBuffer = source.thumbnail.toJPEG(85);
                     return jpegBuffer.toString('base64');
@@ -490,13 +614,10 @@ export class GrishaVisionService extends EventEmitter {
             }
 
             // Fallback to full screen (first screen)
-            const sources = await desktopCapturer.getSources({
-                types: ['screen'],
-                thumbnailSize: { width: 1280, height: 720 }
-            });
+            const screenSources = sources.filter(s => s.id.startsWith('screen:'));
 
-            if (sources.length > 0) {
-                const jpegBuffer = sources[0].thumbnail.toJPEG(85);
+            if (screenSources.length > 0) {
+                const jpegBuffer = screenSources[0].thumbnail.toJPEG(85);
                 return jpegBuffer.toString('base64');
             }
 
