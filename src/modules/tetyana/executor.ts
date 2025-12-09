@@ -424,13 +424,29 @@ export class TetyanaExecutor extends EventEmitter {
             }
 
             // Construct specific prompt for this step
-            const stepPrompt = `Review this entire plan context, but ONLY execute Step ${stepNum}.
-            
+            // Serialize the full plan for context
+            const fullPlanContext = this.currentPlan?.steps.map((s, i) =>
+                `Step ${i + 1}: ${s.action} ${JSON.stringify(s.args || {})}`
+            ).join('\n');
+
+            const stepPrompt = `
+CONTEXT:
+The user wants to: "${this.currentPlan?.goal}"
+Full Plan:
+${fullPlanContext}
+
+CURRENT TASK:
+You are currently executing Step ${stepNum}.
 Task: ${step.action}
 Arguments: ${JSON.stringify(step.args)}
 
-Do not execute previous or future steps. Do not ask for confirmation.
-Write and run the python code to perform this specific action immediately.`;
+INSTRUCTIONS:
+1. Do not execute previous or future steps.
+2. Do not ask for confirmation.
+3. You have full permission to control the OS (open apps, type text, use mouse).
+4. Use AppleScript (osascript) via python 'subprocess' or 'os.system' to open applications or control UI if needed.
+5. For "TextEditor", assume "TextEdit" on macOS.
+6. Write and run the python code to perform this specific action immediately.`;
 
             try {
                 this.core.emit('tetyana:log', { message: `[Bridge] Executing Step ${stepNum}...` });
