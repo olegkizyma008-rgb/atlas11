@@ -219,17 +219,41 @@ export class GrishaVisionService extends EventEmitter {
 
         const currentMode = this.mode;
 
-        if (currentMode === 'live') {
-            // Live mode: just notify Gemini Live
-            await this.notifyActionLive(stepAction, stepDetails || '');
-            return {
-                type: 'verification',
-                message: 'Запит надіслано до Gemini Live',
-                verified: true, // Assume OK for live (async confirmation)
-                timestamp: Date.now(),
-                mode: 'live'
+        // Live mode: Notify Gemini Live and WAIT for response
+        await this.notifyActionLive(stepAction, stepDetails || '');
+
+        return new Promise((resolve) => {
+            const startTime = Date.now();
+
+            // Handler for incoming observations (from processLiveResponse)
+            const responseHandler = (result: VisionObservationResult) => {
+                // We look for confirmation or alert
+                if (result.type === 'confirmation' || result.type === 'alert') {
+                    cleanup();
+                    resolve(result);
+                }
             };
-        }
+
+            const cleanup = () => {
+                this.removeListener('observation', responseHandler);
+            };
+
+            // Listen for Gemini's response
+            this.on('observation', responseHandler);
+
+            // Timeout after 15 seconds if Gemini is silent
+            setTimeout(() => {
+                cleanup();
+                console.warn('[GRISHA VISION] ⚠️ Verification timeout (Live Mode)');
+                resolve({
+                    type: 'observation', // Downgrade to simple observation
+                    message: 'Timeout: Gemini Live did not respond in time.',
+                    verified: true, // Proceed cautiously (soft fail)
+                    timestamp: Date.now(),
+                    mode: 'live'
+                });
+            }, 15000);
+        });
 
         // On-Demand mode: capture and analyze
         try {
