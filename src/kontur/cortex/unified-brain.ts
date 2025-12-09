@@ -4,8 +4,9 @@
  * Supports multiple AI providers with Atlas fallback
  */
 
-import { GoogleGenAI } from '@google/genai';
+// GoogleGenAI import removed - now using ProviderRouter
 import { EventEmitter } from 'events';
+import { getProviderRouter, logProviderConfig } from '../providers';
 import { CortexBrain } from './brain';
 import { BrainAPI } from '../../modules/brain/contract';
 import { AtlasAPI } from '../../modules/atlas/contract';
@@ -42,6 +43,12 @@ export class UnifiedBrain extends CortexBrain {
   constructor() {
     super();
     console.log('[UNIFIED-BRAIN] 🧠🔗 Unified Brain initialized');
+
+    // Log provider configuration
+    logProviderConfig();
+
+    // Warm up the provider router
+    getProviderRouter();
   }
 
   /**
@@ -89,52 +96,33 @@ export class UnifiedBrain extends CortexBrain {
 
   /**
    * Think using KONTUR Cortex providers (Real Intelligence)
+   * Uses ProviderRouter for multi-provider support with fallback
    */
   private async thinkWithCortex(
     request: ThinkRequest
   ): Promise<ThinkResponse> {
-    console.log('[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (Gemini 2.0)...');
-
-    const apiKey = process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY || process.env.GEMINI_LIVE_API_KEY;
-
-    if (!apiKey) {
-      console.error('[UNIFIED-BRAIN] ❌ No API key found for Cortex');
-      throw new Error('No AI provider configured');
-    }
+    const mode = request.mode || 'chat';
+    console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex via ProviderRouter in ${mode} mode...`);
 
     try {
-      const genAI = new GoogleGenAI({ apiKey });
-      const modelName = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
-      const mode = request.mode || 'chat'; // Default to chat mode
-
-      console.log(`[UNIFIED-BRAIN] 🧠 Engaging Cortex Intelligence (${modelName}) in ${mode} mode...`);
-
+      const router = getProviderRouter();
       const systemPrompt = `${request.system_prompt}\n\nIMPORTANT: Think in ENGLISH. Reply in UKRAINIAN.`;
 
-      // Build config based on mode
-      const config: any = {
-        systemInstruction: systemPrompt,
-        temperature: 0.7,
-      };
-
-      // Only force JSON for planning mode
-      if (mode === 'planning') {
-        config.responseMimeType = 'application/json';
-      }
-
-      const response = await genAI.models.generateContent({
-        model: modelName,
-        contents: [
-          { role: 'user', parts: [{ text: request.user_prompt }] }
-        ],
-        config
+      // Use ProviderRouter for LLM generation
+      const response = await router.generateLLM('brain', {
+        prompt: request.user_prompt,
+        systemPrompt,
+        responseFormat: mode === 'planning' ? 'json' : 'text',
+        temperature: 0.7
       });
 
-      const content = response.candidates?.[0]?.content?.parts?.[0]?.text;
+      const content = response.text;
 
       if (!content) {
         throw new Error('Empty response from Cortex');
       }
+
+      console.log(`[UNIFIED-BRAIN] ✅ Response from ${response.provider} (${response.model})`);
 
       // Handle response based on mode
       if (mode === 'chat') {
@@ -142,8 +130,8 @@ export class UnifiedBrain extends CortexBrain {
         return {
           text: content,
           usage: {
-            input_tokens: response.usageMetadata?.promptTokenCount || 0,
-            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+            input_tokens: response.usage?.promptTokens || 0,
+            output_tokens: response.usage?.completionTokens || 0
           }
         };
       } else {
@@ -152,7 +140,7 @@ export class UnifiedBrain extends CortexBrain {
         try {
           parsed = JSON.parse(content);
         } catch (e) {
-          // Fallback if model didn't return pure JSON (sometimes adds markdown blocks)
+          // Fallback if model didn't return pure JSON
           const jsonMatch = content.match(/\{[\s\S]*\}/);
           if (jsonMatch) {
             parsed = JSON.parse(jsonMatch[0]);
@@ -162,21 +150,21 @@ export class UnifiedBrain extends CortexBrain {
         }
 
         return {
-          text: JSON.stringify(parsed), // Keep consistent format for internal passing
+          text: JSON.stringify(parsed),
           tool_calls: parsed.plan?.map((step: any) => ({
             name: step.tool,
             args: step.args
           })) || [],
           usage: {
-            input_tokens: response.usageMetadata?.promptTokenCount || 0,
-            output_tokens: response.usageMetadata?.candidatesTokenCount || 0
+            input_tokens: response.usage?.promptTokens || 0,
+            output_tokens: response.usage?.completionTokens || 0
           }
         };
       }
 
     } catch (error: any) {
       console.error('[UNIFIED-BRAIN] ❌ Cortex Reasoning Failed:', error.message);
-      throw error; // Let the fallback mechanism handle it
+      throw error;
     }
   }
 
