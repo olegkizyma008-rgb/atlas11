@@ -982,8 +982,82 @@ async function runHealthCheck(): Promise<void> {
         warnCount++;
     }
 
+    // ─── MCP Bridges ───
+    console.log(chalk.gray('\n  ─── MCP Bridges ───'));
+    const mcpBridges = [
+        { name: 'filesystem', path: 'node_modules/@modelcontextprotocol/server-filesystem' },
+        { name: 'os', path: 'src/kontur/mcp/servers/os.ts' }
+    ];
+    for (const bridge of mcpBridges) {
+        const bridgePath = path.resolve(process.cwd(), bridge.path);
+        if (fs.existsSync(bridgePath)) {
+            console.log(`  ${chalk.green('●')} ${bridge.name.padEnd(15)} ${chalk.green('Available')}`);
+            okCount++;
+        } else {
+            console.log(`  ${chalk.yellow('△')} ${bridge.name.padEnd(15)} ${chalk.yellow('Not found')}`);
+            warnCount++;
+        }
+    }
+
+    // ─── Memory System ───
+    console.log(chalk.gray('\n  ─── Memory System ───'));
+    const dbPath = path.join(process.cwd(), 'atlas.db');
+    if (fs.existsSync(dbPath)) {
+        const stats = fs.statSync(dbPath);
+        const sizeKB = (stats.size / 1024).toFixed(1);
+        console.log(`  ${chalk.green('●')} Database      ${chalk.green('atlas.db')} (${sizeKB} KB)`);
+        okCount++;
+    } else {
+        console.log(`  ${chalk.yellow('△')} Database      ${chalk.yellow('Not initialized (will be created on first use)')}`);
+        warnCount++;
+    }
+
+    // ─── Ukrainian TTS ───
+    console.log(chalk.gray('\n  ─── Ukrainian TTS ───'));
+    try {
+        const pythonPath = execSync('which python3', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] }).trim();
+        if (pythonPath) {
+            console.log(`  ${chalk.green('●')} Python3       ${chalk.green('Available')}`);
+            okCount++;
+            // Check if package is installed
+            try {
+                execSync('python3 -c "import ukrainian_tts"', { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'] });
+                console.log(`  ${chalk.green('●')} Package       ${chalk.green('ukrainian-tts installed')}`);
+                okCount++;
+            } catch {
+                console.log(`  ${chalk.yellow('△')} Package       ${chalk.yellow('Not installed')} ${chalk.gray('(pip install ukrainian-tts)')}`);
+                warnCount++;
+            }
+        }
+    } catch {
+        console.log(`  ${chalk.yellow('△')} Python3       ${chalk.yellow('Not found')}`);
+        warnCount++;
+    }
+
+    // ─── Voice Configuration ───
+    console.log(chalk.gray('\n  ─── Voice Configuration ───'));
+    const voiceAtlas = config['UKRAINIAN_VOICE_ATLAS'] || 'dmytro';
+    const voiceTetyana = config['UKRAINIAN_VOICE_TETYANA'] || 'tetiana';
+    const voiceGrisha = config['UKRAINIAN_VOICE_GRISHA'] || 'oleksa';
+    console.log(`  ATLAS:   ${chalk.cyan(voiceAtlas)}`);
+    console.log(`  TETYANA: ${chalk.cyan(voiceTetyana)}`);
+    console.log(`  GRISHA:  ${chalk.cyan(voiceGrisha)}`);
+
+    // ─── Tool Registry ───
+    console.log(chalk.gray('\n  ─── Tool Registry ───'));
+    const toolRegistryPath = path.join(process.cwd(), 'src/kontur/core/ToolRegistry.ts');
+    if (fs.existsSync(toolRegistryPath)) {
+        console.log(`  ${chalk.green('●')} Registry      ${chalk.green('Available')}`);
+        console.log(`    ${chalk.gray('(Full status at runtime)')}`);
+        okCount++;
+    } else {
+        console.log(`  ${chalk.yellow('△')} Registry      ${chalk.yellow('Not found')}`);
+        warnCount++;
+    }
+
     // Summary
     console.log(chalk.gray('\n  ─── Summary ───'));
+
     console.log(`  ${chalk.green('●')} OK: ${okCount}  ${chalk.yellow('△')} Warn: ${warnCount}  ${chalk.red('✕')} Error: ${errorCount}`);
 
     // Overall status

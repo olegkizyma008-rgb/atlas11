@@ -21,9 +21,9 @@ export class MemoryCapsule implements MemoryAPI {
         metadata?: Record<string, any>;
     }): Promise<void> {
         console.log(`💾 MemoryCapsule: Storing ${args.type} memory: "${args.content.substring(0, 50)}..."`);
-        
+
         const id = uuidv4();
-        
+
         try {
             this.db
                 .insert(memories)
@@ -34,7 +34,7 @@ export class MemoryCapsule implements MemoryAPI {
                     metadata: args.metadata,
                 })
                 .run();
-            
+
             console.log(`✅ MemoryCapsule: Stored ${args.type} with id ${id}`);
         } catch (error) {
             console.error('❌ MemoryCapsule: Failed to store memory', error);
@@ -47,7 +47,7 @@ export class MemoryCapsule implements MemoryAPI {
         limit?: number;
     }): Promise<z.infer<typeof RecallResultSchema>> {
         console.log(`🔍 MemoryCapsule: Recalling memories for "${args.query}"...`);
-        
+
         const limit = args.limit || 5;
         const queryPattern = `%${args.query}%`;
 
@@ -79,6 +79,18 @@ export class MemoryCapsule implements MemoryAPI {
             console.error('❌ MemoryCapsule: Failed to recall memories', error);
             return { items: [], summary: 'Recall failed' };
         }
+    }
+
+    /**
+     * Backwards-compatible wrapper for recall().
+     * Returns just the items array instead of { items, summary }.
+     */
+    async retrieve(args: {
+        query: string;
+        limit?: number;
+    }): Promise<z.infer<typeof ContextItemSchema>[]> {
+        const result = await this.recall(args);
+        return result.items;
     }
 
     async optimize(): Promise<{ nodes_merged: number }> {

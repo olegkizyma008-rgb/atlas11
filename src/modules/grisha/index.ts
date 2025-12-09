@@ -179,11 +179,32 @@ export class GrishaCapsule implements GrishaAPI {
         };
 
         try {
-            const result = JSON.parse(response.text || '{}');
+            // Try direct JSON parse first
+            let result: { threats?: string[]; level?: string } = {};
+            const rawText = response.text || '';
+
+            try {
+                result = JSON.parse(rawText);
+            } catch {
+                // Fallback: Try to extract JSON from text response (Brain may wrap JSON in explanation)
+                const jsonMatch = rawText.match(/\{[\s\S]*"threats"[\s\S]*\}/);
+                if (jsonMatch) {
+                    result = JSON.parse(jsonMatch[0]);
+                } else {
+                    // If no JSON found, check for threat keywords in text
+                    const threatKeywords = ['threat', 'danger', 'risk', 'warning', 'attack', 'suspicious'];
+                    const foundThreats = threatKeywords.filter(kw => rawText.toLowerCase().includes(kw));
+                    if (foundThreats.length > 0) {
+                        result = { threats: [`Detected keywords: ${foundThreats.join(', ')}`], level: 'medium' };
+                    }
+                    console.log("🛡️ GRISHA: Brain returned non-JSON, using fallback analysis.");
+                }
+            }
+
             report.threats = result.threats || allThreats;
-            report.level = result.level || threatLevel as 'low' | 'medium' | 'high';
+            report.level = (result.level as 'low' | 'medium' | 'high') || threatLevel as 'low' | 'medium' | 'high';
         } catch (e) {
-            console.warn("🛡️ GRISHA: Failed to parse Brain response", e);
+            console.warn("🛡️ GRISHA: Failed to parse Brain response, using collected data.", e);
         }
 
         if (report.level !== 'low') {

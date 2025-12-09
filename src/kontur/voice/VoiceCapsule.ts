@@ -20,8 +20,19 @@ export interface MultiSpeakerConfig {
 }
 
 export class VoiceCapsule {
+    private apiKey: string | undefined;
 
     constructor(apiKey?: string) {
+        // Resolve API key with priority: explicit > GEMINI_API_KEY > GOOGLE_API_KEY > GEMINI_LIVE_API_KEY
+        this.apiKey = apiKey
+            || process.env.GEMINI_API_KEY
+            || process.env.GOOGLE_API_KEY
+            || process.env.GEMINI_LIVE_API_KEY;
+
+        if (!this.apiKey) {
+            console.warn('[VOICE CAPSULE] ⚠️ No API key found for TTS. Check GEMINI_API_KEY, GOOGLE_API_KEY, or GEMINI_LIVE_API_KEY.');
+        }
+
         // Initialization handled by ProviderRouter
         // We trigger router initialization just in case
         console.log('[VOICE CAPSULE] 🔊 Initialized (Using ProviderRouter)');
