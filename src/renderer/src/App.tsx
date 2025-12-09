@@ -85,6 +85,9 @@ function App(): JSX.Element {
         return audioContextRef.current;
     };
 
+    // Track the end time of the last scheduled audio chunk for gapless playback
+    const nextStartTimeRef = useRef<number>(0);
+
     const playAudioChunk = async (base64Chunk: string) => {
         try {
             const ctx = getAudioContext();
@@ -115,10 +118,21 @@ function App(): JSX.Element {
             const source = ctx.createBufferSource();
             source.buffer = audioBuffer;
             source.connect(ctx.destination);
-            source.start(0);
 
-            // Debug log every 4th chunk to avoid spam, or just log generally
-            console.log('[AUDIO] 🎧 Playing chunk', int16Array.length, 'samples');
+            // Gapless Scheduling Logic
+            // We want to schedule this chunk to play IMMEDIATELY after the previous one finishes.
+            // If the queue has run dry (nextStartTime < currentTime), start NOW.
+            const now = ctx.currentTime;
+            // Add a small buffering delay (e.g., 20ms) if starting from scratch to prevent immediate underrun
+            const scheduleTime = Math.max(now, nextStartTimeRef.current);
+
+            source.start(scheduleTime);
+
+            // Update next available slot
+            nextStartTimeRef.current = scheduleTime + audioBuffer.duration;
+
+            // Debug log every 10th chunk or if gap detected
+            // if (Math.abs(scheduleTime - now) > 0.1) console.log('[AUDIO] 🕒 Queuing chunk with delay:', (scheduleTime - now).toFixed(3) + 's');
         } catch (e) {
             console.error('[AUDIO] Playback error:', e);
         }
