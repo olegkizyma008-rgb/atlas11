@@ -102,6 +102,24 @@ export class TetyanaExecutor extends EventEmitter {
                     appName = step.args?.arg1 || step.args?.target;
                 }
 
+                // Check if step.action itself is an app name (e.g., "calculator", "safari")
+                const APP_NAME_MAP: Record<string, string> = {
+                    'calculator': 'Calculator',
+                    'калькулятор': 'Calculator',
+                    'safari': 'Safari',
+                    'сафарі': 'Safari',
+                    'chrome': 'Google Chrome',
+                    'terminal': 'Terminal',
+                    'термінал': 'Terminal',
+                    'notes': 'Notes',
+                    'нотатки': 'Notes',
+                    'finder': 'Finder',
+                    'textedit': 'TextEdit',
+                };
+                if (!appName && APP_NAME_MAP[step.action.toLowerCase()]) {
+                    appName = APP_NAME_MAP[step.action.toLowerCase()];
+                }
+
                 // Try to extract from step description if still not found
                 const stepDescription = (step as any).description;
                 if (!appName && stepDescription) {
@@ -117,8 +135,9 @@ export class TetyanaExecutor extends EventEmitter {
                     this.lastActiveApp = appName; // Remember for subsequent steps
                     await vision.autoSelectSource(appName);
                 } else if (this.lastActiveApp) {
-                    // No explicit app, but we have a previous one - keep watching it
-                    console.log(`[TETYANA] 👁️ Continuing to watch: ${this.lastActiveApp}`);
+                    // No explicit app, but we have a previous one - re-select it for vision
+                    console.log(`[TETYANA] 👁️ Re-selecting window: ${this.lastActiveApp}`);
+                    await vision.autoSelectSource(this.lastActiveApp);
                 }
 
                 // 1. Validate with Grisha (security check)
@@ -235,7 +254,8 @@ export class TetyanaExecutor extends EventEmitter {
         try {
             const result = await vision.verifyStep(
                 step.action,
-                `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`
+                `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`,
+                this.currentPlan ? this.currentPlan.goal : undefined
             );
             return result;
         } catch (e) {

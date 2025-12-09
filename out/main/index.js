@@ -3338,6 +3338,41 @@ class GrishaVisionService extends events.EventEmitter {
     this.emit("source_changed", { id: sourceId, name: sourceName });
   }
   /**
+   * Helper: Find window TITLE via generic AppleScript
+   * This bridges the gap between App Name (known by user) and Window Title (known by desktopCapturer)
+   */
+  async findWindowTitleForApp(appName) {
+    const script = `
+        tell application "System Events"
+            try
+                set targetApp to process "${appName}"
+                if not (exists targetApp) then return ""
+                if (count of windows of targetApp) is 0 then return ""
+                
+                set winTitle to name of window 1 of targetApp
+                return winTitle
+            on error
+                return ""
+            end try
+        end tell
+        `;
+    try {
+      const { exec } = require("child_process");
+      const result = await new Promise((resolve) => {
+        exec(`osascript -e '${script}'`, (err, stdout) => {
+          if (err)
+            resolve("");
+          else
+            resolve(stdout.trim());
+        });
+      });
+      return result || null;
+    } catch (e) {
+      console.warn(`[GRISHA VISION] AppleScript Lookup Failed for ${appName}:`, e);
+      return null;
+    }
+  }
+  /**
    * Auto-select source by app name
    */
   async autoSelectSource(appName) {
@@ -3346,35 +3381,77 @@ class GrishaVisionService extends events.EventEmitter {
       (s) => !s.name.toLowerCase().includes("electron") && !s.name.toLowerCase().includes("atlas") && !s.name.toLowerCase().includes("kontur")
     );
     console.log(`[GRISHA VISION] 🔍 Looking for "${appName}" among ${externalSources.length} external windows`);
-    const normalize = (s) => s.toLowerCase().trim();
+    if (externalSources.length === 0) {
+      console.log("[GRISHA VISION] ⚠️ No external windows found via desktopCapturer.");
+    } else {
+      console.log("[GRISHA VISION] 📋 Available Windows: " + externalSources.map((s) => `"${s.name}"`).join(", "));
+    }
+    const normalize = (s) => s.toLowerCase().trim().replace(/[\u2013\u2014]/g, "-");
     const target = normalize(appName);
     const ALIASES = {
-      "калькулятор": ["calculator"],
-      "calculator": ["калькулятор"],
-      "термінал": ["terminal", "iterm"],
-      "terminal": ["термінал", "iterm"],
-      "нотатки": ["notes"],
-      "notes": ["нотатки"],
-      "сафарі": ["safari"],
-      "safari": ["сафарі"],
-      "файндер": ["finder"],
-      "finder": ["файндер"]
+      "калькулятор": ["Calculator"],
+      "calculator": ["Calculator"],
+      "термінал": ["Terminal", "iTerm2"],
+      "terminal": ["Terminal", "iTerm2"],
+      "нотатки": ["Notes"],
+      "notes": ["Notes"],
+      "сафарі": ["Safari"],
+      "safari": ["Safari"],
+      "файндер": ["Finder"],
+      "finder": ["Finder"],
+      "chrome": ["Google Chrome"],
+      "google chrome": ["Google Chrome"],
+      "code": ["Code", "Visual Studio Code"],
+      "vscode": ["Code", "Visual Studio Code"]
     };
-    const searchTerms = [target, ...ALIASES[target] || []];
+    const potentialAppNames = [appName, ...ALIASES[target] || []];
+    for (const name of potentialAppNames) {
+      const trueWindowTitle = await this.findWindowTitleForApp(name);
+      if (trueWindowTitle) {
+        console.log(`[GRISHA VISION] 🍏 AppleScript found Title "${trueWindowTitle}" for app "${name}"`);
+        const exactMatch = externalSources.find((s) => normalize(s.name) === normalize(trueWindowTitle));
+        if (exactMatch) {
+          console.log(`[GRISHA VISION] ✅ Exact Title Match: "${exactMatch.name}"`);
+          this.selectSource(exactMatch.id, exactMatch.name);
+          return true;
+        }
+        const partialMatch = externalSources.find((s) => normalize(s.name).includes(normalize(trueWindowTitle)) || normalize(trueWindowTitle).includes(normalize(s.name)));
+        if (partialMatch) {
+          console.log(`[GRISHA VISION] ✅ Partial Title Match: "${partialMatch.name}" matches "${trueWindowTitle}"`);
+          this.selectSource(partialMatch.id, partialMatch.name);
+          return true;
+        }
+      }
+    }
+    console.log(`[GRISHA VISION] ⚠️ Title Lookup failed, falling back to title matching...`);
+    const searchTerms = [target, ...(ALIASES[target] || []).map((s) => normalize(s))];
     let matched = externalSources.find(
       (s) => searchTerms.some((term) => normalize(s.name) === term)
     );
     if (!matched) {
       matched = externalSources.find(
+        (s) => searchTerms.some((term) => normalize(s.name).startsWith(term))
+      );
+    }
+    if (!matched) {
+      matched = externalSources.find(
         (s) => searchTerms.some((term) => normalize(s.name).includes(term))
       );
     }
+    if (!matched) {
+      matched = externalSources.find(
+        (s) => searchTerms.some((term) => {
+          const windowWords = normalize(s.name).split(" ");
+          return windowWords.includes(term);
+        })
+      );
+    }
     if (matched) {
-      console.log(`[GRISHA VISION] ✅ Found window: "${matched.name}" (matched for "${appName}")`);
+      console.log(`[GRISHA VISION] ✅ Found window via Title: "${matched.name}" (matched for "${appName}")`);
       this.selectSource(matched.id, matched.name);
       return true;
     }
-    console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}". Available: ${externalSources.map((s) => s.name).join(", ")}`);
+    console.warn(`[GRISHA VISION] ⚠️ Window not found for: "${appName}".`);
     return false;
   }
   /**
@@ -3395,6 +3472,8 @@ class GrishaVisionService extends events.EventEmitter {
     console.log(`[GRISHA VISION] 👁️ Starting observation [${currentMode.toUpperCase()}]...`);
     this.isObserving = true;
     this.frameCount = 0;
+    this.selectedSourceId = null;
+    this.selectedSourceName = null;
     if (currentMode === "live") {
       await this.startLiveObservation(taskDescription);
     } else {
@@ -3488,7 +3567,7 @@ class GrishaVisionService extends events.EventEmitter {
     try {
       const router2 = getProviderRouter();
       const objectMatch = stepAction.match(/(?:відкрити|open|launch|в програмі|in|у|click|натисни|type in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9\s]+)/i);
-      const objectName = objectMatch ? objectMatch[1].trim() : "об'єкт";
+      const objectName = objectMatch ? objectMatch[1].trim() : this.selectedSourceName || stepAction;
       const visibilityPrompt = `
 АНАЛІЗ ВИДИМОСТІ:
 Завдання: "${stepAction}"
@@ -3626,23 +3705,35 @@ class GrishaVisionService extends events.EventEmitter {
   async captureFrame(overrideSourceId) {
     try {
       const targetId = overrideSourceId || this.selectedSourceId;
+      const sources = await electron.desktopCapturer.getSources({
+        types: ["window", "screen"],
+        thumbnailSize: { width: 1280, height: 720 }
+      });
+      this.emit("sources_updated", sources.map((s) => ({
+        id: s.id,
+        name: s.name,
+        thumbnail: s.thumbnail.toDataURL(),
+        isScreen: s.id.startsWith("screen:")
+      })));
       if (targetId) {
-        const sources2 = await electron.desktopCapturer.getSources({
-          types: ["window", "screen"],
-          thumbnailSize: { width: 1280, height: 720 }
-        });
-        const source = sources2.find((s) => s.id === targetId);
+        let source = sources.find((s) => s.id === targetId);
+        if (!source && this.selectedSourceName) {
+          source = sources.find(
+            (s) => s.name.toLowerCase().includes(this.selectedSourceName.toLowerCase())
+          );
+          if (source && source.id !== targetId) {
+            console.log(`[GRISHA VISION] 🔄 Source ID changed for "${this.selectedSourceName}": ${targetId} -> ${source.id}`);
+            this.selectedSourceId = source.id;
+          }
+        }
         if (source) {
           const jpegBuffer = source.thumbnail.toJPEG(85);
           return jpegBuffer.toString("base64");
         }
       }
-      const sources = await electron.desktopCapturer.getSources({
-        types: ["screen"],
-        thumbnailSize: { width: 1280, height: 720 }
-      });
-      if (sources.length > 0) {
-        const jpegBuffer = sources[0].thumbnail.toJPEG(85);
+      const screenSources = sources.filter((s) => s.id.startsWith("screen:"));
+      if (screenSources.length > 0) {
+        const jpegBuffer = screenSources[0].thumbnail.toJPEG(85);
         return jpegBuffer.toString("base64");
       }
       return null;
@@ -3826,6 +3917,22 @@ class TetyanaExecutor extends events.EventEmitter {
         if (!appName && (step.action === "open_application" || step.action === "open" || step.action === "launch")) {
           appName = step.args?.arg1 || step.args?.target;
         }
+        const APP_NAME_MAP = {
+          "calculator": "Calculator",
+          "калькулятор": "Calculator",
+          "safari": "Safari",
+          "сафарі": "Safari",
+          "chrome": "Google Chrome",
+          "terminal": "Terminal",
+          "термінал": "Terminal",
+          "notes": "Notes",
+          "нотатки": "Notes",
+          "finder": "Finder",
+          "textedit": "TextEdit"
+        };
+        if (!appName && APP_NAME_MAP[step.action.toLowerCase()]) {
+          appName = APP_NAME_MAP[step.action.toLowerCase()];
+        }
         const stepDescription = step.description;
         if (!appName && stepDescription) {
           const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
@@ -3838,7 +3945,8 @@ class TetyanaExecutor extends events.EventEmitter {
           this.lastActiveApp = appName;
           await vision.autoSelectSource(appName);
         } else if (this.lastActiveApp) {
-          console.log(`[TETYANA] 👁️ Continuing to watch: ${this.lastActiveApp}`);
+          console.log(`[TETYANA] 👁️ Re-selecting window: ${this.lastActiveApp}`);
+          await vision.autoSelectSource(this.lastActiveApp);
         }
         await this.validateStep(step, stepNum);
         try {
