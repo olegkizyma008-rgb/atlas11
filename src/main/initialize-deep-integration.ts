@@ -63,6 +63,7 @@ export class DeepIntegrationSystem {
   public systemCapsule: SystemCapsule | null = null;
   public geminiLive: GeminiLiveService | null = null;
   public grishaObserver: GrishaObserver | null = null;
+  public grishaVision: any = null; // Unified Vision Service (GrishaVisionService)
 
   private organs: Map<string, Synapse> = new Map();
   private listeners: Map<string, Function[]> = new Map();
@@ -143,48 +144,75 @@ export class DeepIntegrationSystem {
 
   /**
    * Initialize Vision System (Grisha's Eyes)
+   * Supports both LIVE (Gemini) and ON-DEMAND (Copilot) modes
    */
   private async initVisionSystem(): Promise<void> {
     console.log('[DEEP-INTEGRATION] Initializing Vision System...');
-    console.log('[DEEP-INTEGRATION] Initializing Vision System...');
-    // User Request (Corrected): GEMINI_LIVE_API_KEY is for Grisha (Live)
-    const apiKey = process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
 
-    if (apiKey) {
+    const { getVisionConfig } = await import('../kontur/providers/config');
+    const { getGrishaVisionService } = await import('../kontur/vision/GrishaVisionService');
+
+    const visionConfig = getVisionConfig();
+    console.log(`[DEEP-INTEGRATION] Vision Mode: ${visionConfig.mode.toUpperCase()}`);
+
+    // Initialize unified Vision Service
+    this.grishaVision = getGrishaVisionService();
+
+    // Setup Live mode (Gemini Live)
+    const liveApiKey = visionConfig.live.apiKey || process.env.GEMINI_LIVE_API_KEY || process.env.GOOGLE_API_KEY;
+
+    if (liveApiKey) {
       try {
-        this.geminiLive = new GeminiLiveService(apiKey);
-        // Auto connect
-        this.geminiLive.connect().catch(e => console.error("[VISION] Gemini Connect Connect Error:", e));
+        this.geminiLive = new GeminiLiveService(liveApiKey);
+
+        // Only auto-connect if Live mode is active
+        if (visionConfig.mode === 'live') {
+          this.geminiLive.connect().catch(e => console.error("[VISION] Gemini Connect Error:", e));
+        }
 
         this.geminiLive.on('error', (err) => {
           console.error('[VISION] Gemini Live Error:', err.message);
           synapse.emit('GRISHA', 'ALERT', `Помилка доступу до зору: ${err.message}`);
         });
 
-        // Initialize Observer
+        // Connect Gemini Live to Vision Service
+        this.grishaVision.setGeminiLive(this.geminiLive);
+
+        // Initialize legacy Observer (for backward compatibility)
         this.grishaObserver = new GrishaObserver();
         this.grishaObserver.setGeminiLive(this.geminiLive);
 
-        // Forward Grisha's observations to Synapse (UI)
+        // Forward observations to Synapse (UI)
         this.grishaObserver.on('observation', (result: any) => {
           synapse.emit('GRISHA', result.type.toUpperCase(), result.message);
         });
 
-        // Forward Audio to Synapse (UI)
         this.grishaObserver.on('audio', (audioChunk: string) => {
           synapse.emit('GRISHA', 'AUDIO_CHUNK', { chunk: audioChunk });
         });
 
-        // Expose observer globally for ad-hoc debugging if needed
-        (global as any).grishaObserver = this.grishaObserver;
-
         console.log('[DEEP-INTEGRATION] ✅ Vision System (Gemini Live) active');
       } catch (error) {
-        console.error('[DEEP-INTEGRATION] Failed to init Vision:', error);
+        console.error('[DEEP-INTEGRATION] Failed to init Gemini Live:', error);
       }
     } else {
-      console.warn('[DEEP-INTEGRATION] ⚠️ No API Key for Vision. Grisha will be blind.');
+      console.warn('[DEEP-INTEGRATION] ⚠️ No API Key for Live Vision.');
     }
+
+    // Forward Vision Service observations to Synapse
+    this.grishaVision.on('observation', (result: any) => {
+      synapse.emit('GRISHA', result.type.toUpperCase(), result.message);
+    });
+
+    this.grishaVision.on('audio', (audioChunk: string) => {
+      synapse.emit('GRISHA', 'AUDIO_CHUNK', { chunk: audioChunk });
+    });
+
+    // Expose services globally for debugging
+    (global as any).grishaObserver = this.grishaObserver;
+    (global as any).grishaVision = this.grishaVision;
+
+    console.log(`[DEEP-INTEGRATION] ✅ Vision System ready [${visionConfig.mode}]`);
   }
 
   /**
@@ -322,13 +350,61 @@ export class DeepIntegrationSystem {
     // Model Status for UI Indicator
     ipcMain.removeHandler('vision:get_model_status');
     ipcMain.handle('vision:get_model_status', () => {
-      if (!this.geminiLive) {
-        return { status: 'disconnected', error: null };
+      const { getVisionConfig } = require('../kontur/providers/config');
+      const config = getVisionConfig();
+
+      if (config.mode === 'live') {
+        if (!this.geminiLive) {
+          return { status: 'disconnected', error: null, mode: 'live' };
+        }
+        return {
+          status: this.geminiLive.modelStatus,
+          error: this.geminiLive.errorType,
+          mode: 'live'
+        };
+      } else {
+        // On-demand mode: always "ready"
+        return { status: 'connected', error: null, mode: 'on-demand' };
       }
-      return {
-        status: this.geminiLive.modelStatus,
-        error: this.geminiLive.errorType
-      };
+    });
+
+    // Select Vision source (window/screen)
+    ipcMain.removeHandler('vision:select_source');
+    ipcMain.handle('vision:select_source', async (_, { sourceId, sourceName }) => {
+      if (this.grishaVision) {
+        this.grishaVision.selectSource(sourceId, sourceName);
+        return { success: true };
+      }
+      return { success: false, error: 'Vision service not initialized' };
+    });
+
+    // Get current Vision mode
+    ipcMain.removeHandler('vision:get_mode');
+    ipcMain.handle('vision:get_mode', () => {
+      const { getVisionConfig } = require('../kontur/providers/config');
+      return getVisionConfig().mode;
+    });
+
+    // Get full Vision config
+    ipcMain.removeHandler('vision:get_config');
+    ipcMain.handle('vision:get_config', () => {
+      const { getVisionConfig } = require('../kontur/providers/config');
+      return getVisionConfig();
+    });
+
+    // On-demand Vision analysis (manual trigger from UI)
+    ipcMain.removeHandler('vision:analyze');
+    ipcMain.handle('vision:analyze', async (_, { taskContext }) => {
+      try {
+        if (!this.grishaVision) {
+          return { success: false, error: 'Vision service not initialized' };
+        }
+        const result = await this.grishaVision.verifyStep(taskContext || 'Manual analysis', '');
+        return { success: true, result };
+      } catch (err: any) {
+        console.error('[IPC] Vision analyze error:', err);
+        return { success: false, error: err.message };
+      }
     });
 
     console.log('[DEEP-INTEGRATION] ✅ IPC Bridge established');

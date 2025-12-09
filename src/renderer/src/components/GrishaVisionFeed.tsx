@@ -1,6 +1,7 @@
 /**
  * GrishaVisionFeed Component
  * Live vision feed window showing what GRISHA is monitoring
+ * Supports both LIVE (Gemini streaming) and ON-DEMAND (Copilot/GPT-4o) modes
  * Supports webcam, screen capture, or specific window capture
  * Can auto-select source based on current task
  */
@@ -27,7 +28,8 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
     const [showSourcePicker, setShowSourcePicker] = useState(false)
     const [selectedSource, setSelectedSource] = useState<SourceInfo | null>(null)
 
-    // Model status for indicator
+    // Vision mode and status
+    const [visionMode, setVisionMode] = useState<'live' | 'on-demand'>('live')
     const [modelStatus, setModelStatus] = useState<'connected' | 'connecting' | 'disconnected' | 'error'>('disconnected')
     const [modelError, setModelError] = useState<string | null>(null)
 
@@ -47,6 +49,9 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
                 const result = await electron.ipcRenderer.invoke('vision:get_model_status')
                 setModelStatus(result.status)
                 setModelError(result.error)
+                if (result.mode) {
+                    setVisionMode(result.mode)
+                }
             } catch (err) {
                 setModelStatus('error')
                 setModelError('IPC Error')
@@ -126,6 +131,12 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
                 setStreamType('window')
                 setSelectedSource(source)
                 setShowSourcePicker(false)
+
+                // Notify backend Vision service about selected source
+                electron.ipcRenderer.invoke('vision:select_source', {
+                    sourceId: source.id,
+                    sourceName: source.name
+                })
             }
         } catch (err) {
             console.error('Failed to start window stream:', err)
@@ -199,16 +210,18 @@ export const GrishaVisionFeed = ({ isActive, status = 'stable', targetApp }: Gri
                     {/* Model Status Indicator */}
                     <div
                         className={`w-2.5 h-2.5 rounded-full transition-all duration-300 ${modelStatus === 'connected' ? 'bg-green-400 shadow-[0_0_8px_rgba(74,222,128,0.6)]' :
-                                modelStatus === 'connecting' ? 'bg-yellow-400 animate-pulse shadow-[0_0_8px_rgba(250,204,21,0.6)]' :
-                                    'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]'
+                            modelStatus === 'connecting' ? 'bg-yellow-400 animate-pulse shadow-[0_0_8px_rgba(250,204,21,0.6)]' :
+                                'bg-red-400 shadow-[0_0_8px_rgba(248,113,113,0.6)]'
                             }`}
-                        title={modelError ? `Помилка: ${modelError}` : `Gemini: ${modelStatus}`}
+                        title={modelError ? `Помилка: ${modelError}` : `${visionMode === 'live' ? 'Gemini Live' : 'Copilot'}: ${modelStatus}`}
                     />
-                    <span className="text-rose-400 text-sm">◎</span>
+                    <span className={visionMode === 'on-demand' ? 'text-cyan-400 text-sm' : 'text-rose-400 text-sm'}>◎</span>
                     <span className="text-[10px] font-bold text-rose-300 tracking-wider uppercase flex-1">
-                        GRISHA: Live Vision Feed
+                        GRISHA: {visionMode === 'live' ? 'Live Stream' : 'On-Demand'}
                     </span>
-                    <span className="text-[9px] font-bold text-rose-400">A</span>
+                    <span className={`text-[9px] font-bold ${visionMode === 'on-demand' ? 'text-cyan-400' : 'text-rose-400'}`}>
+                        {visionMode === 'live' ? 'LIVE' : 'OD'}
+                    </span>
                 </div>
 
                 {/* Status bar */}

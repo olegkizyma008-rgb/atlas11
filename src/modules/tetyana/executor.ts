@@ -3,15 +3,26 @@ import { Plan, PlanStep } from '../atlas/contract';
 import { createPacket, KPP_Packet, PacketIntent } from '../../kontur/protocol/nexus';
 import { Core } from '../../kontur/core/dispatcher';
 import { EventEmitter } from 'events';
+import { getGrishaVisionService, GrishaVisionService, VisionObservationResult } from '../../kontur/vision/GrishaVisionService';
+import { getVisionConfig } from '../../kontur/providers/config';
 
 export class TetyanaExecutor extends EventEmitter {
     private core: Core;
     private currentPlan: Plan | null = null;
     private active: boolean = false;
+    private visionService: GrishaVisionService | null = null;
 
     constructor(core: Core) {
         super();
         this.core = core;
+    }
+
+    /**
+     * Set Vision Service (for main process integration)
+     */
+    setVisionService(service: GrishaVisionService) {
+        this.visionService = service;
+        console.log('[TETYANA] 👁️ Vision service connected');
     }
 
     /**
@@ -30,6 +41,9 @@ export class TetyanaExecutor extends EventEmitter {
         // Notify UI of start
         this.emitStatus("starting", `Починаю виконання: ${plan.goal}`);
 
+        // Start Vision observation
+        await this.startVisionObservation(plan.goal);
+
         try {
             for (let i = 0; i < plan.steps.length; i++) {
                 if (!this.active) break; // formatting break
@@ -46,15 +60,28 @@ export class TetyanaExecutor extends EventEmitter {
                 }
 
 
-                // 1. Validate with Grisha
+                // 1. Validate with Grisha (security check)
                 await this.validateStep(step, stepNum);
 
                 // 2. Execute Step
                 const result = await this.executeStep(step, stepNum);
 
-                // 3. Report Success
+                // 3. Vision Verification (verify step was executed correctly)
+                const visionResult = await this.verifyStepWithVision(step, stepNum);
+
+                // 4. Check if Vision detected a problem
+                if (visionResult && !visionResult.verified && visionResult.type === 'alert') {
+                    console.warn(`[TETYANA] ⚠️ Vision alert: ${visionResult.message}`);
+                    this.emitStatus("warning", `Grisha: ${visionResult.message}`);
+                    // Continue for now, but could be configurable to stop
+                }
+
+                // 5. Report Success
                 this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
             }
+
+            // Stop Vision observation
+            this.stopVisionObservation();
 
             if (this.active) {
                 this.emitStatus("completed", `План успішно завершено.`);
@@ -65,6 +92,7 @@ export class TetyanaExecutor extends EventEmitter {
 
         } catch (error: any) {
             console.error(`[TETYANA] 💥 Execution Failed: ${error.message}`);
+            this.stopVisionObservation();
             this.handleFailure(error, plan);
         } finally {
             this.active = false;
@@ -79,7 +107,50 @@ export class TetyanaExecutor extends EventEmitter {
         if (this.active) {
             console.log('[TETYANA] 🛑 Emergency Stop requested');
             this.active = false;
+            this.stopVisionObservation();
             this.emitStatus("stopped", "Виконання зупинено.");
+        }
+    }
+
+    /**
+     * Start Vision observation for the plan
+     */
+    private async startVisionObservation(goal: string) {
+        const vision = this.visionService || getGrishaVisionService();
+        const config = getVisionConfig();
+
+        console.log(`[TETYANA] 👁️ Starting Vision observation [${config.mode.toUpperCase()}]`);
+
+        try {
+            await vision.startObservation(goal);
+        } catch (e) {
+            console.warn('[TETYANA] Vision observation failed to start:', e);
+        }
+    }
+
+    /**
+     * Stop Vision observation
+     */
+    private stopVisionObservation() {
+        const vision = this.visionService || getGrishaVisionService();
+        vision.stopObservation();
+    }
+
+    /**
+     * Verify step with Vision (Grisha sees if it worked)
+     */
+    private async verifyStepWithVision(step: PlanStep, stepNum: number): Promise<VisionObservationResult | null> {
+        const vision = this.visionService || getGrishaVisionService();
+
+        try {
+            const result = await vision.verifyStep(
+                step.action,
+                `Крок ${stepNum}: ${JSON.stringify(step.args || {})}`
+            );
+            return result;
+        } catch (e) {
+            console.warn('[TETYANA] Vision verification failed:', e);
+            return null;
         }
     }
 
