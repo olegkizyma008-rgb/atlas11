@@ -1,163 +1,108 @@
-# 🏗️ Архітектура системи
+# 🏗️ Архітектура системи (KONTUR v12)
 
-Детальний огляд архітектури KONTUR v12 та Atlas.
+Детальний огляд архітектури KONTUR v12 "Kozyr" та Atlas.
 
-## 📋 Загальна архітектура
+## 📋 Основна схема
 
-**KONTUR v12** - це потужна система автоматизації macOS з модульною архітектурою, що складається з:
+```mermaid
+graph TD
+    User[User] -->|Goal| Atlas[Atlas Brain (Planner)]
+    Atlas -->|Plan| Tetyana[Tetyana (Executor)]
+    
+    subgraph Execution Cycle
+        Tetyana -->|Context| RAG[RAG System (Search)]
+        Tetyana -->|Command| Bridge[Python Bridge]
+        Bridge -->|Action| OS[macOS UI]
+        OS -->|Visual State| Grisha[Grisha (Vision)]
+        Grisha -->|Feedback| Tetyana
+    end
+    
+    subgraph Self-Healing
+        Tetyana -->|Success Pattern| RAG_Store[RAG (Store)]
+    end
+```
 
-1. **Frontend (Electron)** - TypeScript + React + TailwindCSS
-2. **Backend Core (Node.js)** - KONTUR v12 ядро
-3. **Python Bridge** - Open Interpreter для виконання завдань
-4. **macOS Integration** - Accessibility API та UI Control
+## 🧠 Компоненти Trinity
+
+### 1. ATLAS (Planner)
+- **Роль**: Архітектор та Планувальник.
+- **Модель**: GPT-4.1 / Copilot.
+- **Функція**: Розбиває складні завдання користувача на кроки плану (`PlanStep`).
+- **Інструмент**: `implementation_plan`.
+
+### 2. TETYANA (Executor)
+- **Роль**: Виконавець.
+- **Engine**: Python Bridge (Open Interpreter).
+- **Функція**: Виконує кроки плану, керує мишею/клавіатурою.
+- **Логіка v12**:
+    - **Replan**: Якщо крок не вдався 3 рази — запит нового плану до Atlas.
+    - **Feedback Loop**: Отримує візуальний фідбек від Grisha.
+
+### 3. GRISHA (Guardian)
+- **Роль**: Верифікатор та Охоронець.
+- **Модель**: GPT-4o (Vision).
+- **Функція**: 
+    - Дивиться на екран.
+    - Перевіряє безпеку дій (Safety Filter).
+    - Перевіряє успішність виконання (Verification).
+
+## 🔄 Цикл Виконання (The Loop)
+
+У v12 ми відмовилися від сліпого виконання на користь циклу зворотного зв'язку:
+
+1. **Plan**: Atlas створює план.
+2. **Execute**: Tetyana надсилає команду в Python Bridge.
+3. **Observe**: Grisha робить знімок екрану.
+4. **Verify**: Grisha порівнює результат з очікуванням.
+5. **Correct**: Якщо помилка, Tetyana отримує опис помилки і пробує виправити (Retry).
+6. **Learn**: Успішний патерн зберігається в RAG.
 
 ## 🗂️ Структура проекту
 
-### Atlas Project (`/Users/dev/Documents/GitHub/atlas/`)
-
-```
-atlas/
-├── src/
-│   ├── main/                 # Electron main process
-│   ├── renderer/             # React frontend
-│   ├── kontur/              # 🧠 KONTUR v12 Core System
-│   │   ├── core/            # Core dispatcher & synapse
-│   │   ├── cortex/          # Brain & unified brain
-│   │   ├── providers/       # AI providers (Gemini, Copilot, etc.)
-│   │   ├── vision/          # Vision services
-│   │   ├── voice/           # Voice services (STT/TTS)
-│   │   ├── mcp/             # MCP servers
-│   │   └── protocol/        # KPP Protocol
-│   ├── modules/             # Feature modules
-│   │   └── tetyana/         # Tetyana executor
-│   └── shared/              # Shared utilities
-├── docs/                    # 📚 Документація
-├── package.json             # Dependencies & scripts
-├── .env                     # Configuration
-└── electron.vite.config.ts  # Build configuration
-```
-
-### Mac Assistant (`/Users/dev/mac_assistant/`)
+### Python Bridge (`~/mac_assistant/`)
+Основне робоче середовище v12.
 
 ```
 mac_assistant/
-├── mac_master_agent.py      # 🎯 Main Python agent
-├── mac_accessibility.py     # 🖱️ Accessibility utilities
-├── index_rag.py            # 📚 RAG indexing
-├── venv/                   # Python virtual environment
-└── README.md               # Documentation
+├── mac_master_agent.py      # 🎯 Основний агент (v12)
+├── index_rag.py            # 📚 RAG Система
+└── venv/                   # Ізольоване середовище
 ```
 
-## 🔄 Основні компоненти
+### TypeScript Core (`src/`)
+Оркестрація та інтерфейс.
 
-### 1. KONTUR v12 Core
+```
+src/
+├── kontur/                 # Ядро системи
+│   ├── vision/             # Grisha Service
+│   └── cortex/             # Brain Service
+├── modules/
+│   └── tetyana/            # Executor Logic
+│       ├── executor.ts     # Replan logic
+│       └── bridge.ts       # Python Link
+```
 
-- **Core Dispatcher** - центральний маршрутизатор пакетів
-- **Synapse** - шина подій для координації
-- **Cortex Brain** - центральний мозок системи
-- **Unified Brain** - об'єднаний мозок з fallback системою
+## 📊 Потік Даних (Data Flow)
 
-### 2. Protocol Layer (KPP)
+1. **User Request** -> Electron UI -> Trinity Channel.
+2. **Atlas** генерує JSON Plan.
+3. **Tetyana** бере перший крок -> шукає в RAG.
+4. **Tetyana** передає команду в `mac_master_agent.py` (spawn process).
+5. **Python Agent** використовує AppleScript/Accessibility API.
+6. **macOS** змінює стан вікна.
+7. **Grisha** аналізує скріншот -> повертає `verified: boolean`.
 
-- **KPP_Schema** - схема пакетів
-- **PacketIntent** - типи намірів
-- **SecurityScope** - рівні безпеки
-- **verifyPacket** / **computeIntegrity** - перевірка цілісності
+## 🛠️ Технологічний Стек
 
-### 3. Providers System
-
-- **Multi-provider Router** - підтримка Gemini, Copilot, OpenAI, Anthropic, Mistral
-- **Fallback система** - автоматичне перемикання між провайдерами
-- **Provider Config** - централізована конфігурація
-
-### 4. Vision System
-
-- **LIVE Mode**: Gemini Live API (реальний час)
-- **ON-DEMAND Mode**: GPT-4o/Copilot (скріншоти)
-- **GrishaVisionService** - унітарний сервіс
-- **GrishaObserver** - спостереження за виконанням
-
-### 5. Voice System
-
-- **STT Services**: Gemini Live, Whisper
-- **TTS Services**: Gemini TTS, Ukrainian TTS
-- **VoiceCapsule** - інтеграція голосу
-
-### 6. Accessibility System
-
-- **Swift UI Helper** - низькорівневий доступ до Accessibility API
-- **MCP OS Server** - стандартний MCP сервер з інструментами
-- **AppleScript fallback** - резервна система
-
-## 🐍 Python Integration
-
-### Open Interpreter Bridge
-
-- **Файл**: `src/modules/tetyana/open_interpreter_bridge.ts`
-- **Функція**: Запуск Python агента через spawn
-- **Environment**: Автоматичне завантаження .env змінних
-- **Paths**:
-  - Python: `~/mac_assistant/venv/bin/python3`
-  - Agent: `~/mac_assistant/mac_master_agent.py`
-
-### mac_master_agent.py
-
-- **LLM**: Gemini 2.0-flash або GPT-4o (з fallback)
-- **Vision**: Увімкнено (gpt-4o модель)
-- **Accessibility**: Повний доступ (mouse, keyboard, display)
-- **Custom Instructions**: Українська мова, AppleScript приклади
-- **RAG**: Інтеграція з Chroma DB
-
-### mac_accessibility.py
-
-- **Framework**: PyObjC (Quartz + Accessibility)
-- **Functions**: click_element(), get_ax_attribute()
-- **Direct UI Control**: AXUIElement manipulation
-- **Mouse Events**: Quartz CGEvent APIs
-
-## 📊 Залежності
-
-### Node.js Dependencies (основні)
-
-- **@google/genai** / **@google/generative-ai** - Gemini integration
-- **openai** - OpenAI integration
-- **@anthropic-ai/sdk** - Anthropic integration
-- **@mistralai/mistralai** - Mistral integration
-- **@modelcontextprotocol/sdk** - MCP support
-- **better-sqlite3** - Database
-- **drizzle-orm** - ORM
-- **express** - HTTP server
-- **ws** - WebSocket support
-- **react** / **@trpc** - Frontend stack
-
-### Python Dependencies (в venv)
-
-- **open-interpreter** - Code execution
-- **langchain** - RAG functionality
-- **chromadb** - Vector database
-- **pyobjc-framework-Accessibility** - macOS accessibility
-- **python-dotenv** - Environment variables
-
-## 🎯 Ключові особливості
-
-1. **Модульна архітектура** - легко додавати нові компоненти
-2. **Multi-provider fallback** - надійність через резервні системи
-3. **Real-time Vision** - Gemini Live для потокового аналізу
-4. **Accessibility Integration** - повний контроль macOS UI
-5. **RAG Ready** - готова інтеграція з базою знань
-6. **Ukrainian Language** - нативна підтримка української мови
-7. **Electron App** - desktop додаток з React UI
-
-## 📈 Готовність системи
-
-- ✅ **Архітектура**: 100% готово
-- ✅ **Конфігурація**: 100% готово  
-- ✅ **Dependencies**: 100% встановлено
-- ✅ **Python Bridge**: 100% готово
-- ✅ **Accessibility**: 100% готово
-- ⚠️ **RAG Indexing**: потребує запуску `index_rag.py`
-- ⚠️ **Permissions**: потребує налаштування в System Settings
+- **Frontend**: React + TailwindCSS (Electron).
+- **Backend**: Node.js (TypeScript).
+- **Execution**: Python 3.12 (Open Interpreter Custom).
+- **AI Models**: 
+    - Planner: OpenAI o1 / GPT-4.1
+    - Vision: GPT-4o
+    - Bridge: GPT-4o-mini / Gemini 2.0 Flash
 
 ---
 
-**Детальніше:** [ETAP_1_ARCHITECTURE_ANALYSIS.md](../ETAP_1_ARCHITECTURE_ANALYSIS.md)
+**Детальніше про налаштування**: [04-CONFIGURATION.md](./04-CONFIGURATION.md)

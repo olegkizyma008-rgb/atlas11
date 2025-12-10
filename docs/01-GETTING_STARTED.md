@@ -1,6 +1,6 @@
-# 🚀 Швидкий старт
+# 🚀 Швидкий старт (KONTUR v12)
 
-Налаштування та запуск Atlas за 5 хвилин.
+Налаштування та запуск Atlas KONTUR v12 "Kozyr" за 5 хвилин.
 
 ## ⚡ Базовий запуск
 
@@ -16,88 +16,92 @@ npm run cli -- "Скільки файлів на робочому столі?"
 npm run cli -- "Скажи яка сьогодні дата"
 ```
 
-### Через Python (прямо)
+### Через Python Bridge (прямо)
+
+У v12 ми використовуємо нативний Python міст для виконання важких завдань.
 
 ```bash
-# Базова версія
+# Прямий запуск агента
 ~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Твоє завдання"
 
 # Приклад:
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Відкрий Finder"
+~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Відкрий Finder і створи нову папку Test"
 ```
 
 ## ⚙️ Налаштування
 
 ### 1️⃣ Дозволи Accessibility (обов'язково)
 
+> [!IMPORTANT]
+> Для роботи Vision та контролю миші потрібні спеціальні дозволи.
+
 1. Відкрийте **System Settings → Privacy & Security → Accessibility**
 2. Натисніть **+** (плюс)
 3. Додайте:
-   - **Terminal** (або iTerm)
-   - **/opt/homebrew/opt/python@3.12/bin/python3.12**
+   - **Terminal** (або iTerm/VS Code)
+   - **/Users/dev/mac_assistant/venv/bin/python3** (Python venv executable)
 
-### 2️⃣ API ключі (вже налаштовані)
+![Accessibility Settings Placeholder](electron-web/accessibility-settings.png)
 
-Ключі завантажуються з файлу `/Users/dev/Documents/GitHub/atlas/.env`:
-- ✅ BRAIN_API_KEY (Copilot)
-- ✅ VISION_API_KEY (Gemini)
-- ✅ TTS_API_KEY (Gemini)
+### 2️⃣ API ключі (v12 Minimalist)
+
+Ми спростили конфігурацію. Відредагуйте `/Users/dev/Documents/GitHub/atlas/.env`:
+
+```env
+# === BRAIN (Planner) ===
+BRAIN_PROVIDER=copilot
+BRAIN_API_KEY=ghu_...
+
+# === VISION (Verification) ===
+VISION_PROVIDER=copilot
+VISION_API_KEY=ghu_...
+
+# === EXECUTION ===
+EXECUTION_ENGINE=python-bridge
+
+# === RAG ===
+RAG_ENABLED=true
+```
 
 Детальніше: [API_KEYS_GUIDE.md](./API_KEYS_GUIDE.md)
 
-### 3️⃣ RAG база (опціонально)
+### 3️⃣ RAG Base (Self-Healing)
+
+База знань автоматично наповнюється, але для старту можна запустити індексацію:
 
 ```bash
-# Індексація бази знань
 ~/mac_assistant/venv/bin/python3 ~/mac_assistant/index_rag.py
 ```
 
 ## 🧪 Тестування
 
 ```bash
-# Тест 1: Простий привіт
+# Тест 1: Простий привіт (CLI)
 npm run cli -- "Скажи привіт"
 
-# Тест 2: Відкриття додатку
-npm run cli -- "Відкрий Калькулятор"
-
-# Тест 3: Виконання команди
-npm run cli -- "Скільки файлів у ~/Documents"
+# Тест 2: Vision Feedback Loop (Python)
+# Спробуйте завдання, яке вимагає зворотного зв'язку
+~/mac_assistant/venv/bin/python3 ~/mac_assistant/mac_master_agent.py "Зроби скріншот цього вікна"
 ```
 
-## 📊 Статус компонентів
+## 📊 Статус системи (v12)
 
-| Компонент | Статус |
-|-----------|--------|
-| Open Interpreter Bridge | ✅ 100% |
-| Python venv | ✅ 100% |
-| API ключі | ✅ Налаштовані |
-| EXECUTION_ENGINE | ✅ python-bridge |
-| RAG Database | ✅ Готова |
-| Дозволи | ⚠️ Потребують конфігурації |
-
-## 🔧 Команди
-
-```bash
-# Побудова проекту
-npm run build
-
-# Запуск CLI
-npm run cli -- "команда"
-
-# Запуск інтерактивного меню
-npm run cli
-```
+| Компонент | Статус | Версія |
+|-----------|--------|--------|
+| Open Interpreter Bridge | ✅ Active | v12.0.1 |
+| Execution Engine | ✅ Python | 3.12 |
+| RAG System | ✅ Enabled | ChromaDB |
+| Vision Mode | ✅ On-Demand | GPT-4o |
+| Дозволи | ⚠️ Перевірити | - |
 
 ## ❓ Troubleshooting
 
 | Проблема | Рішення |
 |----------|---------|
-| "Python not found" | Перевірте: `which python3` |
-| "Accessibility denied" | Додайте Terminal + Python у System Settings |
-| "API Key not found" | Перевірте `.env` файл |
-| "RAG database not found" | Запустіть: `python3 ~/mac_assistant/index_rag.py` |
+| "Python not found" | Перевірте шлях: `~/mac_assistant/venv/bin/python3` |
+| "Grisha refused verification" | Перевірте чистоту екрану або спробуйте ще раз (Agent зробить Replan) |
+| "RAG database missing" | Запустіть `index_rag.py` (вона створиться автоматично) |
 
 ---
 
-**Готово? Почніть з:** `npm run cli -- "Привіт"`
+**Готово? Почніть з:** `npm run cli -- "Привіт, я готовий працювати"`

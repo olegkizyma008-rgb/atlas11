@@ -1,12 +1,12 @@
-# 🔧 Ключові компоненти
+# 🔧 Ключові компоненти (KONTUR v12)
 
-Детальний опис основних компонентів системи.
+Детальний опис основних компонентів системи v12 "Kozyr".
 
 ## 📚 Зміст
 
 - [Open Interpreter Bridge](#open-interpreter-bridge)
 - [Accessibility & UI Control](#accessibility--ui-control)
-- [RAG System](#rag-system)
+- [RAG System (Self-Healing)](#rag-system)
 - [Vision & LLM Integration](#vision--llm-integration)
 - [Voice Services](#voice-services)
 
@@ -14,55 +14,34 @@
 
 **Файл**: `src/modules/tetyana/open_interpreter_bridge.ts`
 
-Інтеграція Open Interpreter для виконання Python кодів та завдань.
+Інтеграція Open Interpreter для виконання Python кодів та завдань. У v12 це **основний** метод виконання складних задач.
 
-### Основні функції
+### Основні функції v12
 
 ```typescript
-execute(command: string): Promise<ExecutionResult>
-checkEnvironment(): Promise<EnvironmentStatus>
+// Виконання з Feedback Loop
+executeWithVisionFeedback(command: string): Promise<string>
 ```
 
 ### Конфігурація
 
 - **Python**: `~/mac_assistant/venv/bin/python3`
 - **Agent**: `~/mac_assistant/mac_master_agent.py`
-- **Environment**: Автоматичне завантаження .env змінних
-
-### Приклад використання
-
-```bash
-npm run cli -- "Відкрий Калькулятор"
-```
+- **Environment**: Автоматичне завантаження .env змінних (мінімалістичний набір)
 
 **Детальніше**: [ETAP_2_OPEN_INTERPRETER_BRIDGE.md](../ETAP_2_OPEN_INTERPRETER_BRIDGE.md)
 
 ## Accessibility & UI Control
 
-**Файл**: `src/kontur/mcp/servers/os.ts`
+**Файл**: `~/mac_assistant/mac_master_agent.py` (Python)
 
-Повний контроль macOS UI через Accessibility API.
+Повний контроль macOS UI через Accessibility API та AppleScript.
 
-### Інструменти
+### Інструменти (Native Python)
 
-- `open_application` - Відкриття додатків
-- `keyboard_type` / `keyboard_press` - Введення тексту та натиск клавіш
-- `mouse_click` - Клік мишею
-- `ui_tree` - Отримання дерева UI елементів
-- `ui_find` - Пошук елементів за role/title
-- `ui_action` - Виконання дій на елементах
-- `execute_applescript` - AppleScript для складної автоматизації
-- `get_screenshot` - Отримання скріншоту
-
-### Native Helper
-
-- **Файл**: `bin/atlas-ui-helper` (Swift)
-- **Розмір**: 120976 байт
-- **Функціональність**: Низькорівневий доступ до Accessibility API
-
-### AppleScript Fallback
-
-Резервна система без залежностей для базових операцій.
+- **AppleScript**: `osascript` через `subprocess`
+- **Accessibility API**: `ApplicationServices` (через PyObjC)
+- **Mouse/Keyboard**: `pyautogui` / `Quartz`
 
 **Детальніше**: [ETAP_3_ACCESSIBILITY_UI_CONTROL.md](../ETAP_3_ACCESSIBILITY_UI_CONTROL.md)
 
@@ -72,25 +51,15 @@ npm run cli -- "Відкрий Калькулятор"
 
 Retrieval-Augmented Generation для самонавчання системи.
 
-### Компоненти
+### Компоненти v12
 
 - **Vector Database**: Chroma DB (`~/mac_assistant_rag/chroma_mac/`)
-- **Knowledge Base**: `~/mac_assistant_rag/macOS-automation-knowledge-base/`
-- **Embedding Model**: `BAAI/bge-small-en-v1.5`
+- **Knowledge Base**: `~/mac_assistant_rag/knowledge_base/` (GitHub Corpus)
+- **Embedding Model**: `BAAI/bge-m3` (State of the art multilingual)
 - **Framework**: LangChain
 
-### Налаштування
-
-```bash
-# Індексація бази знань
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/index_rag.py
-```
-
-### Функціональність
-
-- Пошук рішень у базі знань
-- Автоматичне навчання на успішних кроках
-- Адаптація до змін UI
+### Self-Healing
+Система автоматично додає успішні патерни виконання в базу, якщо вони були верифіковані Grisha.
 
 **Детальніше**: [ETAP_4_RAG_SYSTEM.md](../ETAP_4_RAG_SYSTEM.md)
 
@@ -100,112 +69,34 @@ Retrieval-Augmented Generation для самонавчання системи.
 - `src/kontur/vision/grisha-vision-service.ts`
 - `src/kontur/cortex/unified-brain.ts`
 
-### Vision Modes
+### Vision Modes v12
 
 #### LIVE Mode (Gemini Live)
-- Реальний час потокова передача
-- WebSocket з'єднання
-- Безперервний аналіз екрану
+- Потокова передача для надшвидкої реакції.
 
-#### ON-DEMAND Mode
-- Скріншот після кроку
-- Copilot/GPT-4o аналіз
-- Більш економно за трафіком
+#### ON-DEMAND Mode (GPT-4o)
+- Скріншот -> Аналіз -> Вердикт (Verified/Failed).
+- Використовується в `executeWithVisionFeedback`.
 
-### LLM Providers
+### LLM Providers v12
 
-- **Gemini** (основний)
-- **Copilot** (fallback)
-- **OpenAI** (резервний)
-- **Anthropic** (резервний)
-- **Mistral** (резервний)
-
-### Unified Brain
-
-Об'єднаний мозок з автоматичним fallback:
-
-```typescript
-const response = await unifiedBrain.think(prompt, {
-  primaryProvider: 'gemini',
-  fallbackProviders: ['copilot', 'openai'],
-  reasoning: true
-});
-```
+- **Brain**: OpenAI / Copilot (Planner)
+- **Vision**: Google Gemini / GPT-4o
+- **Bridge**: Gemini 2.0 Flash (швидкість) або GPT-4o (точність)
 
 **Детальніше**: [ETAP_5_VISION_LLM_INTEGRATION.md](../ETAP_5_VISION_LLM_INTEGRATION.md)
 
 ## Voice Services
 
-### Speech-to-Text (STT)
+**Файл**: `src/kontur/voice/voice-capsule.ts`
 
-- **Gemini Live** - реальний час
-- **Whisper** - офлайн розпізнавання
+Спрощена система голосу.
 
-### Text-to-Speech (TTS)
-
-- **Gemini TTS** - природний голос
-- **Ukrainian TTS** - українська мова
-- **Web TTS** - браузер синтез
-
-### Конфігурація
-
-```env
-STT_PROVIDER=gemini
-TTS_PROVIDER=gemini
-```
+- **STT**: Gemini Live / Browser Web Speech API
+- **TTS**: Gemini / System Default
 
 **Детальніше**: [STT.md](./STT.md), [TTS.md](./TTS.md)
 
-## 🔗 Зв'язки між компонентами
-
-```
-┌─────────────────────────────────────────┐
-│         User Input (Text/Voice)         │
-└──────────────┬──────────────────────────┘
-               │
-        ┌──────▼──────┐
-        │  STT Service │
-        └──────┬──────┘
-               │
-        ┌──────▼──────────────────┐
-        │   Unified Brain (LLM)   │
-        │  - Gemini (primary)     │
-        │  - Copilot (fallback)   │
-        └──────┬──────────────────┘
-               │
-        ┌──────▼──────────────────┐
-        │  Vision Service (LIVE)  │
-        │  - Gemini Live API      │
-        │  - Real-time analysis   │
-        └──────┬──────────────────┘
-               │
-        ┌──────▼──────────────────┐
-        │  Accessibility Layer    │
-        │  - UI Tree              │
-        │  - Mouse/Keyboard       │
-        │  - AppleScript          │
-        └──────┬──────────────────┘
-               │
-        ┌──────▼──────────────────┐
-        │   macOS UI Control      │
-        │  - Open apps            │
-        │  - Click elements       │
-        │  - Type text            │
-        └──────┬──────────────────┘
-               │
-        ┌──────▼──────────────────┐
-        │    RAG System           │
-        │  - Store solutions      │
-        │  - Learn from success   │
-        └──────┬──────────────────┘
-               │
-        ┌──────▼──────────────────┐
-        │   TTS Service           │
-        │  - Gemini TTS           │
-        │  - Ukrainian voice      │
-        └──────────────────────────┘
-```
-
 ---
 
-**Детальніше**: Див. окремі документи для кожного компонента
+**Статус**: ✅ Активно (v12)

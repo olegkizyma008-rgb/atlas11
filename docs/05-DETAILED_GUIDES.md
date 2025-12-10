@@ -1,13 +1,13 @@
-# 📖 Детальні гайди
+# 📖 Детальні гайди (KONTUR v12)
 
-Глибокий розбір основних компонентів та їх налаштування.
+Глибокий розбір основних компонентів та їх налаштування після оновлення до версії v12 "Kozyr".
 
 ## 📚 Зміст
 
-- [Open Interpreter Bridge](#open-interpreter-bridge)
+- [Open Interpreter Bridge (v12)](#open-interpreter-bridge)
 - [Accessibility & UI Control](#accessibility--ui-control)
-- [RAG System](#rag-system)
-- [Vision & LLM](#vision--llm)
+- [RAG System (Self-Healing)](#rag-system)
+- [Vision Feedback Loop](#vision-feedback-loop)
 - [Voice Services](#voice-services)
 
 ## Open Interpreter Bridge
@@ -16,172 +16,69 @@
 
 ### Що це?
 
-Open Interpreter Bridge дозволяє системі виконувати Python код та складні завдання через окремий Python процес.
+Міст між TypeScript ядром (Tetyana) та Python-агентом (Open Interpreter). У версії v12 отримав критичне оновлення — глибокий зворотний зв'язок від Vision.
 
-### Архітектура
-
-```
-TypeScript (Node.js)
-        ↓
-  Open Interpreter Bridge
-        ↓
-  Python Process (spawn)
-        ↓
-  mac_master_agent.py
-        ↓
-  macOS Accessibility API
-```
-
-### Основні функції
+### Основні функції v12
 
 ```typescript
-// Виконання команди
-execute(command: string): Promise<ExecutionResult>
+// Стандартне виконання
+execute(command: string): Promise<string>
 
-// Перевірка середовища
-checkEnvironment(): Promise<EnvironmentStatus>
-
-// Отримання статусу
-getStatus(): Promise<Status>
+// Виконання з Vision Feedback Loop (v12)
+executeWithVisionFeedback(
+    prompt: string, 
+    maxRetries: number = 3
+): Promise<string>
 ```
 
-### Конфігурація
+### Приклад Feedback Loop
 
 ```typescript
-const config = {
-  pythonPath: '~/mac_assistant/venv/bin/python3',
-  agentPath: '~/mac_assistant/mac_master_agent.py',
-  timeout: 30000,
-  env: {
-    BRAIN_API_KEY: process.env.BRAIN_API_KEY,
-    COPILOT_API_KEY: process.env.COPILOT_API_KEY,
-    VISION_API_KEY: process.env.VISION_API_KEY,
-  }
-};
-```
+// 1. Tetyana виконує дію через Python
+await bridge.execute("Click the blue button");
 
-### Приклади використання
+// 2. Grisha (Vision) перевіряє результат
+const verification = await grishaVision.verifyStep(...);
 
-```bash
-# Простий привіт
-npm run cli -- "Скажи привіт"
-
-# Відкриття додатку
-npm run cli -- "Відкрий Калькулятор"
-
-# Виконання команди
-npm run cli -- "Скільки файлів у ~/Documents"
-
-# Складне завдання
-npm run cli -- "Відкрий Finder, перейди до Downloads, і скажи скільки там файлів"
+// 3. Якщо помилка — bridge отримує feedback і пробує знову
+if (!verification.verified) {
+    // Автоматичний retry з корекцією
+    await bridge.execute(`PREVIOUS FAILED: ${verification.message}. FIX IT.`);
+}
 ```
 
 **Детальніше**: [ETAP_2_OPEN_INTERPRETER_BRIDGE.md](../ETAP_2_OPEN_INTERPRETER_BRIDGE.md)
 
 ## Accessibility & UI Control
 
-**Файл**: `src/kontur/mcp/servers/os.ts`
+**Файл**: `~/mac_assistant/mac_master_agent.py` (Python)
 
-### Що це?
+У v12 ми використовуємо нативний AppleScript через Python Agent.
 
-Система для контролю macOS UI через Accessibility API та AppleScript.
+### Приклади команд (v12)
 
-### Інструменти
-
-#### 1. open_application
-Відкриття додатків
-
-```typescript
-await osServer.open_application({
-  name: "Calculator"
-});
+#### 1. Управління додатками
+```python
+# Відкрити додаток і очистити стан
+tell application "Safari"
+    activate
+    tell application "System Events" to keystroke "n" using command down
+end tell
 ```
 
-#### 2. keyboard_type / keyboard_press
-Введення тексту та натиск клавіш
-
-```typescript
-// Введення тексту
-await osServer.keyboard_type({
-  text: "Hello World"
-});
-
-// Натиск клавіші
-await osServer.keyboard_press({
-  key: "Return"
-});
+#### 2. Введення тексту
+```python
+tell application "System Events"
+    keystroke "Hello World"
+    key code 36 # Enter
+end tell
 ```
 
-#### 3. mouse_click
-Клік мишею
-
-```typescript
-await osServer.mouse_click({
-  x: 100,
-  y: 200,
-  button: "left"
-});
+#### 3. Клік мишею (Coordinates)
+```python
+import pyautogui
+pyautogui.click(x=100, y=200)
 ```
-
-#### 4. ui_tree
-Отримання дерева UI елементів
-
-```typescript
-const tree = await osServer.ui_tree({
-  focused: true
-});
-```
-
-#### 5. ui_find
-Пошук елементів за role/title
-
-```typescript
-const element = await osServer.ui_find({
-  role: "AXButton",
-  title: "OK"
-});
-```
-
-#### 6. ui_action
-Виконання дій на елементах
-
-```typescript
-await osServer.ui_action({
-  element: element,
-  action: "AXPress"
-});
-```
-
-#### 7. execute_applescript
-AppleScript для складної автоматизації
-
-```typescript
-await osServer.execute_applescript({
-  script: `
-    tell application "Finder"
-      activate
-      open home
-    end tell
-  `
-});
-```
-
-#### 8. get_screenshot
-Отримання скріншоту
-
-```typescript
-const screenshot = await osServer.get_screenshot();
-```
-
-### Native Helper
-
-**Файл**: `bin/atlas-ui-helper` (Swift)
-
-Низькорівневий доступ до Accessibility API для більш надійної роботи.
-
-### AppleScript Fallback
-
-Резервна система без залежностей для базових операцій.
 
 **Детальніше**: [ETAP_3_ACCESSIBILITY_UI_CONTROL.md](../ETAP_3_ACCESSIBILITY_UI_CONTROL.md)
 
@@ -189,137 +86,69 @@ const screenshot = await osServer.get_screenshot();
 
 **Файл**: `~/mac_assistant/index_rag.py`
 
-### Що це?
+### v12 "Kozyr" RAG
+- **База**: 50,000+ прикладів
+- **Self-healing**: Автоматичне навчання
 
-RAG (Retrieval-Augmented Generation) система дозволяє:
-- Зберігати успішні рішення
-- Шукати рішення в базі знань
-- Автоматично навчатися на успішних кроках
-
-### Компоненти
-
-#### Vector Database (Chroma)
-```
-~/mac_assistant_rag/chroma_mac/
-├── chroma.sqlite3
-└── embeddings/
-```
-
-#### Knowledge Base
-```
-~/mac_assistant_rag/macOS-automation-knowledge-base/
-├── automation-guide.md
-├── ui-patterns.md
-└── ...
-```
-
-#### Embedding Model
-```
-BAAI/bge-small-en-v1.5
-```
-
-### Налаштування
-
-```bash
-# Індексація бази знань
-~/mac_assistant/venv/bin/python3 ~/mac_assistant/index_rag.py
-```
-
-### Функціональність
+### Як це працює (Code)
 
 ```python
-# Пошук рішень
-results = search_rag("Як відкрити Finder?")
+# 1. Пошук перед дією (Automatic)
+def pre_process(task):
+    context = search_rag(task) # Знаходить схожі успішні кейси
+    return f"CONTEXT:\n{context}\n\nTASK: {task}"
 
-# Додавання нового рішення
-add_to_rag(
-  question="Як відкрити Finder?",
-  answer="Натисніть Cmd+Space, введіть 'Finder', натисніть Enter"
-)
+# 2. Self-healing (збереження успіху)
+if success:
+    add_to_rag(task, solution)
 ```
 
 **Детальніше**: [ETAP_4_RAG_SYSTEM.md](../ETAP_4_RAG_SYSTEM.md)
 
-## Vision & LLM
+## Vision Feedback Loop
 
-**Файли**: 
-- `src/kontur/vision/grisha-vision-service.ts`
-- `src/kontur/cortex/unified-brain.ts`
+**Файл**: `src/modules/tetyana/executor.ts`
 
-### Vision Modes
-
-#### LIVE Mode (Gemini Live)
-- Реальний час потокова передача
-- WebSocket з'єднання
-- Безперервний аналіз екрану
-- Найбільш інтелектуальний режим
-
-#### ON-DEMAND Mode
-- Скріншот після кроку
-- Copilot/GPT-4o аналіз
-- Більш економно за трафіком
-- Швидший відгук
-
-### LLM Providers
+### Логіка Verificator -> Executor
 
 ```typescript
-// Основний провайдер
-const response = await unifiedBrain.think(prompt, {
-  primaryProvider: 'gemini',
-  fallbackProviders: ['copilot', 'openai'],
-  reasoning: true
-});
-```
+// Executor (Tetyana)
+while (attempts < 3) {
+    // 1. Пауза Vision
+    vision.pauseCapture();
+    
+    // 2. Виконання
+    await bridge.execute(step);
+    
+    // 3. Верифікація
+    vision.resumeCapture();
+    const result = await vision.verifyStep(step);
+    
+    if (result.verified) break;
+    
+    // 4. Retry з Feedback
+    feedback = result.message; 
+}
 
-### Reasoning (Gemini 3)
-
-Глибоке мислення для складних завдань:
-
-```typescript
-const response = await unifiedBrain.think(prompt, {
-  reasoning: true,
-  thinkingBudget: 10000 // tokens
-});
+// 5. Replan (якщо все провалилось)
+if (!success) {
+    await triggerReplan(error);
+}
 ```
 
 **Детальніше**: [ETAP_5_VISION_LLM_INTEGRATION.md](../ETAP_5_VISION_LLM_INTEGRATION.md)
 
 ## Voice Services
 
-### Speech-to-Text (STT)
+**Файл**: `.env`
 
-#### Gemini Live
-- Реальний час розпізнавання
-- Потокова передача
-- Найкраща якість
+У v12 ми відмовилися від складних TTS/STT на користь спрощеної конфігурації.
 
-#### Whisper
-- Офлайн розпізнавання
-- Без інтернету
-- Менш точне
-
-### Text-to-Speech (TTS)
-
-#### Gemini TTS
-- Природний голос
-- Багато мов
-- Найкраща якість
-
-#### Ukrainian TTS
-- Українська мова
-- Локальна обробка
-- Швидкий синтез
-
-### Конфігурація
+### Конфігурація v12
 
 ```env
-STT_PROVIDER=gemini
-TTS_PROVIDER=gemini
-LANGUAGE=uk
+# Видалено всі зайві TTS_*/STT_*
+# Залишено тільки Fallback, якщо потрібно
 ```
 
-**Детальніше**: [STT.md](./STT.md), [TTS.md](./TTS.md)
-
----
-
-**Статус**: ✅ Всі компоненти готові до використання
+**Статус**: ✅ Всі компоненти оновлено до v12

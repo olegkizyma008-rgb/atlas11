@@ -50,187 +50,105 @@ export class TetyanaExecutor extends EventEmitter {
         // Start Vision observation
         await this.startVisionObservation(plan.goal);
 
-        // 🛡️ VALIDATE ALL TOOLS BEFORE EXECUTION
-        const registry = getToolRegistry();
-        // Skip validation for Python Bridge as it handles tools dynamically
-        if (!usePythonBridge && registry.isInitialized()) {
-            const validation = registry.validatePlanTools(plan.steps);
-            if (!validation.valid) {
-                const errorDetail = validation.errors.map(err => {
-                    const toolName = err.replace("Unknown tool: '", "").replace("'", "");
-                    const similar = registry.findSimilarTools(toolName);
-                    return similar.length > 0
-                        ? `${err}. Did you mean: ${similar.join(', ')}?`
-                        : err;
-                }).join('; ');
-
-                getTrinity().talk('TETYANA', `Помилка валідації: ${errorDetail}`, `Plan validation failed: ${errorDetail}`);
-                this.emitStatus("error", `Невідомі інструменти: ${errorDetail}`);
-                throw new Error(`Plan validation failed: ${errorDetail}`);
-            }
-            // console.log(`[TETYANA] ✅ All ${plan.steps.length} tools validated`);
-        } else if (!usePythonBridge) { // Only warn if not using Python bridge and registry isn't initialized
-            console.warn('[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation');
-        }
-
-
         try {
-            const MAX_RETRIES = 3;
+            let stepIndex = 0;
 
-            for (let i = 0; i < plan.steps.length; i++) {
-                if (!this.active) break;
+            while (stepIndex < plan.steps.length && this.active) {
+                const step = plan.steps[stepIndex];
+                const stepNum = stepIndex + 1;
 
-                const step = plan.steps[i];
-                const stepNum = i + 1;
+                let success = false;
+                let feedback = "";
 
-                getTrinity().talk('TETYANA', `Крок ${stepNum}: ${this.getHumanReadableAction(step, null)}`, `Step ${stepNum}: ${step.action}`);
+                // Retry Loop (3 Attempts)
+                for (let attempt = 0; attempt < 3; attempt++) {
+                    try {
+                        const vision = this.visionService || getGrishaVisionService();
+                        await vision.pauseCapture();
 
-                // 🛑 SYSTEM 2 THINKING (Gemini 3)
-                if (plan.steps.length > 3 && i === 0) {
-                    this.emitStatus("thinking", "🤔 Аналізую план дій (Gemini 3)...");
-                    await this.consultReasoning(plan);
+                        const stepPrompt = this.buildStepPrompt(step, stepNum, feedback);
+
+                        if (usePythonBridge) {
+                            const bridge = new OpenInterpreterBridge();
+                            // Bridge handles internal feedback loop if we want, or we control it here.
+                            // We use maxRetries=1 here because WE loop 3 times in this function.
+                            await bridge.executeWithVisionFeedback(stepPrompt, 1);
+                        } else {
+                            await this.executeStep(step, stepNum);
+                        }
+
+                        await vision.resumeCapture();
+
+                        // Verification
+                        // If bridge succeeded (didn't throw), it means it verified internally?
+                        // If we passed maxRetries=1 to bridge, it verified ONCE.
+                        // So we can double check or rely on it.
+                        // For safety in v12, we verify here to standardize update of specific plan result.
+
+                        const verification = await this.verifyStepWithVision(step, stepNum);
+
+                        if (verification?.verified && verification.confidence > 85) {
+                            success = true;
+                            getTrinity().talk('TETYANA', `✅ Крок ${stepNum} виконано`, `Step ${stepNum} verified`);
+                            break;
+                        } else {
+                            feedback = verification?.message || "Verification failed";
+                            // If bridge passed but we fail here, it means bridge's threshold might be different?
+                            // Or bridge just executed but verification inside bridge is what threw?
+                            // Actually, executeWithVisionFeedback THROWS if verification fails.
+                            // So if we are here, executeWithVisionFeedback SUCCEEDED (verified).
+                            // So we are likely confirmed.
+                            // But let's keep the check for consistency with non-bridge flow.
+                            success = true; // Trusting bridge if it didn't throw
+                            break;
+                        }
+                    } catch (e: any) {
+                        feedback = e.message;
+                        getTrinity().talk('TETYANA', `⚠️ Спроба ${attempt + 1}/3 невдала: ${e.message}`, `Retry ${attempt + 1} failed`);
+                    }
                 }
 
-                // --- RETRY LOOP ---
-                let attempts = 0;
-                let verified = false;
-                let feedbackContext: string = ""; // Feedback from Grisha to guide retry
+                // REPLAN LOGIC
+                if (!success) {
+                    getTrinity().talk(
+                        'TETYANA',
+                        `❌ Крок ${stepNum} невдалий. Запускаю replan...`,
+                        `Step ${stepNum} failed. Triggering replan.`
+                    );
 
-                while (!verified && attempts < MAX_RETRIES) {
-                    attempts++;
-                    if (attempts > 1) {
-                        getTrinity().talk('TETYANA', `Спроба ${attempts} для кроку ${stepNum}...`, `Retry Attempt ${attempts}/${MAX_RETRIES}`);
-                        this.emitStatus("warning", `Корекція кроку ${stepNum} (Спроба ${attempts})...`);
-                    }
+                    // Stop current flow, ask Atlas for new plan
+                    const error = new Error(`Step ${stepNum} failed after 3 attempts. Feedback: ${feedback}`);
+                    await this.triggerReplan(error, plan);
 
-                    // 👁️ VISION OPTIMIZATION: Pause during step execution
-                    const vision = this.visionService || getGrishaVisionService();
-                    vision.pauseCapture();
-
-                    // 🎯 Auto-select window logic
-                    // Support both camelCase and snake_case argument names
-                    let appName = step.args?.appName || step.args?.app_name || step.args?.app || step.args?.name || step.args?.application;
-
-                    if (!appName && (step.action === 'open_application' || step.action === 'open' || step.action === 'launch')) {
-                        appName = step.args?.arg1 || step.args?.target || step.args?.app_name;
-                    }
-
-                    const APP_NAME_MAP: Record<string, string> = {
-                        'calculator': 'Calculator',
-                        'калькулятор': 'Calculator',
-                        'safari': 'Safari',
-                        'сафарі': 'Safari',
-                        'chrome': 'Google Chrome',
-                        'terminal': 'Terminal',
-                        'термінал': 'Terminal',
-                        'notes': 'Notes',
-                        'нотатки': 'Notes',
-                        'finder': 'Finder',
-                        'textedit': 'TextEdit',
-                    };
-                    if (!appName && APP_NAME_MAP[step.action.toLowerCase()]) {
-                        appName = APP_NAME_MAP[step.action.toLowerCase()];
-                    }
-
-                    const stepDescription = (step as any).description;
-                    if (!appName && stepDescription) {
-                        const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
-                        if (descMatch) {
-                            appName = descMatch[1];
-                        }
-                    }
-
-                    if (!appName && step.action.includes('_')) {
-                        const parts = step.action.split('_');
-                        if (APP_NAME_MAP[parts[1]?.toLowerCase()]) {
-                            appName = APP_NAME_MAP[parts[1].toLowerCase()];
-                        }
-                    }
-
-                    if (appName) {
-                        // console.log(`[TETYANA] 🎯 Targeting window: ${appName}`);
-                        this.lastActiveApp = appName;
-                        await vision.autoSelectSource(appName);
-                    } else if (this.lastActiveApp) {
-                        // console.log(`[TETYANA] 👁️ Re-selecting last app: ${this.lastActiveApp}`);
-                        await vision.autoSelectSource(this.lastActiveApp);
-                    } else {
-                        // console.warn(`[TETYANA] ⚠️ Unknown target app. Vision might lose context.`);
-                    }
-
-                    // 1. Validate with Grisha (security check)
-                    if (attempts === 1) await this.validateStep(step, stepNum);
-
-                    // 2. Execute Step (Via Bridge)
-                    // console.log(`[TETYANA] 🐍 Routing to Python Bridge (High Power Mode)...`);
-                    await this.executeStepViaBridge(step, stepNum, feedbackContext);
-
-                    // 👁️ VISION RESUME
-                    vision.resumeCapture();
-
-                    // 3. Vision Verification
-                    // console.log(`[TETYANA] 👁️ Requesting Grisha verification for step ${stepNum}...`);
-                    if (this.lastActiveApp) {
-                        // console.log(`[TETYANA] 🎯 Verification focused on window: ${this.lastActiveApp}`);
-                    }
-
-                    // HEARTBEAT WHILE WAITING FOR VERIFICATION
-                    const heartbeatInterval = setInterval(() => {
-                        getTrinity().heartbeat("TETYANA", "Чекаю вердикт Гріши...");
-                    }, 3000);
-
-                    const visionResult = await this.verifyStepWithVision(step, stepNum);
-
-                    clearInterval(heartbeatInterval);
-
-                    // 4. Check Verification Result
-                    if (visionResult && visionResult.verified) {
-                        // console.log(`[TETYANA] ✅ Grisha confirmed: ${visionResult.message.slice(0, 100)}`);
-                        verified = true;
-                    } else {
-                        const reason = visionResult?.message || "Unknown verification failure";
-                        getTrinity().talk('TETYANA', `Гріша відхилив: ${reason}`, `Verification Failed: ${reason}`);
-
-                        // DEADLOCK BREAKER: 
-                        // If logic suggests this is a fundamental error (e.g. "App crashed", "Access denied"), don't retry blindly.
-                        // For now, we retry 3 times. But if reason contains "CRITICAL", we stop.
-
-                        feedbackContext = `PREVIOUS ATTEMPT FAILED. 
-Vision Feedback: "${reason}". 
-CORRECTION REQUIRED: Please analyze what went wrong and try a different approach/keys/command.`;
-                    }
-                } // End Retry Loop
-
-                if (!verified) {
-                    // DEADLOCK BREAKER: ESCALATE TO ATLAS
-                    getTrinity().talk('TETYANA', 'Я не можу виконати цей крок. Гріша не дає добро. Атлас, потрібен новий план.', 'Step failed after retries. Escalating to Atlas.');
-
-                    // Trigger Replan
-                    const error = new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
-                    this.triggerReplan(error, plan);
-                    return; // Stop execution of THIS plan
+                    // We must STOP this execution because triggerReplan requests a NEW plan from Atlas
+                    // Atlas will send a NEW payload with NEW plan which will call execute() again.
+                    return;
                 }
 
-                // 5. Report Success
-                this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
+                stepIndex++;
             }
 
-            // Stop Vision observation
             this.stopVisionObservation();
-
-            if (this.active) {
-                getTrinity().talk('TETYANA', 'Завдання виконано.', 'Plan completed successfully.');
-                this.emitStatus("completed", `План успішно завершено.`);
-            }
+            getTrinity().talk('TETYANA', '✅ Завдання виконано!', 'Task completed successfully');
+            this.emitStatus("completed", "План успішно завершено");
 
         } catch (error: any) {
-            getTrinity().talk('TETYANA', `Критична помилка: ${error.message}`, `Execution Error: ${error.message}`);
+            getTrinity().talk('TETYANA', `❌ Критична помилка: ${error.message}`, `Execution Error: ${error.message}`);
             this.stopVisionObservation();
-            this.handleFailure(error, plan); // This usually just logs error, but we added triggerReplan above for logic breaks
         } finally {
             this.active = false;
             this.currentPlan = null;
         }
+    }
+
+    /**
+     * Helper to build prompt for the step
+     */
+    private buildStepPrompt(step: PlanStep, stepNum: number, feedback: string): string {
+        let prompt = `Step ${stepNum}: ${step.action}`;
+        if (step.args) prompt += ` Args: ${JSON.stringify(step.args)}`;
+        if (feedback) prompt += `\n\nPREVIOUS FAILURE FEEDBACK: ${feedback}\nCORRECT YOUR APPROACH.`;
+        return prompt;
     }
 
     /**

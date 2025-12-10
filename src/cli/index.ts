@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { mainMenu } from './ui/menu.js';
+import { mainMenuV2 } from './ui/menu-v2.js';
 import { OpenInterpreterBridge } from '../modules/tetyana/open_interpreter_bridge.js';
 
 async function main() {
@@ -29,7 +29,7 @@ async function main() {
             }
         } else {
             // Interactive menu mode
-            await mainMenu();
+            await mainMenuV2();
         }
     } catch (error) {
         console.error('An error occurred:', error);

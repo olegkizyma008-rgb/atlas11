@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { app } from 'electron'; // Or however we get env paths in this context if electron
 import { getVisionConfig, getProviderConfig } from '../../kontur/providers/config';
+import { getGrishaVisionService } from '../../kontur/vision/GrishaVisionService';
 
 // Define the path to the python venv and script
 // Assuming standard posix paths for macOS as per setup
@@ -103,6 +104,59 @@ export class OpenInterpreterBridge {
 
             this.isRunning = true;
         });
+    }
+
+    /**
+     * Executes a task with Vision Feedback Loop (v12)
+     */
+    async executeWithVisionFeedback(
+        prompt: string,
+        maxRetries: number = 3
+    ): Promise<string> {
+        let attempt = 0;
+        let lastFeedback = "";
+
+        while (attempt < maxRetries) {
+            // Step 1: Execute via Python bridge
+            const enhancedPrompt = lastFeedback
+                ? `${prompt}\n\n⚠️ PREVIOUS ATTEMPT FAILED:\n${lastFeedback}\nFIX THIS.`
+                : prompt;
+
+            const result = await this.execute(enhancedPrompt);
+
+            // Step 2: Verify via Grisha Vision
+            const grishaVision = getGrishaVisionService();
+            await grishaVision.pauseCapture();
+            await this.delay(1000);
+
+            const verification = await grishaVision.verifyStep(
+                "custom_action",
+                JSON.stringify({ prompt: enhancedPrompt }),
+                "Check if the last action was executed correctly"
+            );
+
+            await grishaVision.resumeCapture();
+
+            // Step 3: Analyze result
+            if (verification?.verified && verification.confidence > 90) {
+                console.log(`✅ Step verified by Grisha (confidence: ${verification.confidence})`);
+                return result + `\n✅ VERIFIED: ${verification.message}`;
+            }
+
+            // Step 4: Form feedback for next attempt
+            lastFeedback = `Grisha says: "${verification?.message}". Confidence: ${verification?.confidence || 0}%.`;
+            attempt++;
+
+            if (attempt < maxRetries) {
+                console.log(`⚠️ Attempt ${attempt}/${maxRetries}. ${lastFeedback}`);
+            }
+        }
+
+        throw new Error(`❌ Failed to execute step after ${maxRetries} attempts`);
+    }
+
+    private delay(ms: number): Promise<void> {
+        return new Promise(resolve => setTimeout(resolve, ms));
     }
 
     /**
