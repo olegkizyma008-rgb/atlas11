@@ -14,8 +14,8 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # Шляхи
 PYTHON_VENV="$PROJECT_ROOT/python/venv/bin/python3"
-KONTUR_BRIDGE="$PROJECT_ROOT/python/kontur_agent_bridge.py"
-PYTHON_AGENT="$PROJECT_ROOT/python/mac_master_agent.py"
+KONTUR_BRIDGE="$PROJECT_ROOT/src/kontur/organs/tetyana_bridge.py"
+PYTHON_AGENT="$PROJECT_ROOT/src/kontur/organs/tetyana_agent.py"
 ENV_FILE="$PROJECT_ROOT/.env"
 
 # Перевірити наявність Python

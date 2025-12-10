@@ -21,31 +21,35 @@ config.yaml
 # ============================================================================
 # PYTHON & VIRTUAL ENVIRONMENT
 # ============================================================================
-/python/venv/
-/python/.venv/
-/python/env/
+# Legacy Python directory (agents moved to src/kontur/organs/)
+/python/
+# But keep venv for development if needed
+!/python/venv/
+!/python/.venv/
+
+# Python cache and build artifacts
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
-/python/.Python
-/python/build/
-/python/develop-eggs/
-/python/dist/
-/python/downloads/
-/python/eggs/
-/python/.eggs/
-/python/lib/
-/python/lib64/
-/python/parts/
-/python/sdist/
-/python/var/
-/python/wheels/
-/python/*.egg-info/
-/python/.installed.cfg
-/python/*.egg
-/python/pip-log.txt
-/python/pip-delete-this-directory.txt
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+pip-log.txt
+pip-delete-this-directory.txt
 
 # ============================================================================
 # RAG DATABASE (LARGE FILES - REGENERATE WITH index_rag.py)

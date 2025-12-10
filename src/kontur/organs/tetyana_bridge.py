@@ -18,7 +18,7 @@ from pathlib import Path
 from rich.console import Console
 
 # Імпортуємо основний агент
-from mac_master_agent import (
+from tetyana_agent import (
     AgentState, 
     build_graph, 
     RAG_AVAILABLE, 
