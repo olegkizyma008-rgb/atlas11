@@ -10,7 +10,14 @@ import { getGrishaVisionService } from '../../kontur/vision/GrishaVisionService'
 const HOME = process.env.HOME || '/Users/dev';
 
 // Tetyana v12 — New Clean Version (Recommended)
-const PYTHON_PATH_CLEAN = path.join(HOME, 'mac_assistant/venv_clean/bin/python3');
+// Try venv_clean first, fallback to venv
+const PYTHON_PATH_CLEAN = (() => {
+    const cleanPath = path.join(HOME, 'mac_assistant/venv_clean/bin/python3');
+    const fallbackPath = path.join(HOME, 'mac_assistant/venv/bin/python3');
+    const fs = require('fs');
+    return fs.existsSync(cleanPath) ? cleanPath : fallbackPath;
+})();
+
 const AGENT_SCRIPT_CLEAN = path.join(HOME, 'mac_assistant/mac_master_agent_clean.py');
 
 // Tetyana v12 + LangGraph (Extended)
