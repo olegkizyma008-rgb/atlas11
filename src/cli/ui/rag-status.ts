@@ -4,8 +4,9 @@ import path from 'path';
 import { execSync } from 'child_process';
 
 const HOME = process.env.HOME || '/Users/dev';
-const RAG_DB_PATH = path.join(HOME, 'mac_assistant_rag/chroma_mac/chroma.sqlite3');
-const KNOWLEDGE_BASE_PATH = path.join(HOME, 'mac_assistant_rag/knowledge_base/large_corpus');
+const PROJECT_ROOT = path.join(__dirname, '../../..');
+const RAG_DB_PATH = path.join(PROJECT_ROOT, 'rag/chroma_mac/chroma.sqlite3');
+const KNOWLEDGE_BASE_PATH = path.join(PROJECT_ROOT, 'rag/knowledge_base/large_corpus');
 
 /**
  * Get RAG indexing status
