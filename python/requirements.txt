@@ -1,22 +1,32 @@
-# Tetyana v12 — LangGraph Edition (Production)
-# Надійна версія з графовою архітектурою, replan, verification
+# =============================================================================
+# TETYANA v12 — ATLAS LangGraph Edition (Production)
+# Автор: Кізима Олег Миколайович
+# Україна, 2025 | Всі права захищені ©
+# =============================================================================
 
 # Core
 rich>=13.7
 python-dotenv>=1.0
 
 # LangChain + RAG
-langchain>=0.1.20
+langchain>=0.2.0
 langchain-chroma>=0.1.2
 langchain-huggingface>=0.0.3
-langchain-core>=0.1.20
+langchain-core>=0.2.0
 
-# LangGraph (Графова архітектура)
-langgraph>=0.0.1
+# LangGraph (Графова архітектура з Redis checkpoint)
+langgraph>=0.2.0
 
 # Embeddings
 sentence-transformers>=2.2.2
 huggingface-hub>=0.19.4
+
+# Redis (для state management)
+redis>=5.0
+
+# Vision (скріншоти та fallback)
+pillow>=10.0
+pyautogui>=0.9.54
 
 # macOS Automation
 pyobjc-framework-Accessibility>=12.1
@@ -25,3 +35,4 @@ pyobjc-framework-Quartz>=12.1
 # Utilities
 requests>=2.31.0
 pydantic>=2.5.0
+psutil>=5.9.0
