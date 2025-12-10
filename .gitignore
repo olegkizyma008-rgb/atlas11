@@ -1,66 +1,119 @@
-# Node
-node_modules/
-
-# Env files
-.env
-.env.local
-.env.*
-
-# macOS
-.DS_Store
-# Dependencies
+# ============================================================================
+# NODE & NPM
+# ============================================================================
 node_modules/
 .pnp
 .pnp.js
-
-# Build output
 dist/
 out/
 build/
-
-# Electron
 release/
 
-# IDE
+# ============================================================================
+# ENVIRONMENT & CONFIGURATION
+# ============================================================================
+.env
+.env.local
+.env.*.local
+.env.*
+config.yaml
+
+# ============================================================================
+# PYTHON & VIRTUAL ENVIRONMENT
+# ============================================================================
+/python/venv/
+/python/.venv/
+/python/env/
+/python/__pycache__/
+/python/*.pyc
+/python/*.pyo
+/python/*.pyd
+/python/.Python
+/python/build/
+/python/develop-eggs/
+/python/dist/
+/python/downloads/
+/python/eggs/
+/python/.eggs/
+/python/lib/
+/python/lib64/
+/python/parts/
+/python/sdist/
+/python/var/
+/python/wheels/
+/python/*.egg-info/
+/python/.installed.cfg
+/python/*.egg
+/python/pip-log.txt
+/python/pip-delete-this-directory.txt
+
+# ============================================================================
+# RAG DATABASE (LARGE FILES - REGENERATE WITH index_rag.py)
+# ============================================================================
+/rag/chroma_mac/
+/rag/chroma_mac/**
+/rag/knowledge_base/
+/rag/knowledge_sources/
+*.sqlite3
+*.db
+
+# ============================================================================
+# IDE & EDITOR
+# ============================================================================
 .idea/
 .vscode/
 *.swp
 *.swo
 *~
-
-# OS
+*.sublime-workspace
+*.sublime-project
 .DS_Store
 Thumbs.db
 
-# Environment
-.env
-.env.local
-.env.*.local
-
-# Logs
+# ============================================================================
+# LOGS & DEBUGGING
+# ============================================================================
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+lerna-debug.log*
+.pnpm-debug.log*
 
-# Test
+# ============================================================================
+# TESTING
+# ============================================================================
 coverage/
+.nyc_output/
 
-# Temp
+# ============================================================================
+# TEMPORARY FILES
+# ============================================================================
 *.tmp
 *.temp
 .cache/
+.pytest_cache/
+.coverage
+.coverage.*
+
+# ============================================================================
+# MACHINE LEARNING & DATA
+# ============================================================================
 *.pth
 *.npz
 *.ark
-config.yaml
+*.pkl
+*.pickle
+*.h5
+*.hdf5
 
-# Python virtual environment
-/python/venv/
-/python/__pycache__/
-/python/*.pyc
-
-# RAG database (large files, regenerate with index_rag.py)
-/rag/chroma_mac/
-/rag/knowledge_base/
-/rag/knowledge_sources/
+# ============================================================================
+# OS SPECIFIC
+# ============================================================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
