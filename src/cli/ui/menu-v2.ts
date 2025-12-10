@@ -621,8 +621,8 @@ async function testTetyanaMode(): Promise<void> {
  * Run Python Agent
  */
 async function runPythonAgent(): Promise<void> {
-    showHeader('Run macOS Automation Agent - Tetyana v12');
-    console.log(chalk.gray('  Execute Python-based automation\n'));
+    showHeader('Run macOS Automation Agent - Tetyana v12 LangGraph');
+    console.log(chalk.gray('  Reliable automation with replan and verification\n'));
     
     // Import and use OpenInterpreterBridge
     try {
@@ -635,30 +635,15 @@ async function runPythonAgent(): Promise<void> {
             return;
         }
         
-        // Show available versions
-        const versions = OpenInterpreterBridge.getAvailableVersions();
-        const versionChoices = [
-            versions.clean && { name: `${chalk.green('●')} Tetyana v12 Clean (Recommended)`, value: 'clean' },
-            versions.langgraph && { name: `${chalk.green('●')} Tetyana v12 + LangGraph (Extended)`, value: 'langgraph' },
-            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
-            { name: chalk.gray('← Back'), value: 'back' }
-        ].filter(Boolean) as any[];
-        
-        const selectedVersion = await select('Select version', versionChoices);
-        
-        if (selectedVersion === 'back') return;
-        
         const task = await input('Enter task', 'Open Finder');
         console.log(chalk.gray(`\n  Executing: "${task}"\n`));
         
-        const bridge = new OpenInterpreterBridge(selectedVersion as 'clean' | 'langgraph');
+        const bridge = new OpenInterpreterBridge();
         
-        console.log(chalk.cyan(`  ◆ Starting Tetyana v12 ${selectedVersion === 'langgraph' ? '+ LangGraph' : 'Clean'}...\n`));
+        console.log(chalk.cyan(`  ◆ Starting Tetyana v12 LangGraph (Production)...\n`));
         
         try {
-            const result = selectedVersion === 'langgraph'
-                ? await bridge.executeLangGraph(task)
-                : await bridge.executeClean(task);
+            const result = await bridge.execute(task);
             
             console.log(chalk.green('\n  ✓ Agent completed successfully\n'));
             console.log(chalk.gray('  Result:'));

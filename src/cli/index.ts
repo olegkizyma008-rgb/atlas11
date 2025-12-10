@@ -7,8 +7,8 @@ async function main() {
         // Check if command line arguments are provided for direct task execution
         const args = process.argv.slice(2);
         
-        // Check for version flag
-        const versionFlag = args.find(arg => arg === '--langgraph' || arg === '--clean' || arg === '--version-info');
+        // Check for version info flag
+        const versionFlag = args.find(arg => arg === '--version-info');
         const taskArgs = args.filter(arg => !arg.startsWith('--'));
         
         if (versionFlag === '--version-info') {
@@ -17,20 +17,17 @@ async function main() {
         }
         
         if (taskArgs.length > 0) {
-            // Direct command mode: npm run cli "Твоє завдання" [--clean|--langgraph]
+            // Direct command mode: npm run cli "Твоє завдання"
             const task = taskArgs.join(' ');
-            const version = versionFlag === '--langgraph' ? 'langgraph' : 'clean';
             
             console.log(`\n🎯 Executing task: "${task}"`);
-            console.log(`📦 Version: Tetyana v12 ${version === 'langgraph' ? '+ LangGraph' : 'Clean'}\n`);
+            console.log(`📦 Version: Tetyana v12 LangGraph (Production)\n`);
             
-            const bridge = new OpenInterpreterBridge(version);
+            const bridge = new OpenInterpreterBridge();
             
             if (OpenInterpreterBridge.checkEnvironment()) {
                 try {
-                    const result = version === 'langgraph' 
-                        ? await bridge.executeLangGraph(task)
-                        : await bridge.executeClean(task);
+                    const result = await bridge.execute(task);
                     console.log(`\n✅ Result:\n${result}\n`);
                     process.exit(0);
                 } catch (error: any) {
