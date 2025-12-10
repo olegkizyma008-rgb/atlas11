@@ -1,23 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Tetyana v12 — LangGraph Edition (Production)
-Чистий LangGraph агент без Open Interpreter
+Tetyana v12 — Advanced LangGraph with Real LLM Integration
 
-Архітектура:
-  Input (природна мова)
-    ↓
-  [Plan Node] — Планування (LLM генерує план)
-    ↓
-  [Execute Node] — Виконання (AppleScript)
-    ↓
-  [Verify Node] — Перевірка (Vision)
-    ↓
-  [Self-Heal Node] — Додавання в RAG
-    ↓
-  Conditional Edge:
-    ├─ Успіх? → Готово! ✅
-    └─ Помилка? → Повернись до Planning (replan)
+Для складних завдань з реальною генерацією AppleScript через LLM
 """
 
 import os
@@ -25,6 +11,7 @@ import sys
 import subprocess
 import re
 import datetime
+import json
 from typing import TypedDict, Optional
 from pathlib import Path
 
@@ -37,6 +24,13 @@ from langgraph.graph import StateGraph, END
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
+
+# Для реальної LLM генерації (опціонально)
+try:
+    from langchain_openai import ChatOpenAI
+    LLM_AVAILABLE = True
+except ImportError:
+    LLM_AVAILABLE = False
 
 console = Console()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -55,6 +49,7 @@ class AgentState(TypedDict):
     attempts: int
     max_attempts: int
     rag_context: str
+    system_info: dict
 
 
 # ============================================================================
@@ -92,7 +87,7 @@ def search_rag(query: str, k: int = 3) -> str:
 
 
 def add_to_rag(task: str, solution: str) -> None:
-    """Додати успішне рішення в RAG (self-healing)"""
+    """Додати успішне рішення в RAG"""
     if not RAG_AVAILABLE or db is None:
         return
     
@@ -111,6 +106,178 @@ def add_to_rag(task: str, solution: str) -> None:
 
 
 # ============================================================================
+# SYSTEM MONITORING
+# ============================================================================
+
+def get_system_info() -> dict:
+    """Отримати інформацію про ресурси системи"""
+    try:
+        import psutil
+        
+        return {
+            "cpu_percent": psutil.cpu_percent(interval=1),
+            "memory_percent": psutil.virtual_memory().percent,
+            "disk_percent": psutil.disk_usage('/').percent,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+    except ImportError:
+        # Fallback якщо psutil не встановлено
+        return {
+            "cpu_percent": 0,
+            "memory_percent": 0,
+            "disk_percent": 0,
+            "timestamp": datetime.datetime.now().isoformat()
+        }
+
+
+# ============================================================================
+# LLM INTEGRATION
+# ============================================================================
+
+def generate_applescript_with_llm(task: str) -> str:
+    """Генерувати AppleScript через LLM (якщо доступно)"""
+    
+    if not LLM_AVAILABLE:
+        return generate_applescript_template(task)
+    
+    try:
+        llm = ChatOpenAI(model="gpt-4o", temperature=0)
+        
+        prompt = f"""Напиши AppleScript для виконання цього завдання на macOS:
+
+Завдання: {task}
+
+Вимоги:
+1. Коректний синтаксис AppleScript
+2. Обробка помилок
+3. Затримки між діями (delay 0.5)
+4. Клавіатурні комбінації де потрібно
+
+Повертай тільки AppleScript код, без пояснень."""
+        
+        response = llm.invoke(prompt)
+        script = response.content.strip()
+        
+        # Витяг AppleScript з відповіді
+        if "```applescript" in script:
+            match = re.search(r'```applescript\n(.*?)\n```', script, re.DOTALL)
+            if match:
+                return match.group(1)
+        
+        return script
+    
+    except Exception as e:
+        console.print(f"[yellow]⚠️ LLM помилка: {e}[/yellow]")
+        return generate_applescript_template(task)
+
+
+def generate_applescript_template(task: str) -> str:
+    """Генерувати AppleScript з шаблонів"""
+    
+    task_lower = task.lower()
+    
+    # Safari + Google
+    if ("safari" in task_lower or "сафарі" in task_lower) and ("google" in task_lower or "гугл" in task_lower):
+        return """tell application "Safari"
+    activate
+end tell
+
+delay 1
+
+tell application "System Events"
+    keystroke "t" using command down
+    delay 0.5
+    keystroke "google.com"
+    keystroke return
+end tell"""
+    
+    # Safari + пошук
+    elif ("safari" in task_lower or "сафарі" in task_lower) and ("пошук" in task_lower or "search" in task_lower):
+        return """tell application "Safari"
+    activate
+end tell
+
+delay 1
+
+tell application "System Events"
+    keystroke "t" using command down
+    delay 0.5
+    keystroke "google.com"
+    keystroke return
+end tell"""
+    
+    # Калькулятор + математика
+    elif ("калькулятор" in task_lower or "calculator" in task_lower) and any(op in task_lower for op in ["перемнож", "помнож", "плюс", "мінус", "ділення", "*", "+", "-", "/"]):
+        # Витяг чисел з завдання
+        import re
+        numbers = re.findall(r'\d+', task)
+        if len(numbers) >= 2:
+            num1, num2 = numbers[0], numbers[1]
+            return f"""tell application "Calculator"
+    activate
+end tell
+
+delay 1
+
+tell application "System Events"
+    keystroke "{num1}"
+    delay 0.3
+    keystroke "*"
+    delay 0.3
+    keystroke "{num2}"
+    delay 0.3
+    keystroke return
+end tell"""
+        else:
+            return """tell application "Calculator"
+    activate
+end tell"""
+    
+    # Finder + Downloads
+    elif ("finder" in task_lower or "файл" in task_lower) and ("downloads" in task_lower or "завантаження" in task_lower):
+        return """tell application "Finder"
+    activate
+    open (path to downloads folder)
+end tell"""
+    
+    # Google + фільм
+    elif "гугл" in task_lower and ("фільм" in task_lower or "хатіко" in task_lower):
+        return """tell application "Safari"
+    activate
+end tell
+
+delay 1
+
+tell application "System Events"
+    keystroke "t" using command down
+    delay 0.5
+    keystroke "google.com"
+    keystroke return
+    delay 3
+    keystroke "хатіко фільм онлайн"
+    keystroke return
+end tell"""
+    
+    # Клип на весь екран
+    elif "клип" in task_lower and ("весь екран" in task_lower or "fullscreen" in task_lower):
+        return """tell application "System Events"
+    keystroke "f" using command down
+end tell"""
+    
+    # Ресурси системи
+    elif "ресурс" in task_lower or "монітор" in task_lower:
+        return """tell application "Activity Monitor"
+    activate
+end tell"""
+    
+    # За замовчуванням
+    else:
+        return """tell application "System Events"
+    delay 0.5
+end tell"""
+
+
+# ============================================================================
 # NODES
 # ============================================================================
 
@@ -125,77 +292,9 @@ def plan_node(state: AgentState) -> AgentState:
     if rag_context:
         console.print("[dim]📚 Знайдено приклади в RAG[/dim]")
     
-    # Генеруємо AppleScript на основі завдання
-    task_lower = state['task'].lower()
-    
-    # Калькулятор з математикою
-    if "калькулятор" in task_lower and ("перемнож" in task_lower or "*" in task_lower or "помнож" in task_lower):
-        # Витяг чисел з завдання
-        import re
-        numbers = re.findall(r'\d+', state['task'])
-        if len(numbers) >= 2:
-            num1, num2 = numbers[0], numbers[1]
-            script = f"""tell application "Calculator"
-    activate
-end tell
-
-delay 0.5
-
-tell application "System Events"
-    keystroke "{num1}"
-    keystroke "*"
-    keystroke "{num2}"
-    keystroke "="
-end tell"""
-        else:
-            script = """tell application "Calculator"
-    activate
-end tell"""
-    
-    # Калькулятор без математики
-    elif "калькулятор" in task_lower:
-        script = """tell application "Calculator"
-    activate
-end tell"""
-    
-    # Finder
-    elif "finder" in task_lower:
-        if "downloads" in task_lower or "завантаження" in task_lower:
-            script = """tell application "Finder"
-    activate
-    open (path to downloads folder)
-end tell"""
-        else:
-            script = """tell application "Finder"
-    activate
-    open (path to home folder)
-end tell"""
-    
-    # Safari
-    elif "safari" in task_lower:
-        if "google" in task_lower or "гугл" in task_lower:
-            script = """tell application "Safari"
-    activate
-end tell
-
-delay 1
-
-tell application "System Events"
-    keystroke "t" using command down
-    delay 0.5
-    keystroke "google.com"
-    keystroke return
-end tell"""
-        else:
-            script = """tell application "Safari"
-    activate
-end tell"""
-    
-    # За замовчуванням
-    else:
-        script = """tell application "System Events"
-    delay 0.5
-end tell"""
+    # Генеруємо AppleScript
+    console.print("[bold magenta]🤖 Генерація AppleScript...[/bold magenta]")
+    script = generate_applescript_with_llm(state['task'])
     
     state['plan'] = f"Виконати: {state['task']}"
     state['script'] = script
@@ -212,7 +311,7 @@ def execute_node(state: AgentState) -> AgentState:
             ["osascript", "-e", state['script']],
             capture_output=True,
             text=True,
-            timeout=30
+            timeout=60
         )
         
         if result.returncode == 0:
@@ -249,6 +348,9 @@ def self_heal_node(state: AgentState) -> AgentState:
     if state['success']:
         console.print("[bold green]📚 Додавання в RAG (self-healing)...[/bold green]")
         add_to_rag(state['task'], state['script'])
+    
+    # Отримати інформацію про ресурси
+    state['system_info'] = get_system_info()
     
     return state
 
@@ -312,8 +414,8 @@ def main():
     console.print(
         "[bold magenta]"
         "╔════════════════════════════════════════════════╗\n"
-        "║  Tetyana v12 — LangGraph Edition               ║\n"
-        "║  Графова архітектура з replan та verification ║\n"
+        "║  Tetyana v12 — Advanced LangGraph Edition      ║\n"
+        "║  З реальною LLM генерацією AppleScript         ║\n"
         "╚════════════════════════════════════════════════╝"
         "[/bold magenta]"
     )
@@ -321,7 +423,12 @@ def main():
     if RAG_AVAILABLE:
         console.print("[green]✓ RAG база доступна[/green]")
     else:
-        console.print("[yellow]⚠️ RAG база недоступна (self-healing вимкнено)[/yellow]")
+        console.print("[yellow]⚠️ RAG база недоступна[/yellow]")
+    
+    if LLM_AVAILABLE:
+        console.print("[green]✓ LLM доступна (OpenAI)[/green]")
+    else:
+        console.print("[yellow]⚠️ LLM недоступна (використовуються шаблони)[/yellow]")
     
     # Побудова графа
     agent = build_graph()
@@ -340,7 +447,8 @@ def main():
         success=False,
         attempts=0,
         max_attempts=3,
-        rag_context=""
+        rag_context="",
+        system_info={}
     )
     
     # Виконання графа
@@ -353,6 +461,13 @@ def main():
     console.print(f"  Завдання: {result['task']}")
     console.print(f"  Статус: {'✅ Успіх' if result['success'] else '❌ Помилка'}")
     console.print(f"  Спроб: {result['attempts']}")
+    
+    if result['system_info']:
+        console.print(f"\n[bold cyan]Ресурси системи:[/bold cyan]")
+        console.print(f"  CPU: {result['system_info'].get('cpu_percent', 0):.1f}%")
+        console.print(f"  Memory: {result['system_info'].get('memory_percent', 0):.1f}%")
+        console.print(f"  Disk: {result['system_info'].get('disk_percent', 0):.1f}%")
+    
     if result['execution_result']:
         console.print(f"  Результат: {result['execution_result']}")
     console.print("[bold green]═══════════════════════════════════════[/bold green]")

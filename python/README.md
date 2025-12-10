@@ -1,6 +1,6 @@
-# Python Agent - Tetyana v12 LangGraph Edition
+# Python Agent - Tetyana v12 Advanced LangGraph Edition
 
-Потужна система автоматизації macOS з LangGraph, RAG базою знань та Vision інтеграцією.
+Потужна система автоматизації macOS з LangGraph, реальною LLM генерацією AppleScript, RAG базою знань та системним моніторингом.
 
 **Розташування:** `/atlas/python/`
 
@@ -9,8 +9,7 @@
 ```
 /atlas/python/
 ├── venv/                          # Python virtual environment
-├── mac_master_agent.py            # Основний LangGraph агент
-├── mac_master_agent_advanced.py   # Розширена версія з LLM інтеграцією
+├── mac_master_agent.py            # Основний агент (Advanced LangGraph з LLM)
 ├── mac_accessibility.py           # Accessibility API утиліти
 ├── index_rag.py                   # Скрипт індексації RAG бази
 ├── requirements.txt               # Python залежності
