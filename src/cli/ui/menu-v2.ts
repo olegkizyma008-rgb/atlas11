@@ -10,6 +10,7 @@ import { select, input, confirm } from './prompts.js';
 import { configManager } from '../managers/config-manager.js';
 import { modelRegistry } from '../managers/model-registry.js';
 import { selectConfigItems, manageConfigItem, displayConfigSummary, ConfigSection, ConfigItem } from './config-list.js';
+import { displayRagStatus, displayRagSearch, getRagIndexStatus } from './rag-status.js';
 
 // Service definitions
 const SERVICES = [
@@ -92,6 +93,7 @@ export async function mainMenuV2(): Promise<void> {
             { name: `${chalk.green('●')} Secrets & Keys`, value: 'secrets' },
             { name: `${chalk.green('●')} App Settings`, value: 'settings' },
             { name: `${chalk.green('●')} System Health`, value: 'health' },
+            { name: `${chalk.green('●')} RAG Status & Search`, value: 'rag' },
             { name: chalk.cyan('◆─────────────────────────────────────────────────◆'), value: '_sep2', disabled: true },
             { name: `${chalk.green('●')} Run macOS Agent`, value: 'run_agent' },
             { name: `${chalk.green('●')} Test Tetyana`, value: 'test_tetyana' },
@@ -114,6 +116,8 @@ export async function mainMenuV2(): Promise<void> {
             await configureAppSettings();
         } else if (action === 'health') {
             await runHealthCheck();
+        } else if (action === 'rag') {
+            await ragMenu();
         } else if (action === 'test_tetyana') {
             await testTetyanaMode();
         } else if (action === 'run_agent') {
@@ -651,5 +655,39 @@ async function runPythonAgent(): Promise<void> {
     } catch (error: any) {
         console.log(chalk.red(`  ✗ Error: ${error.message}`));
         await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * RAG Status and Search Menu
+ */
+async function ragMenu(): Promise<void> {
+    while (true) {
+        showHeader('RAG Status & Search');
+        
+        const status = await getRagIndexStatus();
+        const statusText = status.indexed ? 
+            chalk.green(`✓ Indexed (${status.documentCount} docs)`) : 
+            chalk.red('✗ Not indexed');
+
+        const choices = [
+            { name: `${chalk.green('●')} View Status           ${statusText}`, value: 'status' },
+            { name: `${chalk.green('●')} Search Repository     ${chalk.gray('Find documents')}`, value: 'search' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
+        ];
+
+        const action = await select('', choices);
+        
+        if (action === 'back') return;
+        
+        if (action === 'status') {
+            await displayRagStatus();
+        } else if (action === 'search') {
+            const query = await input('Search query', 'open Safari');
+            if (query) {
+                await displayRagSearch(query);
+            }
+        }
     }
 }
