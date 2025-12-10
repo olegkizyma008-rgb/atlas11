@@ -8,7 +8,16 @@ import { getGrishaVisionService } from '../../kontur/vision/GrishaVisionService'
 // Define the path to the python venv and script
 // Assuming standard posix paths for macOS as per setup
 const HOME = process.env.HOME || '/Users/dev';
-const PYTHON_PATH = path.join(HOME, 'mac_assistant/venv/bin/python3');
+
+// Tetyana v12 — New Clean Version (Recommended)
+const PYTHON_PATH_CLEAN = path.join(HOME, 'mac_assistant/venv_clean/bin/python3');
+const AGENT_SCRIPT_CLEAN = path.join(HOME, 'mac_assistant/mac_master_agent_clean.py');
+
+// Tetyana v12 + LangGraph (Extended)
+const AGENT_SCRIPT_LANGGRAPH = path.join(HOME, 'mac_assistant/langgraph_template.py');
+
+// Fallback to old version if new one doesn't exist
+const PYTHON_PATH = PYTHON_PATH_CLEAN;
 const AGENT_SCRIPT_PATH = path.join(HOME, 'mac_assistant/mac_master_agent.py');
 const ENV_FILE_PATH = path.join(HOME, 'Documents/GitHub/atlas/.env');
 
@@ -36,13 +45,44 @@ function loadEnvFile(): Record<string, string> {
 export class OpenInterpreterBridge {
     private process: ChildProcess | null = null;
     private isRunning: boolean = false;
+    private version: 'clean' | 'langgraph' = 'clean'; // Default to clean version
+
+    constructor(version: 'clean' | 'langgraph' = 'clean') {
+        this.version = version;
+    }
 
     /**
-     * Executes a task using the Python Open Interpreter Agent.
+     * Executes a task using Tetyana v12 Clean (Recommended)
+     * @param prompt The natural language prompt/task for the agent.
+     * @returns A promise that resolves when the agent completes
+     */
+    async executeClean(prompt: string): Promise<string> {
+        return this.executeWithScript(AGENT_SCRIPT_CLEAN, prompt);
+    }
+
+    /**
+     * Executes a task using Tetyana v12 + LangGraph (Extended)
+     * @param prompt The natural language prompt/task for the agent.
+     * @returns A promise that resolves when the agent completes
+     */
+    async executeLangGraph(prompt: string): Promise<string> {
+        return this.executeWithScript(AGENT_SCRIPT_LANGGRAPH, prompt);
+    }
+
+    /**
+     * Executes a task using the selected version
      * @param prompt The natural language prompt/task for the agent.
      * @returns A promise that resolves when the agent completes (for single-shot tasks)
      */
     async execute(prompt: string): Promise<string> {
+        const scriptPath = this.version === 'langgraph' ? AGENT_SCRIPT_LANGGRAPH : AGENT_SCRIPT_CLEAN;
+        return this.executeWithScript(scriptPath, prompt);
+    }
+
+    /**
+     * Internal method to execute with a specific script
+     */
+    private executeWithScript(scriptPath: string, prompt: string): Promise<string> {
         return new Promise((resolve, reject) => {
             console.log(`[OpenInterpreter] Starting task: ${prompt}`);
 
@@ -66,7 +106,7 @@ export class OpenInterpreterBridge {
                 PYTHONUNBUFFERED: '1'
             };
 
-            this.process = spawn(PYTHON_PATH, [AGENT_SCRIPT_PATH, prompt], {
+            this.process = spawn(PYTHON_PATH, [scriptPath, prompt], {
                 env,
                 cwd: HOME
             });
@@ -163,6 +203,32 @@ export class OpenInterpreterBridge {
      * Checks if the python environment seems valid
      */
     static checkEnvironment(): boolean {
+        // Check for new clean version (preferred)
+        const hasClean = fs.existsSync(PYTHON_PATH_CLEAN) && fs.existsSync(AGENT_SCRIPT_CLEAN);
+        if (hasClean) return true;
+        
+        // Fallback to old version
         return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
+    }
+
+    /**
+     * Get available versions
+     */
+    static getAvailableVersions(): { clean: boolean; langgraph: boolean } {
+        return {
+            clean: fs.existsSync(PYTHON_PATH_CLEAN) && fs.existsSync(AGENT_SCRIPT_CLEAN),
+            langgraph: fs.existsSync(AGENT_SCRIPT_LANGGRAPH)
+        };
+    }
+
+    /**
+     * Get version info
+     */
+    static getVersionInfo(): string {
+        const versions = this.getAvailableVersions();
+        let info = 'Tetyana v12 Available Versions:\n';
+        info += `  Clean: ${versions.clean ? '✅' : '❌'}\n`;
+        info += `  LangGraph: ${versions.langgraph ? '✅' : '❌'}`;
+        return info;
     }
 }

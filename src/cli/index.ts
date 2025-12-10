@@ -7,16 +7,30 @@ async function main() {
         // Check if command line arguments are provided for direct task execution
         const args = process.argv.slice(2);
         
-        if (args.length > 0) {
-            // Direct command mode: npm run cli "Твоє завдання"
-            const task = args.join(' ');
-            console.log(`\n🎯 Executing task: "${task}"\n`);
+        // Check for version flag
+        const versionFlag = args.find(arg => arg === '--langgraph' || arg === '--clean' || arg === '--version-info');
+        const taskArgs = args.filter(arg => !arg.startsWith('--'));
+        
+        if (versionFlag === '--version-info') {
+            console.log('\n' + OpenInterpreterBridge.getVersionInfo() + '\n');
+            process.exit(0);
+        }
+        
+        if (taskArgs.length > 0) {
+            // Direct command mode: npm run cli "Твоє завдання" [--clean|--langgraph]
+            const task = taskArgs.join(' ');
+            const version = versionFlag === '--langgraph' ? 'langgraph' : 'clean';
             
-            const bridge = new OpenInterpreterBridge();
+            console.log(`\n🎯 Executing task: "${task}"`);
+            console.log(`📦 Version: Tetyana v12 ${version === 'langgraph' ? '+ LangGraph' : 'Clean'}\n`);
+            
+            const bridge = new OpenInterpreterBridge(version);
             
             if (OpenInterpreterBridge.checkEnvironment()) {
                 try {
-                    const result = await bridge.execute(task);
+                    const result = version === 'langgraph' 
+                        ? await bridge.executeLangGraph(task)
+                        : await bridge.executeClean(task);
                     console.log(`\n✅ Result:\n${result}\n`);
                     process.exit(0);
                 } catch (error: any) {
@@ -24,7 +38,8 @@ async function main() {
                     process.exit(1);
                 }
             } else {
-                console.error('❌ Python environment not found. Please ensure mac_master_agent.py is set up.');
+                console.error('❌ Python environment not found. Please ensure Tetyana v12 is set up.');
+                console.error(OpenInterpreterBridge.getVersionInfo());
                 process.exit(1);
             }
         } else {
