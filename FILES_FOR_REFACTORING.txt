@@ -1,0 +1,153 @@
+================================================================================
+ФАЙЛИ ДЛЯ РЕФАКТОРИНГУ - СКОПІЮЙТЕ ЦЕЙ СПИСОК У РЕДАКТОР
+================================================================================
+
+ЕТАП 1: ОНОВЛЕННЯ ПОСИЛАНЬ У КОРЕНІ (9 файлів)
+================================================================================
+
+/Users/dev/Documents/GitHub/atlas/START_HERE.md
+/Users/dev/Documents/GitHub/atlas/DOCUMENTATION.md
+/Users/dev/Documents/GitHub/atlas/DOCS_GUIDE.md
+/Users/dev/Documents/GitHub/atlas/README_DOCS.md
+/Users/dev/Documents/GitHub/atlas/DOCS_INVENTORY.md
+/Users/dev/Documents/GitHub/atlas/DOCS_COMPLETION_STATUS.md
+/Users/dev/Documents/GitHub/atlas/DOCS_ENHANCEMENT_PLAN.md
+/Users/dev/Documents/GitHub/atlas/DOCS_NEXT_STEPS.md
+/Users/dev/Documents/GitHub/atlas/DOCUMENTATION_ORGANIZED.md
+
+ЧТО РОБИТИ: Замінити всі посилання з ./файл.md на ./docs/файл.md
+ЧАС: 30-60 хвилин
+
+================================================================================
+
+ЕТАП 2: ОНОВЛЕННЯ ПОСИЛАНЬ У /docs (15 файлів)
+================================================================================
+
+/Users/dev/Documents/GitHub/atlas/docs/INDEX.md
+/Users/dev/Documents/GitHub/atlas/docs/MAP.md
+/Users/dev/Documents/GitHub/atlas/docs/README.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_1_ARCHITECTURE_ANALYSIS.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_2_OPEN_INTERPRETER_BRIDGE.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_3_ACCESSIBILITY_UI_CONTROL.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_4_RAG_SYSTEM.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_5_VISION_LLM_INTEGRATION.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_6_CONFIGURATION_DEPENDENCIES.md
+/Users/dev/Documents/GitHub/atlas/docs/ETAP_7_FINAL_SUMMARY.md
+/Users/dev/Documents/GitHub/atlas/docs/QUICK_START.md
+/Users/dev/Documents/GitHub/atlas/docs/QUICK_START_v12.md
+/Users/dev/Documents/GitHub/atlas/docs/EDITOR_REFACTORING_GUIDE.md
+/Users/dev/Documents/GitHub/atlas/docs/EDITOR_SUMMARY.md
+/Users/dev/Documents/GitHub/atlas/docs/ROOT_FILES_REFERENCE.md
+
+ЧТО РОБИТИ: Перевірити та оновити посилання на файли в папці /docs
+ЧАС: 30-60 хвилин
+
+================================================================================
+
+ЕТАП 3: ДОПОВНЕННЯ ДОКУМЕНТАЦІЇ (7 файлів)
+================================================================================
+
+КРИТИЧНО (1-2 дні):
+/Users/dev/Documents/GitHub/atlas/docs/05-DETAILED_GUIDES.md
+  → Додати приклади коду
+
+ВАЖЛИВО (2-3 дні):
+/Users/dev/Documents/GitHub/atlas/docs/01-GETTING_STARTED.md
+  → Додати скріншоти
+/Users/dev/Documents/GitHub/atlas/docs/02-ARCHITECTURE.md
+  → Додати діаграми
+
+ОПЦІОНАЛЬНО (1-2 дні):
+/Users/dev/Documents/GitHub/atlas/docs/03-COMPONENTS.md
+/Users/dev/Documents/GitHub/atlas/docs/04-CONFIGURATION.md
+/Users/dev/Documents/GitHub/atlas/docs/06-TROUBLESHOOTING.md
+/Users/dev/Documents/GitHub/atlas/docs/07-ADVANCED.md
+
+================================================================================
+
+ЕТАП 4: СТВОРЕННЯ НОВИХ ФАЙЛІВ (7 файлів)
+================================================================================
+
+КРИТИЧНО (1-2 дні):
+/Users/dev/Documents/GitHub/atlas/docs/FAQ.md
+  → Часто задавані питання
+/Users/dev/Documents/GitHub/atlas/docs/EXAMPLES.md
+  → Практичні приклади
+
+ВАЖЛИВО (1-2 дні):
+/Users/dev/Documents/GitHub/atlas/docs/GLOSSARY.md
+  → Глосарій термінів
+/Users/dev/Documents/GitHub/atlas/docs/USER_GUIDE.md
+  → Посібник для користувачів
+
+ОПЦІОНАЛЬНО (2-3 дні):
+/Users/dev/Documents/GitHub/atlas/docs/CONTRIBUTING.md
+  → Посібник для контрибюторів
+/Users/dev/Documents/GitHub/atlas/docs/API_DEVELOPMENT.md
+  → Посібник для розробників
+/Users/dev/Documents/GitHub/atlas/docs/DEVOPS_GUIDE.md
+  → Посібник для DevOps
+
+================================================================================
+
+ГАЙДИ ДЛЯ РЕДАКТОРА
+================================================================================
+
+Перед початком рефакторингу прочитайте:
+
+/Users/dev/Documents/GitHub/atlas/docs/MIGRATION_COMPLETE.md
+  → Інформація про переміщення
+  → Чек-лист оновлення посилань
+
+/Users/dev/Documents/GitHub/atlas/docs/EDITOR_REFACTORING_GUIDE.md
+  → Детальний гайд рефакторингу
+  → Чек-лист для редактора
+
+/Users/dev/Documents/GitHub/atlas/docs/REFACTORING_CHECKLIST.md
+  → Повний чек-лист рефакторингу
+
+================================================================================
+
+КОМАНДИ ДЛЯ ПОШУКУ ТА ЗАМІНИ
+================================================================================
+
+Пошук всіх посилань на файли в корені:
+grep -r "ETAP_\|QUICK_START\|KONTUR_v12\|CONTEXT7\|ANALYSIS_COMPLETE\|DOCUMENTATION_INDEX" /Users/dev/Documents/GitHub/atlas/
+
+Заміна посилань на ETAP_1:
+sed -i '' 's|\./ETAP_1_ARCHITECTURE_ANALYSIS.md|./docs/ETAP_1_ARCHITECTURE_ANALYSIS.md|g' /Users/dev/Documents/GitHub/atlas/*.md
+
+Заміна посилань на QUICK_START:
+sed -i '' 's|\./QUICK_START\.md|./docs/QUICK_START.md|g' /Users/dev/Documents/GitHub/atlas/*.md
+
+Заміна посилань на QUICK_START_v12:
+sed -i '' 's|\./QUICK_START_v12\.md|./docs/QUICK_START_v12.md|g' /Users/dev/Documents/GitHub/atlas/*.md
+
+================================================================================
+
+СТАТИСТИКА РЕФАКТОРИНГУ
+================================================================================
+
+Файлів для оновлення посилань: 24
+Файлів для доповнення: 7
+Файлів для створення: 7
+ВСЬОГО: 38 файлів
+
+Час рефакторингу: 15-25 днів
+
+================================================================================
+
+РЕКОМЕНДОВАНИЙ ПОРЯДОК
+================================================================================
+
+День 1: Оновлення посилань у корені (30-60 хвилин)
+День 2: Оновлення посилань у /docs (30-60 хвилин)
+День 3-4: Доповнення основних гайдів (1-2 дні)
+День 5-6: Створення FAQ та EXAMPLES (1-2 дні)
+День 7: Створення GLOSSARY та USER_GUIDE (1-2 дні)
+День 8+: Додаткові посібники (опціонально)
+
+================================================================================
+
+ПОЧНІТЬ З ЕТАПУ 1 - ОНОВЛЕННЯ ПОСИЛАНЬ У КОРЕНІ
+================================================================================

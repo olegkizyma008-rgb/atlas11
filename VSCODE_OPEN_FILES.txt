@@ -1,0 +1,120 @@
+# VS Code - Відкрити всі файли для рефакторингу
+
+## Копіюйте ці команди в VS Code Terminal
+
+### Команда 1: Відкрити всі файли для оновлення посилань
+
+```bash
+code /Users/dev/Documents/GitHub/atlas/START_HERE.md /Users/dev/Documents/GitHub/atlas/DOCUMENTATION.md /Users/dev/Documents/GitHub/atlas/DOCS_GUIDE.md /Users/dev/Documents/GitHub/atlas/README_DOCS.md /Users/dev/Documents/GitHub/atlas/DOCS_INVENTORY.md /Users/dev/Documents/GitHub/atlas/DOCS_COMPLETION_STATUS.md /Users/dev/Documents/GitHub/atlas/DOCS_ENHANCEMENT_PLAN.md /Users/dev/Documents/GitHub/atlas/DOCS_NEXT_STEPS.md /Users/dev/Documents/GitHub/atlas/DOCUMENTATION_ORGANIZED.md
+```
+
+### Команда 2: Відкрити файли у /docs для оновлення посилань
+
+```bash
+code /Users/dev/Documents/GitHub/atlas/docs/INDEX.md /Users/dev/Documents/GitHub/atlas/docs/MAP.md /Users/dev/Documents/GitHub/atlas/docs/README.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_1_ARCHITECTURE_ANALYSIS.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_2_OPEN_INTERPRETER_BRIDGE.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_3_ACCESSIBILITY_UI_CONTROL.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_4_RAG_SYSTEM.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_5_VISION_LLM_INTEGRATION.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_6_CONFIGURATION_DEPENDENCIES.md /Users/dev/Documents/GitHub/atlas/docs/ETAP_7_FINAL_SUMMARY.md /Users/dev/Documents/GitHub/atlas/docs/QUICK_START.md /Users/dev/Documents/GitHub/atlas/docs/QUICK_START_v12.md
+```
+
+### Команда 3: Відкрити файли для доповнення
+
+```bash
+code /Users/dev/Documents/GitHub/atlas/docs/05-DETAILED_GUIDES.md /Users/dev/Documents/GitHub/atlas/docs/01-GETTING_STARTED.md /Users/dev/Documents/GitHub/atlas/docs/02-ARCHITECTURE.md /Users/dev/Documents/GitHub/atlas/docs/03-COMPONENTS.md /Users/dev/Documents/GitHub/atlas/docs/04-CONFIGURATION.md /Users/dev/Documents/GitHub/atlas/docs/06-TROUBLESHOOTING.md /Users/dev/Documents/GitHub/atlas/docs/07-ADVANCED.md
+```
+
+### Команда 4: Відкрити гайди для редактора
+
+```bash
+code /Users/dev/Documents/GitHub/atlas/docs/MIGRATION_COMPLETE.md /Users/dev/Documents/GitHub/atlas/docs/EDITOR_REFACTORING_GUIDE.md /Users/dev/Documents/GitHub/atlas/docs/REFACTORING_CHECKLIST.md
+```
+
+---
+
+## Альтернатива: Відкрити весь проект
+
+```bash
+code /Users/dev/Documents/GitHub/atlas
+```
+
+Потім використовуйте Ctrl+P (Cmd+P на Mac) для швидкого пошуку файлів
+
+---
+
+## Рекомендована послідовність
+
+### День 1: Оновлення посилань у корені
+Запустіть Команду 1
+
+### День 2: Оновлення посилань у /docs
+Запустіть Команду 2
+
+### День 3-4: Доповнення документації
+Запустіть Команду 3
+
+### День 5+: Створення нових файлів
+Запустіть Команду 4 для перегляду гайдів
+
+---
+
+## Для інших редакторів
+
+### Sublime Text
+Скопіюйте список файлів та використовуйте Quick Open (Ctrl+P / Cmd+P)
+
+### Vim/Neovim
+```bash
+vim /Users/dev/Documents/GitHub/atlas/START_HERE.md /Users/dev/Documents/GitHub/atlas/DOCUMENTATION.md ...
+```
+
+### Nano
+```bash
+nano /Users/dev/Documents/GitHub/atlas/START_HERE.md
+```
+
+---
+
+## Пошук та заміна в VS Code
+
+### Відкрити Find and Replace
+Ctrl+H (Cmd+H на Mac)
+
+### Замінити посилання
+
+**Пошук**: `\./ETAP_1_ARCHITECTURE_ANALYSIS\.md`
+**Заміна**: `./docs/ETAP_1_ARCHITECTURE_ANALYSIS.md`
+
+**Пошук**: `\./QUICK_START\.md`
+**Заміна**: `./docs/QUICK_START.md`
+
+**Пошук**: `\./QUICK_START_v12\.md`
+**Заміна**: `./docs/QUICK_START_v12.md`
+
+---
+
+## Швидкі клавіші VS Code
+
+- Ctrl+P (Cmd+P): Швидкий пошук файлів
+- Ctrl+H (Cmd+H): Find and Replace
+- Ctrl+Shift+F (Cmd+Shift+F): Пошук у всіх файлах
+- Ctrl+Alt+F (Cmd+Alt+F): Replace in Files
+- Ctrl+S (Cmd+S): Зберегти файл
+- Ctrl+Shift+S (Cmd+Shift+S): Зберегти всі файли
+
+---
+
+## Статус рефакторингу
+
+Після завершення кожного етапу позначте його як завершений:
+
+- [ ] День 1: Оновлення посилань у корені
+- [ ] День 2: Оновлення посилань у /docs
+- [ ] День 3-4: Доповнення документації
+- [ ] День 5-6: Створення FAQ та EXAMPLES
+- [ ] День 7: Створення GLOSSARY та USER_GUIDE
+- [ ] День 8+: Додаткові посібники (опціонально)
+
+---
+
+**Статус**: ✅ ГОТОВО ДЛЯ РЕФАКТОРИНГУ
+**Версія**: KONTUR v12
+**Мова**: Українська 🇺🇦
+
+Почніть з Команди 1 для оновлення посилань у корені!

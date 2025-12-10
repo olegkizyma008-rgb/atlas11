@@ -1,20 +1,117 @@
-# Documentation & Specifications
+# 📚 Atlas Documentation
 
-Welcome to the Documentation Hub for **ATLAS 11 (KONTUR v11.0)**. 
-This directory contains technical guides for the AI technologies powering the system, while the system architecture itself is documented in the `.agent` directory.
+Повна документація проекту KONTUR v12 - системи автоматизації macOS з AI.
 
-## Core Architecture
-*   **[KONTUR Technical Specification](../.agent/KONTUR_TECH_SPEC.md)**: The definitive guide to the KONTUR v11.0 bio-cybernetic architecture, including Anti-Gravity protocols, Immune System (AEDS), and Generative AI layers.
-*   **[KONTUR Project Overview](../.agent/kontur.md)**: Detailed project structure, file roadmap, and deployment guides for Google Cloud Run.
+## 🚀 Швидкий навігатор
 
-## AI Implementation Guides (Gemini API)
-KONTUR relies heavily almost exclusively on Google's Gemini models for its cognitive functions. These guides serve as the reference for the "Cortex" implementation:
+### Для новачків
+- **[01-GETTING_STARTED.md](./01-GETTING_STARTED.md)** - Старт за 5 хвилин
+- **[02-ARCHITECTURE.md](./02-ARCHITECTURE.md)** - Розуміння архітектури
+- **[04-CONFIGURATION.md](./04-CONFIGURATION.md)** - Налаштування
 
-*   **[Speech-to-Text (STT)](STT.md)**: Using Gemini for audio analysis and transcription. Used by KONTUR's *Input Sensory Layer*.
-*   **[Text-to-Speech (TTS)](TTS.md)**: Generating audio responses. Used by KONTUR's *Voice Synthesis Organ*.
-*   **[Gemini Live API](jemeni_live.md)**: Real-time, low-latency voice interaction. This is the foundation for KONTUR's *Direct Neural Interface*.
+### Для розробників
+- **[03-COMPONENTS.md](./03-COMPONENTS.md)** - Ключові компоненти
+- **[05-DETAILED_GUIDES.md](./05-DETAILED_GUIDES.md)** - Детальні гайди
+- **[07-ADVANCED.md](./07-ADVANCED.md)** - Розширені теми
 
-## Integration Notes
-The KONTUR system abstracts these APIs into "Organs" (isolated processes). 
-- The **Cortex Brain** (`src/cortex/brain.ts`) uses the patterns described in `STT.md` and `TTS.md`.
-- The **Active Listening Module** implements the WebSocket protocols detailed in `jemeni_live.md`.
+### Для вирішення проблем
+- **[06-TROUBLESHOOTING.md](./06-TROUBLESHOOTING.md)** - Рішення проблем
+
+### API & Сервіси
+- **[API_KEYS_GUIDE.md](./API_KEYS_GUIDE.md)** - Налаштування API ключів
+- **[gemini_3.md](./gemini_3.md)** - Gemini 3 (Reasoning)
+- **[jemeni_live.md](./jemeni_live.md)** - Gemini Live (потокова передача)
+- **[TTS.md](./TTS.md)** - Text-to-Speech
+- **[STT.md](./STT.md)** - Speech-to-Text
+
+### Інші ресурси
+- **[ATLAS_KONTUR_UNIFIED.md](./ATLAS_KONTUR_UNIFIED.md)** - Об'єднання Atlas + KONTUR
+- **[INDEX.md](./INDEX.md)** - Повний індекс документації
+
+## 📖 Рекомендований порядок читання
+
+### Для новачків:
+1. [01-GETTING_STARTED.md](./01-GETTING_STARTED.md) - Базовий старт
+2. [02-ARCHITECTURE.md](./02-ARCHITECTURE.md) - Розуміння архітектури
+3. [04-CONFIGURATION.md](./04-CONFIGURATION.md) - Налаштування
+
+### Для розробників:
+1. [02-ARCHITECTURE.md](./02-ARCHITECTURE.md) - Архітектура
+2. [03-COMPONENTS.md](./03-COMPONENTS.md) - Компоненти
+3. [05-DETAILED_GUIDES.md](./05-DETAILED_GUIDES.md) - Детальні гайди
+4. [07-ADVANCED.md](./07-ADVANCED.md) - Розширені теми
+
+### Для налаштування:
+1. [04-CONFIGURATION.md](./04-CONFIGURATION.md) - Конфігурація
+2. [API_KEYS_GUIDE.md](./API_KEYS_GUIDE.md) - API ключі
+3. [06-TROUBLESHOOTING.md](./06-TROUBLESHOOTING.md) - Troubleshooting
+
+## 🎯 Основні компоненти
+
+### 🧠 KONTUR v12 Core
+- Gemini 3 Reasoning (глибоке мислення)
+- Gemini Live WebSocket (потокова передача)
+- Multi-provider fallback (надійність)
+
+### 🔧 Open Interpreter Bridge
+- Виконання Python кодів
+- Контроль macOS UI
+- Автоматизація завдань
+
+### 📚 RAG System
+- Векторна база знань (Chroma)
+- Самонавчання системи
+- Пошук рішень
+
+### 🎤 Voice Services
+- Speech-to-Text (STT)
+- Text-to-Speech (TTS)
+- Українська мова
+
+### 👁️ Vision System
+- LIVE Mode (Gemini Live)
+- ON-DEMAND Mode (Copilot/GPT-4o)
+- Real-time аналіз екрану
+
+## 🔗 Зовнішні ресурси
+
+- [Open Interpreter Docs](https://docs.openinterpreter.com/)
+- [Gemini API Docs](https://ai.google.dev/docs)
+- [LangChain Docs](https://python.langchain.com/)
+- [MCP Protocol](https://modelcontextprotocol.io/)
+
+## 📊 Статус проекту
+
+- ✅ Архітектура: 100% готово
+- ✅ Конфігурація: 100% готово
+- ✅ Python Bridge: 100% готово
+- ✅ Accessibility: 100% готово
+- ✅ Vision & LLM: 100% готово
+- ✅ Voice Services: 100% готово
+- ✅ RAG System: 100% готово
+
+## 🚀 Швидкий старт
+
+```bash
+# Встановлення залежностей
+npm install
+
+# Запуск CLI
+npm run cli -- "Твоє завдання"
+
+# Приклади:
+npm run cli -- "Відкрий Калькулятор"
+npm run cli -- "Скільки файлів на робочому столі?"
+```
+
+## 📝 Примітки
+
+- Всі документи написані українською мовою
+- Код приклади в TypeScript, Python та AppleScript
+- Регулярно оновлюється разом з проектом
+
+---
+
+**Остання оновлення:** December 2025  
+**Версія:** KONTUR v12  
+**Статус:** ✅ Готово до використання
