@@ -54,3 +54,13 @@ coverage/
 *.npz
 *.ark
 config.yaml
+
+# Python virtual environment
+/python/venv/
+/python/__pycache__/
+/python/*.pyc
+
+# RAG database (large files, regenerate with index_rag.py)
+/rag/chroma_mac/
+/rag/knowledge_base/
+/rag/knowledge_sources/

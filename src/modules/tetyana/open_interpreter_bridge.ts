@@ -6,14 +6,13 @@ import { getVisionConfig, getProviderConfig } from '../../kontur/providers/confi
 import { getGrishaVisionService } from '../../kontur/vision/GrishaVisionService';
 
 // Define the path to the python venv and script
-// Assuming standard posix paths for macOS as per setup
-const HOME = process.env.HOME || '/Users/dev';
-
-// Tetyana v12 — LangGraph Edition (Production)
-// Only LangGraph version for maximum reliability
-const PYTHON_PATH = path.join(HOME, 'mac_assistant/venv/bin/python3');
-const AGENT_SCRIPT_PATH = path.join(HOME, 'mac_assistant/mac_master_agent.py');
-const ENV_FILE_PATH = path.join(HOME, 'Documents/GitHub/atlas/.env');
+// Now using paths within the repository for better portability
+const PROJECT_ROOT = path.join(__dirname, '../../..');
+const PYTHON_PATH = path.join(PROJECT_ROOT, 'python/venv/bin/python3');
+const AGENT_SCRIPT_PATH = path.join(PROJECT_ROOT, 'python/mac_master_agent.py');
+const ENV_FILE_PATH = path.join(PROJECT_ROOT, '.env');
+const RAG_DB_PATH = path.join(PROJECT_ROOT, 'rag/chroma_mac');
+const RAG_KNOWLEDGE_BASE = path.join(PROJECT_ROOT, 'rag/macOS-automation-knowledge-base');
 
 // Load environment variables from .env file
 function loadEnvFile(): Record<string, string> {
@@ -89,7 +88,7 @@ export class OpenInterpreterBridge {
 
             this.process = spawn(PYTHON_PATH, [scriptPath, prompt], {
                 env,
-                cwd: HOME
+                cwd: PROJECT_ROOT
             });
 
             let fullOutput = '';

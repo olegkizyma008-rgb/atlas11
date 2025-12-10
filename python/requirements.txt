@@ -1,0 +1,27 @@
+# Tetyana v12 — LangGraph Edition (Production)
+# Надійна версія з графовою архітектурою, replan, verification
+
+# Core
+rich>=13.7
+python-dotenv>=1.0
+
+# LangChain + RAG
+langchain>=0.1.20
+langchain-chroma>=0.1.2
+langchain-huggingface>=0.0.3
+langchain-core>=0.1.20
+
+# LangGraph (Графова архітектура)
+langgraph>=0.0.1
+
+# Embeddings
+sentence-transformers>=2.2.2
+huggingface-hub>=0.19.4
+
+# macOS Automation
+pyobjc-framework-Accessibility>=12.1
+pyobjc-framework-Quartz>=12.1
+
+# Utilities
+requests>=2.31.0
+pydantic>=2.5.0

@@ -1449,18 +1449,25 @@ class CopilotVisionProvider {
     }
     console.log("[COPILOT VISION] 🖼️ Analyzing image...");
     try {
-      const tokenResponse = await fetch("https://api.github.com/copilot_internal/v2/token", {
-        headers: {
-          "Authorization": `token ${this.token}`,
-          "Editor-Version": "vscode/1.85.0",
-          "Editor-Plugin-Version": "copilot/1.144.0",
-          "User-Agent": "GithubCopilot/1.144.0"
+      let sessionToken = this.token;
+      try {
+        const tokenResponse = await fetch("https://api.github.com/copilot_internal/v2/token", {
+          headers: {
+            "Authorization": `token ${this.token}`,
+            "Editor-Version": "vscode/1.85.0",
+            "Editor-Plugin-Version": "copilot/1.144.0",
+            "User-Agent": "GithubCopilot/1.144.0"
+          }
+        });
+        if (tokenResponse.ok) {
+          const data2 = await tokenResponse.json();
+          sessionToken = data2.token;
+        } else {
+          console.warn("[COPILOT VISION] ⚠️ Could not get session token, using direct token");
         }
-      });
-      if (!tokenResponse.ok) {
-        throw new Error(`Failed to authenticate with Copilot: ${tokenResponse.status}`);
+      } catch (e) {
+        console.warn("[COPILOT VISION] ⚠️ Token refresh failed, using direct token");
       }
-      const { token: sessionToken } = await tokenResponse.json();
       const systemPrompt = `You are GRISHA, the Security Guardian of the ATLAS System.
 Your task is to analyze screenshots and verify task execution.
 
@@ -1542,6 +1549,17 @@ Return JSON:
       };
     } catch (error) {
       console.error("[COPILOT VISION] ❌ Error:", error.message);
+      console.warn("[COPILOT VISION] ⚠️ Falling back to Gemini Vision");
+      try {
+        const { GeminiVisionProvider: GeminiVisionProvider2 } = await Promise.resolve().then(() => geminiVision);
+        const geminiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_LIVE_API_KEY;
+        if (geminiKey) {
+          const geminiProvider = new GeminiVisionProvider2(geminiKey);
+          return await geminiProvider.analyzeImage(request);
+        }
+      } catch (fallbackError) {
+        console.error("[COPILOT VISION] ❌ Fallback to Gemini also failed:", fallbackError);
+      }
       throw error;
     }
   }
@@ -1557,6 +1575,102 @@ Return JSON:
     return this.getModels();
   }
 }
+class GeminiVisionProvider {
+  name = "gemini";
+  apiKey;
+  client;
+  model = "gemini-2.0-flash";
+  constructor(apiKey, model) {
+    if (!apiKey) {
+      throw new Error("Gemini API key is required");
+    }
+    this.apiKey = apiKey;
+    this.client = new generativeAi.GoogleGenerativeAI(apiKey);
+    if (model)
+      this.model = model;
+  }
+  isAvailable() {
+    return !!this.apiKey;
+  }
+  async analyzeImage(request) {
+    console.log("[GEMINI VISION] 🖼️ Analyzing image...");
+    try {
+      const model = this.client.getGenerativeModel({ model: this.model });
+      const systemPrompt = `You are GRISHA, the Security Guardian of the ATLAS System.
+Your task is to analyze screenshots and verify task execution.
+
+RESPOND IN UKRAINIAN LANGUAGE ONLY.
+
+Analyze the image for:
+1. VERIFICATION: Did the requested action complete successfully?
+2. SECURITY: Any phishing, fake dialogs, or suspicious elements?
+3. ERRORS: Any error dialogs, crash screens, or warnings?
+4. BLOCKERS: Popups that might block further actions?
+
+Return JSON:
+{
+  "analysis": "Brief Ukrainian description of what you see",
+  "anomalies": [
+    { "type": "string", "severity": "low|medium|high", "description": "string", "location": "string" }
+  ],
+  "confidence": 0.0-1.0,
+  "verified": true/false
+}`;
+      const userPrompt = request.prompt || (request.taskContext ? `Перевір виконання завдання: "${request.taskContext}". Що бачиш на екрані?` : "Проаналізуй цей скріншот. Що ти бачиш? Чи все в нормі?");
+      const imagePart = {
+        inlineData: {
+          data: request.image,
+          mimeType: request.mimeType || "image/jpeg"
+        }
+      };
+      const response = await model.generateContent([
+        systemPrompt,
+        imagePart,
+        userPrompt
+      ]);
+      const text = response.response.text();
+      try {
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+          return {
+            analysis: parsed.analysis || text,
+            anomalies: parsed.anomalies || [],
+            confidence: parsed.confidence || 0.8,
+            verified: parsed.verified ?? true,
+            provider: this.name
+          };
+        }
+      } catch (parseError) {
+        console.warn("[GEMINI VISION] Failed to parse JSON response, using raw text");
+      }
+      return {
+        analysis: text,
+        anomalies: [],
+        confidence: 0.7,
+        verified: !text.toLowerCase().includes("error") && !text.toLowerCase().includes("помилка"),
+        provider: this.name
+      };
+    } catch (error) {
+      console.error("[GEMINI VISION] ❌ Error:", error.message);
+      throw error;
+    }
+  }
+  getModels() {
+    return [
+      "gemini-2.0-flash",
+      "gemini-1.5-pro",
+      "gemini-1.5-flash"
+    ];
+  }
+  async fetchModels() {
+    return this.getModels();
+  }
+}
+const geminiVision = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Object.defineProperty({
+  __proto__: null,
+  GeminiVisionProvider
+}, Symbol.toStringTag, { value: "Module" }));
 class WebTTSProvider {
   name = "web";
   constructor() {
@@ -1730,6 +1844,11 @@ class ProviderRouter {
     const copilotVision = new CopilotVisionProvider(copilotKey, "gpt-4o");
     if (copilotVision.isAvailable()) {
       this.visionProviders.set("copilot", copilotVision);
+    }
+    const geminiVisionKey = process.env.GEMINI_API_KEY || process.env.GEMINI_LIVE_API_KEY;
+    if (geminiVisionKey) {
+      const geminiVision2 = new GeminiVisionProvider(geminiVisionKey, "gemini-2.0-flash");
+      this.visionProviders.set("gemini", geminiVision2);
     }
     console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM, ${this.ttsProviders.size} TTS, ${this.visionProviders.size} Vision providers`);
   }
@@ -3831,10 +3950,12 @@ const GrishaVisionService$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Obje
   GrishaVisionService,
   getGrishaVisionService
 }, Symbol.toStringTag, { value: "Module" }));
-const HOME = process.env.HOME || "/Users/dev";
-const PYTHON_PATH = path.join(HOME, "mac_assistant/venv/bin/python3");
-const AGENT_SCRIPT_PATH = path.join(HOME, "mac_assistant/mac_master_agent.py");
-const ENV_FILE_PATH = path.join(HOME, "Documents/GitHub/atlas/.env");
+const PROJECT_ROOT = path.join(__dirname, "../../..");
+const PYTHON_PATH = path.join(PROJECT_ROOT, "python/venv/bin/python3");
+const AGENT_SCRIPT_PATH = path.join(PROJECT_ROOT, "python/mac_master_agent.py");
+const ENV_FILE_PATH = path.join(PROJECT_ROOT, ".env");
+path.join(PROJECT_ROOT, "rag/chroma_mac");
+path.join(PROJECT_ROOT, "rag/macOS-automation-knowledge-base");
 function loadEnvFile() {
   const envVars = {};
   try {
@@ -3857,12 +3978,26 @@ function loadEnvFile() {
 class OpenInterpreterBridge {
   process = null;
   isRunning = false;
+  constructor() {
+  }
   /**
-   * Executes a task using the Python Open Interpreter Agent.
+   * Executes a task using Tetyana v12 LangGraph (Production)
    * @param prompt The natural language prompt/task for the agent.
-   * @returns A promise that resolves when the agent completes (for single-shot tasks)
+   * @returns A promise that resolves when the agent completes
    */
   async execute(prompt) {
+    return this.executeWithScript(AGENT_SCRIPT_PATH, prompt);
+  }
+  /**
+   * Alias for execute() - LangGraph version
+   */
+  async executeLangGraph(prompt) {
+    return this.execute(prompt);
+  }
+  /**
+   * Internal method to execute with a specific script
+   */
+  executeWithScript(scriptPath, prompt) {
     return new Promise((resolve, reject) => {
       console.log(`[OpenInterpreter] Starting task: ${prompt}`);
       const envFileVars = loadEnvFile();
@@ -3877,9 +4012,9 @@ class OpenInterpreterBridge {
         // Ensure Python uses unbuffered output
         PYTHONUNBUFFERED: "1"
       };
-      this.process = child_process.spawn(PYTHON_PATH, [AGENT_SCRIPT_PATH, prompt], {
+      this.process = child_process.spawn(PYTHON_PATH, [scriptPath, prompt], {
         env,
-        cwd: HOME
+        cwd: PROJECT_ROOT
       });
       let fullOutput = "";
       this.process.stdout?.on("data", (data) => {
@@ -3951,6 +4086,14 @@ FIX THIS.` : prompt;
    */
   static checkEnvironment() {
     return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
+  }
+  /**
+   * Get version info
+   */
+  static getVersionInfo() {
+    const hasEnv = this.checkEnvironment();
+    return `Tetyana v12 LangGraph Edition (Production)
+  Status: ${hasEnv ? "✅ Ready" : "❌ Not Found"}`;
   }
 }
 class TetyanaExecutor extends events.EventEmitter {
