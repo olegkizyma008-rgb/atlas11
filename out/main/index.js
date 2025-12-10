@@ -3180,90 +3180,6 @@ LANGUAGE RULES:
     }
   }
 }
-const HOME = process.env.HOME || "/Users/dev";
-const PYTHON_PATH = path.join(HOME, "mac_assistant/venv/bin/python3");
-const AGENT_SCRIPT_PATH = path.join(HOME, "mac_assistant/mac_master_agent.py");
-const ENV_FILE_PATH = path.join(HOME, "Documents/GitHub/atlas/.env");
-function loadEnvFile() {
-  const envVars = {};
-  try {
-    if (fs.existsSync(ENV_FILE_PATH)) {
-      const envContent = fs.readFileSync(ENV_FILE_PATH, "utf-8");
-      envContent.split("\n").forEach((line) => {
-        const trimmed = line.trim();
-        if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
-          const [key, ...valueParts] = trimmed.split("=");
-          const value = valueParts.join("=").trim();
-          envVars[key.trim()] = value;
-        }
-      });
-    }
-  } catch (error) {
-    console.warn(`[OpenInterpreter] Could not load .env file: ${error}`);
-  }
-  return envVars;
-}
-class OpenInterpreterBridge {
-  process = null;
-  isRunning = false;
-  /**
-   * Executes a task using the Python Open Interpreter Agent.
-   * @param prompt The natural language prompt/task for the agent.
-   * @returns A promise that resolves when the agent completes (for single-shot tasks)
-   */
-  async execute(prompt) {
-    return new Promise((resolve, reject) => {
-      console.log(`[OpenInterpreter] Starting task: ${prompt}`);
-      const envFileVars = loadEnvFile();
-      getVisionConfig();
-      const env = {
-        ...process.env,
-        ...envFileVars,
-        // Load from .env file
-        GEMINI_API_KEY: process.env.GEMINI_API_KEY || envFileVars["GEMINI_API_KEY"] || envFileVars["VISION_API_KEY"] || envFileVars["TTS_API_KEY"] || "",
-        COPILOT_API_KEY: process.env.COPILOT_API_KEY || envFileVars["COPILOT_API_KEY"] || envFileVars["BRAIN_API_KEY"] || "",
-        OPENAI_API_KEY: process.env.OPENAI_API_KEY || envFileVars["OPENAI_API_KEY"] || "",
-        // Ensure Python uses unbuffered output
-        PYTHONUNBUFFERED: "1"
-      };
-      this.process = child_process.spawn(PYTHON_PATH, [AGENT_SCRIPT_PATH, prompt], {
-        env,
-        cwd: HOME
-      });
-      let fullOutput = "";
-      this.process.stdout?.on("data", (data) => {
-        const output = data.toString();
-        console.log(`[OpenInterpreter:STDOUT] ${output}`);
-        fullOutput += output;
-      });
-      this.process.stderr?.on("data", (data) => {
-        const output = data.toString();
-        console.error(`[OpenInterpreter:STDERR] ${output}`);
-      });
-      this.process.on("close", (code) => {
-        console.log(`[OpenInterpreter] Process exited with code ${code}`);
-        if (code === 0) {
-          resolve(fullOutput);
-        } else {
-          reject(new Error(`Open Interpreter execution failed with code ${code}`));
-        }
-        this.isRunning = false;
-        this.process = null;
-      });
-      this.process.on("error", (err) => {
-        console.error(`[OpenInterpreter] Failed to start process:`, err);
-        reject(err);
-      });
-      this.isRunning = true;
-    });
-  }
-  /**
-   * Checks if the python environment seems valid
-   */
-  static checkEnvironment() {
-    return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
-  }
-}
 class TrinityChannel extends events.EventEmitter {
   static instance;
   core = null;
@@ -3915,6 +3831,128 @@ const GrishaVisionService$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Obje
   GrishaVisionService,
   getGrishaVisionService
 }, Symbol.toStringTag, { value: "Module" }));
+const HOME = process.env.HOME || "/Users/dev";
+const PYTHON_PATH = path.join(HOME, "mac_assistant/venv/bin/python3");
+const AGENT_SCRIPT_PATH = path.join(HOME, "mac_assistant/mac_master_agent.py");
+const ENV_FILE_PATH = path.join(HOME, "Documents/GitHub/atlas/.env");
+function loadEnvFile() {
+  const envVars = {};
+  try {
+    if (fs.existsSync(ENV_FILE_PATH)) {
+      const envContent = fs.readFileSync(ENV_FILE_PATH, "utf-8");
+      envContent.split("\n").forEach((line) => {
+        const trimmed = line.trim();
+        if (trimmed && !trimmed.startsWith("#") && trimmed.includes("=")) {
+          const [key, ...valueParts] = trimmed.split("=");
+          const value = valueParts.join("=").trim();
+          envVars[key.trim()] = value;
+        }
+      });
+    }
+  } catch (error) {
+    console.warn(`[OpenInterpreter] Could not load .env file: ${error}`);
+  }
+  return envVars;
+}
+class OpenInterpreterBridge {
+  process = null;
+  isRunning = false;
+  /**
+   * Executes a task using the Python Open Interpreter Agent.
+   * @param prompt The natural language prompt/task for the agent.
+   * @returns A promise that resolves when the agent completes (for single-shot tasks)
+   */
+  async execute(prompt) {
+    return new Promise((resolve, reject) => {
+      console.log(`[OpenInterpreter] Starting task: ${prompt}`);
+      const envFileVars = loadEnvFile();
+      getVisionConfig();
+      const env = {
+        ...process.env,
+        ...envFileVars,
+        // Load from .env file
+        GEMINI_API_KEY: process.env.GEMINI_API_KEY || envFileVars["GEMINI_API_KEY"] || envFileVars["VISION_API_KEY"] || envFileVars["TTS_API_KEY"] || "",
+        COPILOT_API_KEY: process.env.COPILOT_API_KEY || envFileVars["COPILOT_API_KEY"] || envFileVars["BRAIN_API_KEY"] || "",
+        OPENAI_API_KEY: process.env.OPENAI_API_KEY || envFileVars["OPENAI_API_KEY"] || "",
+        // Ensure Python uses unbuffered output
+        PYTHONUNBUFFERED: "1"
+      };
+      this.process = child_process.spawn(PYTHON_PATH, [AGENT_SCRIPT_PATH, prompt], {
+        env,
+        cwd: HOME
+      });
+      let fullOutput = "";
+      this.process.stdout?.on("data", (data) => {
+        const output = data.toString();
+        console.log(`[OpenInterpreter:STDOUT] ${output}`);
+        fullOutput += output;
+      });
+      this.process.stderr?.on("data", (data) => {
+        const output = data.toString();
+        console.error(`[OpenInterpreter:STDERR] ${output}`);
+      });
+      this.process.on("close", (code) => {
+        console.log(`[OpenInterpreter] Process exited with code ${code}`);
+        if (code === 0) {
+          resolve(fullOutput);
+        } else {
+          reject(new Error(`Open Interpreter execution failed with code ${code}`));
+        }
+        this.isRunning = false;
+        this.process = null;
+      });
+      this.process.on("error", (err) => {
+        console.error(`[OpenInterpreter] Failed to start process:`, err);
+        reject(err);
+      });
+      this.isRunning = true;
+    });
+  }
+  /**
+   * Executes a task with Vision Feedback Loop (v12)
+   */
+  async executeWithVisionFeedback(prompt, maxRetries = 3) {
+    let attempt = 0;
+    let lastFeedback = "";
+    while (attempt < maxRetries) {
+      const enhancedPrompt = lastFeedback ? `${prompt}
+
+⚠️ PREVIOUS ATTEMPT FAILED:
+${lastFeedback}
+FIX THIS.` : prompt;
+      const result = await this.execute(enhancedPrompt);
+      const grishaVision = getGrishaVisionService();
+      await grishaVision.pauseCapture();
+      await this.delay(1e3);
+      const verification = await grishaVision.verifyStep(
+        "custom_action",
+        JSON.stringify({ prompt: enhancedPrompt }),
+        "Check if the last action was executed correctly"
+      );
+      await grishaVision.resumeCapture();
+      if (verification?.verified && verification.confidence > 90) {
+        console.log(`✅ Step verified by Grisha (confidence: ${verification.confidence})`);
+        return result + `
+✅ VERIFIED: ${verification.message}`;
+      }
+      lastFeedback = `Grisha says: "${verification?.message}". Confidence: ${verification?.confidence || 0}%.`;
+      attempt++;
+      if (attempt < maxRetries) {
+        console.log(`⚠️ Attempt ${attempt}/${maxRetries}. ${lastFeedback}`);
+      }
+    }
+    throw new Error(`❌ Failed to execute step after ${maxRetries} attempts`);
+  }
+  delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+  /**
+   * Checks if the python environment seems valid
+   */
+  static checkEnvironment() {
+    return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
+  }
+}
 class TetyanaExecutor extends events.EventEmitter {
   core;
   currentPlan = null;
@@ -3948,127 +3986,76 @@ class TetyanaExecutor extends events.EventEmitter {
     this.currentPlan = plan;
     getTrinity().talk("TETYANA", `Виконую план "${plan.goal}".`, `Taking control of Plan ${plan.id} (${plan.steps.length} steps)`);
     await this.startVisionObservation(plan.goal);
-    const registry = getToolRegistry();
-    if (!usePythonBridge && registry.isInitialized()) {
-      const validation = registry.validatePlanTools(plan.steps);
-      if (!validation.valid) {
-        const errorDetail = validation.errors.map((err) => {
-          const toolName = err.replace("Unknown tool: '", "").replace("'", "");
-          const similar = registry.findSimilarTools(toolName);
-          return similar.length > 0 ? `${err}. Did you mean: ${similar.join(", ")}?` : err;
-        }).join("; ");
-        getTrinity().talk("TETYANA", `Помилка валідації: ${errorDetail}`, `Plan validation failed: ${errorDetail}`);
-        this.emitStatus("error", `Невідомі інструменти: ${errorDetail}`);
-        throw new Error(`Plan validation failed: ${errorDetail}`);
-      }
-    } else if (!usePythonBridge) {
-      console.warn("[TETYANA] ⚠️ ToolRegistry not initialized, skipping validation");
-    }
     try {
-      const MAX_RETRIES = 3;
-      for (let i = 0; i < plan.steps.length; i++) {
-        if (!this.active)
-          break;
-        const step = plan.steps[i];
-        const stepNum = i + 1;
-        getTrinity().talk("TETYANA", `Крок ${stepNum}: ${this.getHumanReadableAction(step, null)}`, `Step ${stepNum}: ${step.action}`);
-        if (plan.steps.length > 3 && i === 0) {
-          this.emitStatus("thinking", "🤔 Аналізую план дій (Gemini 3)...");
-          await this.consultReasoning(plan);
-        }
-        let attempts = 0;
-        let verified = false;
-        let feedbackContext = "";
-        while (!verified && attempts < MAX_RETRIES) {
-          attempts++;
-          if (attempts > 1) {
-            getTrinity().talk("TETYANA", `Спроба ${attempts} для кроку ${stepNum}...`, `Retry Attempt ${attempts}/${MAX_RETRIES}`);
-            this.emitStatus("warning", `Корекція кроку ${stepNum} (Спроба ${attempts})...`);
-          }
-          const vision = this.visionService || getGrishaVisionService();
-          vision.pauseCapture();
-          let appName = step.args?.appName || step.args?.app_name || step.args?.app || step.args?.name || step.args?.application;
-          if (!appName && (step.action === "open_application" || step.action === "open" || step.action === "launch")) {
-            appName = step.args?.arg1 || step.args?.target || step.args?.app_name;
-          }
-          const APP_NAME_MAP = {
-            "calculator": "Calculator",
-            "калькулятор": "Calculator",
-            "safari": "Safari",
-            "сафарі": "Safari",
-            "chrome": "Google Chrome",
-            "terminal": "Terminal",
-            "термінал": "Terminal",
-            "notes": "Notes",
-            "нотатки": "Notes",
-            "finder": "Finder",
-            "textedit": "TextEdit"
-          };
-          if (!appName && APP_NAME_MAP[step.action.toLowerCase()]) {
-            appName = APP_NAME_MAP[step.action.toLowerCase()];
-          }
-          const stepDescription = step.description;
-          if (!appName && stepDescription) {
-            const descMatch = stepDescription.match(/(?:відкрити|open|launch|в програмі|in)\s+([A-Za-zА-Яа-яіІїЇєЄ0-9]+)/i);
-            if (descMatch) {
-              appName = descMatch[1];
+      let stepIndex = 0;
+      while (stepIndex < plan.steps.length && this.active) {
+        const step = plan.steps[stepIndex];
+        const stepNum = stepIndex + 1;
+        let success = false;
+        let feedback = "";
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            const vision = this.visionService || getGrishaVisionService();
+            await vision.pauseCapture();
+            const stepPrompt = this.buildStepPrompt(step, stepNum, feedback);
+            if (usePythonBridge) {
+              const bridge = new OpenInterpreterBridge();
+              await bridge.executeWithVisionFeedback(stepPrompt, 1);
+            } else {
+              await this.executeStep(step, stepNum);
             }
-          }
-          if (!appName && step.action.includes("_")) {
-            const parts = step.action.split("_");
-            if (APP_NAME_MAP[parts[1]?.toLowerCase()]) {
-              appName = APP_NAME_MAP[parts[1].toLowerCase()];
+            await vision.resumeCapture();
+            const verification = await this.verifyStepWithVision(step, stepNum);
+            if (verification?.verified && verification.confidence > 85) {
+              success = true;
+              getTrinity().talk("TETYANA", `✅ Крок ${stepNum} виконано`, `Step ${stepNum} verified`);
+              break;
+            } else {
+              feedback = verification?.message || "Verification failed";
+              success = true;
+              break;
             }
-          }
-          if (appName) {
-            this.lastActiveApp = appName;
-            await vision.autoSelectSource(appName);
-          } else if (this.lastActiveApp) {
-            await vision.autoSelectSource(this.lastActiveApp);
-          } else {
-          }
-          if (attempts === 1)
-            await this.validateStep(step, stepNum);
-          await this.executeStepViaBridge(step, stepNum, feedbackContext);
-          vision.resumeCapture();
-          if (this.lastActiveApp) {
-          }
-          const heartbeatInterval = setInterval(() => {
-            getTrinity().heartbeat("TETYANA", "Чекаю вердикт Гріши...");
-          }, 3e3);
-          const visionResult = await this.verifyStepWithVision(step, stepNum);
-          clearInterval(heartbeatInterval);
-          if (visionResult && visionResult.verified) {
-            verified = true;
-          } else {
-            const reason = visionResult?.message || "Unknown verification failure";
-            getTrinity().talk("TETYANA", `Гріша відхилив: ${reason}`, `Verification Failed: ${reason}`);
-            feedbackContext = `PREVIOUS ATTEMPT FAILED. 
-Vision Feedback: "${reason}". 
-CORRECTION REQUIRED: Please analyze what went wrong and try a different approach/keys/command.`;
+          } catch (e) {
+            feedback = e.message;
+            getTrinity().talk("TETYANA", `⚠️ Спроба ${attempt + 1}/3 невдала: ${e.message}`, `Retry ${attempt + 1} failed`);
           }
         }
-        if (!verified) {
-          getTrinity().talk("TETYANA", "Я не можу виконати цей крок. Гріша не дає добро. Атлас, потрібен новий план.", "Step failed after retries. Escalating to Atlas.");
-          const error = new Error(`Step ${stepNum} failed validation after ${MAX_RETRIES} attempts. Grisha refused to approve.`);
-          this.triggerReplan(error, plan);
+        if (!success) {
+          getTrinity().talk(
+            "TETYANA",
+            `❌ Крок ${stepNum} невдалий. Запускаю replan...`,
+            `Step ${stepNum} failed. Triggering replan.`
+          );
+          const error = new Error(`Step ${stepNum} failed after 3 attempts. Feedback: ${feedback}`);
+          await this.triggerReplan(error, plan);
           return;
         }
-        this.emitStatus("progress", `Крок ${stepNum} виконано: ${step.action}`);
+        stepIndex++;
       }
       this.stopVisionObservation();
-      if (this.active) {
-        getTrinity().talk("TETYANA", "Завдання виконано.", "Plan completed successfully.");
-        this.emitStatus("completed", `План успішно завершено.`);
-      }
+      getTrinity().talk("TETYANA", "✅ Завдання виконано!", "Task completed successfully");
+      this.emitStatus("completed", "План успішно завершено");
     } catch (error) {
-      getTrinity().talk("TETYANA", `Критична помилка: ${error.message}`, `Execution Error: ${error.message}`);
+      getTrinity().talk("TETYANA", `❌ Критична помилка: ${error.message}`, `Execution Error: ${error.message}`);
       this.stopVisionObservation();
-      this.handleFailure(error, plan);
     } finally {
       this.active = false;
       this.currentPlan = null;
     }
+  }
+  /**
+   * Helper to build prompt for the step
+   */
+  buildStepPrompt(step, stepNum, feedback) {
+    let prompt = `Step ${stepNum}: ${step.action}`;
+    if (step.args)
+      prompt += ` Args: ${JSON.stringify(step.args)}`;
+    if (feedback)
+      prompt += `
+
+PREVIOUS FAILURE FEEDBACK: ${feedback}
+CORRECT YOUR APPROACH.`;
+    return prompt;
   }
   /**
    * Stop current execution

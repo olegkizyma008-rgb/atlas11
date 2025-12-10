@@ -32,13 +32,14 @@ const PROVIDER_API_KEYS: Record<string, string> = {
 };
 
 /**
- * Display header with clean design
+ * Display header with title and decorative elements
  */
 function showHeader(title: string): void {
     console.clear();
-    console.log(chalk.bold.cyan(`\n  KONTUR SYSTEM CONFIGURATOR`));
-    console.log(chalk.gray(`  ${title}`));
-    console.log(chalk.gray(`  ${'─'.repeat(50)}`));
+    // Blue arc decoration
+    console.log(chalk.cyan('  ◆─────────────────────────────────────◆'));
+    console.log(chalk.cyan(`  │ ${chalk.green('●')} ${title.padEnd(36)} ${chalk.green('●')} │`));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────◆'));
     console.log('');
 }
 
@@ -87,14 +88,14 @@ export async function mainMenuV2(): Promise<void> {
 
         const choices = [
             ...serviceChoices,
-            { name: '─'.repeat(50), value: '_sep1', disabled: true },
-            { name: 'Secrets & Keys', value: 'secrets' },
-            { name: 'App Settings', value: 'settings' },
-            { name: 'System Health', value: 'health' },
-            { name: '─'.repeat(50), value: '_sep2', disabled: true },
-            { name: 'Run macOS Agent', value: 'run_agent' },
-            { name: 'Test Tetyana', value: 'test_tetyana' },
-            { name: 'Exit', value: 'exit' }
+            { name: chalk.cyan('◆─────────────────────────────────────────────────◆'), value: '_sep1', disabled: true },
+            { name: `${chalk.green('●')} Secrets & Keys`, value: 'secrets' },
+            { name: `${chalk.green('●')} App Settings`, value: 'settings' },
+            { name: `${chalk.green('●')} System Health`, value: 'health' },
+            { name: chalk.cyan('◆─────────────────────────────────────────────────◆'), value: '_sep2', disabled: true },
+            { name: `${chalk.green('●')} Run macOS Agent`, value: 'run_agent' },
+            { name: `${chalk.green('●')} Test Tetyana`, value: 'test_tetyana' },
+            { name: chalk.yellow('✕ Exit'), value: 'exit' }
         ];
 
         const action = await select('', choices);
@@ -201,13 +202,13 @@ async function configureVision(): Promise<void> {
         const onDemandProvider = config['VISION_ONDEMAND_PROVIDER'] || 'copilot';
 
         const choices = [
-            { name: `Active Mode      ${modeLabel}`, value: 'mode' },
-            { name: `Fallback Mode    ${fallbackLabel}`, value: 'fallback_mode' },
-            { name: '─'.repeat(45), value: '_sep1', disabled: true },
-            { name: `Live Stream      ${chalk.gray(liveProvider)}`, value: 'live' },
-            { name: `On-Demand        ${chalk.gray(onDemandProvider)}`, value: 'ondemand' },
-            { name: '─'.repeat(45), value: '_sep2', disabled: true },
-            { name: 'Back', value: 'back' }
+            { name: `${chalk.green('●')} Active Mode      ${modeLabel}`, value: 'mode' },
+            { name: `${chalk.green('●')} Fallback Mode    ${fallbackLabel}`, value: 'fallback_mode' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep1', disabled: true },
+            { name: `${chalk.green('●')} Live Stream      ${chalk.gray(liveProvider)}`, value: 'live' },
+            { name: `${chalk.green('●')} On-Demand        ${chalk.gray(onDemandProvider)}`, value: 'ondemand' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep2', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
         ];
 
         const action = await select('', choices);
@@ -248,11 +249,11 @@ async function configureVisionMode(label: string, prefix: string): Promise<void>
         const currentFallback = config[fallbackKey];
 
         const choices = [
-            { name: `Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
-            { name: `Model            ${fmtVal(currentModel)}`, value: 'model', disabled: !currentProvider ? 'Set provider first' : undefined },
-            { name: `Fallback         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
-            { name: '─'.repeat(45), value: '_sep', disabled: true },
-            { name: 'Back', value: 'back' }
+            { name: `${chalk.green('●')} Provider         ${fmtVal(currentProvider)}`, value: 'provider' },
+            { name: `${chalk.green('●')} Model            ${fmtVal(currentModel)}`, value: 'model', disabled: !currentProvider ? 'Set provider first' : undefined },
+            { name: `${chalk.green('●')} Fallback         ${currentFallback ? fmtVal(currentFallback) : chalk.gray('none')}`, value: 'fallback' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
         ];
 
         const action = await select('', choices);
@@ -286,11 +287,11 @@ async function configureExecutionEngine(): Promise<void> {
 
         const choices = [
             {
-                name: `Engine           ${currentEngine === 'python-bridge' ? chalk.green('Python Bridge') : chalk.cyan('Native (MCP)')}`,
+                name: `${chalk.green('●')} Engine           ${currentEngine === 'python-bridge' ? chalk.green('Python Bridge') : chalk.cyan('Native (MCP)')}`,
                 value: 'engine'
             },
-            { name: '─'.repeat(45), value: '_sep', disabled: true },
-            { name: 'Back', value: 'back' }
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
         ];
 
         const action = await select('', choices);
@@ -331,11 +332,11 @@ async function configureSecrets(): Promise<void> {
         const config = configManager.getAll();
 
         const choices: { name: string; value: string; disabled?: boolean }[] = keysList.map(k => ({
-            name: `${k.label.padEnd(30)} ${fmtKey(config[k.key])}`,
+            name: `${chalk.green('●')} ${k.label.padEnd(28)} ${fmtKey(config[k.key])}`,
             value: k.key
         }));
-        choices.push({ name: '─'.repeat(45), value: '_sep', disabled: true });
-        choices.push({ name: 'Back', value: 'back' });
+        choices.push({ name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true });
+        choices.push({ name: chalk.gray('← Back'), value: 'back' });
 
         const selected = await select('', choices);
         if (selected === 'back') return;
@@ -382,11 +383,11 @@ async function configureAppSettings(): Promise<void> {
         const logLevel = config['LOG_LEVEL'] || 'info';
 
         const choices = [
-            { name: `Language         ${language === 'uk' ? chalk.cyan('Українська') : chalk.gray('English')}`, value: 'APP_LANGUAGE' },
-            { name: `Theme            ${theme === 'dark' ? chalk.magenta('Dark') : chalk.yellow('Light')}`, value: 'APP_THEME' },
-            { name: `Log Level        ${chalk.cyan(logLevel)}`, value: 'LOG_LEVEL' },
-            { name: '─'.repeat(45), value: '_sep', disabled: true },
-            { name: 'Back', value: 'back' }
+            { name: `${chalk.green('●')} Language         ${language === 'uk' ? chalk.cyan('Українська') : chalk.gray('English')}`, value: 'APP_LANGUAGE' },
+            { name: `${chalk.green('●')} Theme            ${theme === 'dark' ? chalk.magenta('Dark') : chalk.yellow('Light')}`, value: 'APP_THEME' },
+            { name: `${chalk.green('●')} Log Level        ${chalk.cyan(logLevel)}`, value: 'LOG_LEVEL' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
         ];
 
         const action = await select('', choices);
@@ -553,18 +554,20 @@ async function runHealthCheck(): Promise<void> {
     ];
 
     let healthy = true;
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     for (const check of checks) {
         const value = config[check.name];
-        const status = value ? chalk.green('OK') : chalk.red('MISSING');
-        console.log(`  ${check.label.padEnd(25)} ${status}`);
+        const status = value ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        console.log(`  │ ${chalk.green('●')} ${check.label.padEnd(23)} ${status}`);
         if (!value) healthy = false;
     }
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
 
     console.log('');
     if (healthy) {
-        console.log(chalk.green('  All critical components configured!'));
+        console.log(chalk.green('  ✓ All critical components configured!'));
     } else {
-        console.log(chalk.yellow('  Some components need configuration'));
+        console.log(chalk.yellow('  ⚠ Some components need configuration'));
     }
 
     await new Promise(r => setTimeout(r, 2000));
@@ -580,9 +583,34 @@ async function testTetyanaMode(): Promise<void> {
     const task = await input('Enter a test task', 'Open Calculator');
     console.log(chalk.gray(`\n  Testing: "${task}"\n`));
     
-    // TODO: Implement actual test
-    console.log(chalk.yellow('  Test execution not yet implemented'));
-    await new Promise(r => setTimeout(r, 1500));
+    try {
+        const { OpenInterpreterBridge } = await import('../../modules/tetyana/open_interpreter_bridge.js');
+        
+        const bridge = new OpenInterpreterBridge();
+        
+        if (!OpenInterpreterBridge.checkEnvironment()) {
+            console.log(chalk.red('  ✗ Python environment not found'));
+            console.log(chalk.gray('  Please ensure mac_master_agent.py is set up'));
+            await new Promise(r => setTimeout(r, 2000));
+            return;
+        }
+        
+        console.log(chalk.cyan('  ◆ Testing natural language mode...\n'));
+        
+        try {
+            const result = await bridge.execute(task);
+            console.log(chalk.green('\n  ✓ Test completed successfully\n'));
+            console.log(chalk.gray('  Result:'));
+            console.log(chalk.cyan('  ' + result.split('\n').join('\n  ')));
+            await new Promise(r => setTimeout(r, 1500));
+        } catch (error: any) {
+            console.log(chalk.red(`\n  ✗ Test failed: ${error.message}\n`));
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    } catch (error: any) {
+        console.log(chalk.red(`  ✗ Error: ${error.message}`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
 }
 
 /**
@@ -595,7 +623,33 @@ async function runPythonAgent(): Promise<void> {
     const task = await input('Enter task', 'Open Finder');
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
     
-    // TODO: Implement actual execution
-    console.log(chalk.yellow('  Agent execution not yet implemented'));
-    await new Promise(r => setTimeout(r, 1500));
+    // Import and use OpenInterpreterBridge
+    try {
+        const { OpenInterpreterBridge } = await import('../../modules/tetyana/open_interpreter_bridge.js');
+        
+        const bridge = new OpenInterpreterBridge();
+        
+        if (!OpenInterpreterBridge.checkEnvironment()) {
+            console.log(chalk.red('  ✗ Python environment not found'));
+            console.log(chalk.gray('  Please ensure mac_master_agent.py is set up'));
+            await new Promise(r => setTimeout(r, 2000));
+            return;
+        }
+        
+        console.log(chalk.cyan('  ◆ Starting agent...\n'));
+        
+        try {
+            const result = await bridge.execute(task);
+            console.log(chalk.green('\n  ✓ Agent completed successfully\n'));
+            console.log(chalk.gray('  Result:'));
+            console.log(chalk.cyan('  ' + result.split('\n').join('\n  ')));
+            await new Promise(r => setTimeout(r, 1500));
+        } catch (error: any) {
+            console.log(chalk.red(`\n  ✗ Agent failed: ${error.message}\n`));
+            await new Promise(r => setTimeout(r, 2000));
+        }
+    } catch (error: any) {
+        console.log(chalk.red(`  ✗ Error: ${error.message}`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
 }
