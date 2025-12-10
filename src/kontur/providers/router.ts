@@ -28,6 +28,7 @@ import { AnthropicProvider } from './anthropic';
 import { MistralProvider } from './mistral';
 import { VSCodeCopilotProvider } from './copilot';
 import { CopilotVisionProvider } from './copilot-vision';
+import { GeminiVisionProvider } from './gemini-vision';
 import { WebTTSProvider } from './web-tts';
 import { WebSTTProvider } from './web-stt';
 import { UkrainianTTSProvider } from './ukrainian-tts';
@@ -123,8 +124,12 @@ export class ProviderRouter {
             this.visionProviders.set('copilot', copilotVision);
         }
 
-        // Note: Gemini Vision for on-demand mode could be added here
-        // For live mode, GeminiLiveService handles it separately
+        // Gemini Vision - fallback for on-demand mode
+        const geminiVisionKey = process.env.GEMINI_API_KEY || process.env.GEMINI_LIVE_API_KEY;
+        if (geminiVisionKey) {
+            const geminiVision = new GeminiVisionProvider(geminiVisionKey, 'gemini-2.0-flash');
+            this.visionProviders.set('gemini', geminiVision);
+        }
 
         console.log(`[PROVIDER ROUTER] ✅ Initialized ${this.llmProviders.size} LLM, ${this.ttsProviders.size} TTS, ${this.visionProviders.size} Vision providers`);
     }

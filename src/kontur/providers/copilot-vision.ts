@@ -98,20 +98,29 @@ export class CopilotVisionProvider implements IVisionProvider {
 
         try {
             // Step 1: Get session token
-            const tokenResponse = await fetch('https://api.github.com/copilot_internal/v2/token', {
-                headers: {
-                    'Authorization': `token ${this.token}`,
-                    'Editor-Version': 'vscode/1.85.0',
-                    'Editor-Plugin-Version': 'copilot/1.144.0',
-                    'User-Agent': 'GithubCopilot/1.144.0'
+            // Note: GitHub Copilot API requires special authentication
+            // For now, we'll use a fallback approach
+            let sessionToken = this.token;
+            
+            try {
+                const tokenResponse = await fetch('https://api.github.com/copilot_internal/v2/token', {
+                    headers: {
+                        'Authorization': `token ${this.token}`,
+                        'Editor-Version': 'vscode/1.85.0',
+                        'Editor-Plugin-Version': 'copilot/1.144.0',
+                        'User-Agent': 'GithubCopilot/1.144.0'
+                    }
+                });
+
+                if (tokenResponse.ok) {
+                    const data = await tokenResponse.json();
+                    sessionToken = data.token;
+                } else {
+                    console.warn('[COPILOT VISION] ⚠️ Could not get session token, using direct token');
                 }
-            });
-
-            if (!tokenResponse.ok) {
-                throw new Error(`Failed to authenticate with Copilot: ${tokenResponse.status}`);
+            } catch (e) {
+                console.warn('[COPILOT VISION] ⚠️ Token refresh failed, using direct token');
             }
-
-            const { token: sessionToken } = await tokenResponse.json();
 
             // Step 2: Vision Analysis via Chat Completions with image
             const systemPrompt = `You are GRISHA, the Security Guardian of the ATLAS System.
@@ -207,6 +216,20 @@ Return JSON:
 
         } catch (error: any) {
             console.error('[COPILOT VISION] ❌ Error:', error.message);
+            console.warn('[COPILOT VISION] ⚠️ Falling back to Gemini Vision');
+            
+            // Fallback to Gemini Vision
+            try {
+                const { GeminiVisionProvider } = await import('./gemini-vision');
+                const geminiKey = process.env.GEMINI_API_KEY || process.env.GEMINI_LIVE_API_KEY;
+                if (geminiKey) {
+                    const geminiProvider = new GeminiVisionProvider(geminiKey);
+                    return await geminiProvider.analyzeImage(request);
+                }
+            } catch (fallbackError) {
+                console.error('[COPILOT VISION] ❌ Fallback to Gemini also failed:', fallbackError);
+            }
+            
             throw error;
         }
     }
