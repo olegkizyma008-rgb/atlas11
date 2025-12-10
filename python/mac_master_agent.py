@@ -172,107 +172,38 @@ def generate_applescript_with_llm(task: str) -> str:
 
 
 def generate_applescript_template(task: str) -> str:
-    """Генерувати AppleScript з шаблонів"""
+    """Генерувати AppleScript з RAG бази знань"""
     
-    task_lower = task.lower()
+    # Спочатку спробуємо знайти рішення в RAG
+    rag_context = search_rag(task, k=5)
     
-    # Safari + Google
-    if ("safari" in task_lower or "сафарі" in task_lower) and ("google" in task_lower or "гугл" in task_lower):
-        return """tell application "Safari"
-    activate
-end tell
-
-delay 1
-
-tell application "System Events"
-    keystroke "t" using command down
-    delay 0.5
-    keystroke "google.com"
-    keystroke return
-end tell"""
-    
-    # Safari + пошук
-    elif ("safari" in task_lower or "сафарі" in task_lower) and ("пошук" in task_lower or "search" in task_lower):
-        return """tell application "Safari"
-    activate
-end tell
-
-delay 1
-
-tell application "System Events"
-    keystroke "t" using command down
-    delay 0.5
-    keystroke "google.com"
-    keystroke return
-end tell"""
-    
-    # Калькулятор + математика
-    elif ("калькулятор" in task_lower or "calculator" in task_lower) and any(op in task_lower for op in ["перемнож", "помнож", "плюс", "мінус", "ділення", "*", "+", "-", "/"]):
-        # Витяг чисел з завдання
+    if rag_context:
+        # Витяг AppleScript з RAG контексту
         import re
-        numbers = re.findall(r'\d+', task)
-        if len(numbers) >= 2:
-            num1, num2 = numbers[0], numbers[1]
-            return f"""tell application "Calculator"
-    activate
-end tell
-
-delay 1
-
-tell application "System Events"
-    keystroke "{num1}"
-    delay 0.3
-    keystroke "*"
-    delay 0.3
-    keystroke "{num2}"
-    delay 0.3
-    keystroke return
-end tell"""
-        else:
-            return """tell application "Calculator"
-    activate
-end tell"""
+        
+        # Шукаємо AppleScript блоки в RAG результатах
+        applescript_blocks = re.findall(r'```applescript\n(.*?)\n```', rag_context, re.DOTALL)
+        if applescript_blocks:
+            return applescript_blocks[0].strip()
+        
+        # Якщо немає блоків, шукаємо просто код
+        lines = rag_context.split('\n')
+        script_lines = []
+        in_script = False
+        
+        for line in lines:
+            if 'tell application' in line.lower() or in_script:
+                script_lines.append(line)
+                in_script = True
+                if 'end tell' in line.lower():
+                    in_script = False
+        
+        if script_lines:
+            return '\n'.join(script_lines)
     
-    # Finder + Downloads
-    elif ("finder" in task_lower or "файл" in task_lower) and ("downloads" in task_lower or "завантаження" in task_lower):
-        return """tell application "Finder"
-    activate
-    open (path to downloads folder)
-end tell"""
-    
-    # Google + фільм
-    elif "гугл" in task_lower and ("фільм" in task_lower or "хатіко" in task_lower):
-        return """tell application "Safari"
-    activate
-end tell
-
-delay 1
-
-tell application "System Events"
-    keystroke "t" using command down
-    delay 0.5
-    keystroke "google.com"
-    keystroke return
-    delay 3
-    keystroke "хатіко фільм онлайн"
-    keystroke return
-end tell"""
-    
-    # Клип на весь екран
-    elif "клип" in task_lower and ("весь екран" in task_lower or "fullscreen" in task_lower):
-        return """tell application "System Events"
-    keystroke "f" using command down
-end tell"""
-    
-    # Ресурси системи
-    elif "ресурс" in task_lower or "монітор" in task_lower:
-        return """tell application "Activity Monitor"
-    activate
-end tell"""
-    
-    # За замовчуванням
-    else:
-        return """tell application "System Events"
+    # Якщо RAG не знайшов нічого, повертаємо мінімальний скрипт
+    console.print("[yellow]⚠️ RAG не знайшов рішення для завдання[/yellow]")
+    return """tell application "System Events"
     delay 0.5
 end tell"""
 

@@ -23,8 +23,8 @@ def main():
     splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
     texts = splitter.split_documents(docs)
 
-    print("Initializing embeddings (BAAI/bge-small-en-v1.5)...")
-    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-small-en-v1.5")
+    print("Initializing embeddings (BAAI/bge-m3)...")
+    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
     
     print("Creating/Updating Vector Store...")
     # Chroma 0.4+ automatically persists if persist_directory is set
