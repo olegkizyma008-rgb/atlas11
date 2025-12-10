@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-# =============================================================================
-# TETYANA v12 — ATLAS LangGraph Edition (Production)
-# Автор: Кізима Олег Миколайович
-# Україна, 2025 | Всі права захищені ©
-# =============================================================================
 """
-TETYANA v12 — LangGraph + Redis + Vision + Self-healing
-Найкращий автономний агент macOS у світі (грудень 2025)
+Tetyana v12 — Advanced LangGraph with Real LLM Integration
+
+Для складних завдань з реальною генерацією AppleScript через LLM
 """
 
 import os
@@ -16,33 +12,25 @@ import subprocess
 import re
 import datetime
 import json
-import uuid
-import time
-from typing import TypedDict, Optional, Annotated, Sequence
+from typing import TypedDict, Optional
 from pathlib import Path
 
 from rich.console import Console
 
 # LangGraph
 from langgraph.graph import StateGraph, END
-try:
-    from langgraph.checkpoint.redis import RedisSaver
-    REDIS_AVAILABLE = True
-except ImportError:
-    REDIS_AVAILABLE = False
 
 # LangChain
 from langchain_chroma import Chroma
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_core.documents import Document
-from langchain_core.messages import HumanMessage, AIMessage
 
-# Vision
+# Для реальної LLM генерації (опціонально)
 try:
-    import pyautogui
-    VISION_AVAILABLE = True
+    from langchain_openai import ChatOpenAI
+    LLM_AVAILABLE = True
 except ImportError:
-    VISION_AVAILABLE = False
+    LLM_AVAILABLE = False
 
 console = Console()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -54,16 +42,14 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 class AgentState(TypedDict):
     """Стан агента в графі"""
     task: str
-    steps: list
-    current_step_idx: int
-    current_step: str
-    current_code: str
-    messages: Annotated[Sequence[AIMessage | HumanMessage], "list"]
+    plan: str
+    script: str
     execution_result: str
-    error: str
-    screenshot_path: str
-    thread_id: str
+    success: bool
+    attempts: int
+    max_attempts: int
     rag_context: str
+    system_info: dict
 
 
 # ============================================================================
