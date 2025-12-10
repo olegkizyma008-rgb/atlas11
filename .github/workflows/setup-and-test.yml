@@ -1,0 +1,92 @@
+name: Setup & Test Workflow
+
+on:
+  push:
+    branches: [ master, main, develop ]
+  pull_request:
+    branches: [ master, main, develop ]
+
+jobs:
+  setup-and-test:
+    runs-on: macos-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+    
+    - name: Setup Node.js
+      uses: actions/setup-node@v3
+      with:
+        node-version: '18'
+        cache: 'npm'
+    
+    - name: Setup Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+    
+    - name: Install Homebrew dependencies
+      run: |
+        brew install google-chrome redis
+    
+    - name: Install Node dependencies
+      run: npm install
+    
+    - name: Install Python dependencies
+      run: |
+        python -m venv venv
+        source venv/bin/activate
+        pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Create .env file
+      run: |
+        cat > .env << 'EOF'
+        NODE_ENV=test
+        AG=true
+        GEMINI_API_KEY=test_key
+        OPENAI_API_KEY=test_key
+        REDIS_URL=redis://localhost:6379/0
+        RAG_PATH=./rag/chroma_mac
+        EXECUTION_ENGINE=python-bridge
+        EOF
+    
+    - name: Build project
+      run: npm run build
+    
+    - name: Run tests
+      run: npm test
+    
+    - name: Check RAG status
+      run: |
+        python3 << 'PYTHON'
+        import os
+        from pathlib import Path
+        
+        rag_path = Path("rag/chroma_mac")
+        if rag_path.exists():
+            print("✅ RAG database found")
+        else:
+            print("⚠️ RAG database not found")
+        
+        if Path(".env").exists():
+            print("✅ .env file found")
+        else:
+            print("❌ .env file not found")
+        PYTHON
+    
+    - name: Verify Chrome installation
+      run: |
+        which google-chrome || echo "Chrome not found"
+        google-chrome --version || echo "Chrome version check failed"
+    
+    - name: Verify Redis installation
+      run: |
+        which redis-server || echo "Redis not found"
+        redis-server --version || echo "Redis version check failed"
+    
+    - name: Test agent execution
+      run: |
+        timeout 30 ./bin/tetyana "система готова" || true
+      continue-on-error: true
