@@ -5,11 +5,10 @@ import { app } from 'electron'; // Or however we get env paths in this context i
 import { getVisionConfig, getProviderConfig } from '../../kontur/providers/config';
 import { getGrishaVisionService } from '../../kontur/vision/GrishaVisionService';
 
-// Define the path to the python venv and script
-// Now using paths within the repository for better portability
+// Define the path to the binary and configuration
+// Using the compiled binary for better reliability and portability
 const PROJECT_ROOT = path.join(__dirname, '../../..');
-const PYTHON_PATH = path.join(PROJECT_ROOT, 'python/venv/bin/python3');
-const AGENT_SCRIPT_PATH = path.join(PROJECT_ROOT, 'python/mac_master_agent.py');
+const TETYANA_BINARY = path.join(PROJECT_ROOT, 'bin/tetyana');
 const ENV_FILE_PATH = path.join(PROJECT_ROOT, '.env');
 const RAG_DB_PATH = path.join(PROJECT_ROOT, 'rag/chroma_mac');
 const RAG_KNOWLEDGE_BASE = path.join(PROJECT_ROOT, 'rag/macOS-automation-knowledge-base');
@@ -49,7 +48,7 @@ export class OpenInterpreterBridge {
      * @returns A promise that resolves when the agent completes
      */
     async execute(prompt: string): Promise<string> {
-        return this.executeWithScript(AGENT_SCRIPT_PATH, prompt);
+        return this.executeWithBinary(prompt);
     }
 
     /**
@@ -60,9 +59,9 @@ export class OpenInterpreterBridge {
     }
 
     /**
-     * Internal method to execute with a specific script
+     * Internal method to execute using the Tetyana binary
      */
-    private executeWithScript(scriptPath: string, prompt: string): Promise<string> {
+    private executeWithBinary(prompt: string): Promise<string> {
         return new Promise((resolve, reject) => {
             console.log(`[OpenInterpreter] Starting task: ${prompt}`);
 
@@ -86,7 +85,7 @@ export class OpenInterpreterBridge {
                 PYTHONUNBUFFERED: '1'
             };
 
-            this.process = spawn(PYTHON_PATH, [scriptPath, prompt], {
+            this.process = spawn(TETYANA_BINARY, [prompt], {
                 env,
                 cwd: PROJECT_ROOT
             });
@@ -180,11 +179,13 @@ export class OpenInterpreterBridge {
     }
 
     /**
-     * Checks if the python environment seems valid
+     * Checks if the Tetyana binary is available
      */
     static checkEnvironment(): boolean {
-        // Tetyana v12 LangGraph Edition - Only version
-        return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
+        // Tetyana v12 LangGraph Edition - Check binary availability
+        const projectRoot = path.join(__dirname, '../../..');
+        const binaryPath = path.join(projectRoot, 'bin/tetyana');
+        return fs.existsSync(binaryPath);
     }
 
     /**

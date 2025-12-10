@@ -3951,8 +3951,7 @@ const GrishaVisionService$1 = /* @__PURE__ */ Object.freeze(/* @__PURE__ */ Obje
   getGrishaVisionService
 }, Symbol.toStringTag, { value: "Module" }));
 const PROJECT_ROOT = path.join(__dirname, "../../..");
-const PYTHON_PATH = path.join(PROJECT_ROOT, "python/venv/bin/python3");
-const AGENT_SCRIPT_PATH = path.join(PROJECT_ROOT, "python/mac_master_agent.py");
+const TETYANA_BINARY = path.join(PROJECT_ROOT, "bin/tetyana");
 const ENV_FILE_PATH = path.join(PROJECT_ROOT, ".env");
 path.join(PROJECT_ROOT, "rag/chroma_mac");
 path.join(PROJECT_ROOT, "rag/macOS-automation-knowledge-base");
@@ -3986,7 +3985,7 @@ class OpenInterpreterBridge {
    * @returns A promise that resolves when the agent completes
    */
   async execute(prompt) {
-    return this.executeWithScript(AGENT_SCRIPT_PATH, prompt);
+    return this.executeWithBinary(prompt);
   }
   /**
    * Alias for execute() - LangGraph version
@@ -3995,9 +3994,9 @@ class OpenInterpreterBridge {
     return this.execute(prompt);
   }
   /**
-   * Internal method to execute with a specific script
+   * Internal method to execute using the Tetyana binary
    */
-  executeWithScript(scriptPath, prompt) {
+  executeWithBinary(prompt) {
     return new Promise((resolve, reject) => {
       console.log(`[OpenInterpreter] Starting task: ${prompt}`);
       const envFileVars = loadEnvFile();
@@ -4012,7 +4011,7 @@ class OpenInterpreterBridge {
         // Ensure Python uses unbuffered output
         PYTHONUNBUFFERED: "1"
       };
-      this.process = child_process.spawn(PYTHON_PATH, [scriptPath, prompt], {
+      this.process = child_process.spawn(TETYANA_BINARY, [prompt], {
         env,
         cwd: PROJECT_ROOT
       });
@@ -4082,10 +4081,12 @@ FIX THIS.` : prompt;
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
   /**
-   * Checks if the python environment seems valid
+   * Checks if the Tetyana binary is available
    */
   static checkEnvironment() {
-    return fs.existsSync(PYTHON_PATH) && fs.existsSync(AGENT_SCRIPT_PATH);
+    const projectRoot = path.join(__dirname, "../../..");
+    const binaryPath = path.join(projectRoot, "bin/tetyana");
+    return fs.existsSync(binaryPath);
   }
   /**
    * Get version info
