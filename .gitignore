@@ -26,6 +26,8 @@ config.yaml
 # But keep venv for development if needed
 !/python/venv/
 !/python/.venv/
+# Ignore Python cache in python directory
+/python/__pycache__/
 
 # Python cache and build artifacts
 __pycache__/
