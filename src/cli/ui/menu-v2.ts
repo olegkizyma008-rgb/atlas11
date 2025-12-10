@@ -95,6 +95,7 @@ export async function mainMenuV2(): Promise<void> {
             { name: `${chalk.green('●')} System Health`, value: 'health' },
             { name: `${chalk.green('●')} RAG Status & Search`, value: 'rag' },
             { name: chalk.cyan('◆─────────────────────────────────────────────────◆'), value: '_sep2', disabled: true },
+            { name: `${chalk.green('●')} Build & Deploy`, value: 'build' },
             { name: `${chalk.green('●')} Run macOS Agent`, value: 'run_agent' },
             { name: `${chalk.green('●')} Test Tetyana`, value: 'test_tetyana' },
             { name: chalk.yellow('✕ Exit'), value: 'exit' }
@@ -118,6 +119,8 @@ export async function mainMenuV2(): Promise<void> {
             await runHealthCheck();
         } else if (action === 'rag') {
             await ragMenu();
+        } else if (action === 'build') {
+            await buildAndDeployMenu();
         } else if (action === 'test_tetyana') {
             await testTetyanaMode();
         } else if (action === 'run_agent') {
@@ -655,6 +658,93 @@ async function runPythonAgent(): Promise<void> {
         }
     } catch (error: any) {
         console.log(chalk.red(`  ✗ Error: ${error.message}`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * Build and Deploy Menu
+ */
+async function buildAndDeployMenu(): Promise<void> {
+    while (true) {
+        showHeader('Build & Deploy');
+        
+        const choices = [
+            { name: `${chalk.green('●')} Build Project       ${chalk.gray('npm run build')}`, value: 'build' },
+            { name: `${chalk.green('●')} Dev Mode            ${chalk.gray('npm run dev')}`, value: 'dev' },
+            { name: `${chalk.green('●')} Rebuild Binary      ${chalk.gray('Copy Python organs')}`, value: 'rebuild_binary' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
+        ];
+
+        const action = await select('', choices);
+        
+        if (action === 'back') return;
+        
+        if (action === 'build') {
+            await runBuild();
+        } else if (action === 'dev') {
+            await runDev();
+        } else if (action === 'rebuild_binary') {
+            await rebuildBinary();
+        }
+    }
+}
+
+/**
+ * Run npm build
+ */
+async function runBuild(): Promise<void> {
+    showHeader('Building Project');
+    console.log(chalk.gray('  Running: npm run build\n'));
+    
+    const { execSync } = require('child_process');
+    try {
+        const spinner = ora('Building...').start();
+        const output = execSync('npm run build', { encoding: 'utf-8', stdio: 'pipe' });
+        spinner.succeed('Build completed successfully');
+        console.log(chalk.green('\n  ✓ Project built and ready for deployment\n'));
+        await new Promise(r => setTimeout(r, 1500));
+    } catch (error: any) {
+        console.log(chalk.red(`\n  ✗ Build failed: ${error.message}\n`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * Run npm dev
+ */
+async function runDev(): Promise<void> {
+    showHeader('Development Mode');
+    console.log(chalk.gray('  Running: npm run dev\n'));
+    console.log(chalk.yellow('  Note: Press Ctrl+C to stop\n'));
+    
+    const { execSync } = require('child_process');
+    try {
+        execSync('npm run dev', { stdio: 'inherit' });
+    } catch (error: any) {
+        console.log(chalk.gray('\n  Development mode stopped\n'));
+    }
+}
+
+/**
+ * Rebuild Binary (copy Python organs)
+ */
+async function rebuildBinary(): Promise<void> {
+    showHeader('Rebuild Binary');
+    console.log(chalk.gray('  Copying Python organs to out/kontur/\n'));
+    
+    const { execSync } = require('child_process');
+    try {
+        const spinner = ora('Rebuilding...').start();
+        execSync('mkdir -p out/kontur/organs out/kontur/ag', { stdio: 'pipe' });
+        execSync('cp src/kontur/organs/*.py out/kontur/organs/', { stdio: 'pipe' });
+        execSync('cp src/kontur/ag/*.py out/kontur/ag/', { stdio: 'pipe' });
+        spinner.succeed('Binary rebuilt successfully');
+        console.log(chalk.green('\n  ✓ Python organs copied to out/\n'));
+        await new Promise(r => setTimeout(r, 1500));
+    } catch (error: any) {
+        console.log(chalk.red(`\n  ✗ Rebuild failed: ${error.message}\n`));
         await new Promise(r => setTimeout(r, 2000));
     }
 }
