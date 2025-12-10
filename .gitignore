@@ -24,10 +24,10 @@ config.yaml
 /python/venv/
 /python/.venv/
 /python/env/
-/python/__pycache__/
-/python/*.pyc
-/python/*.pyo
-/python/*.pyd
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
 /python/.Python
 /python/build/
 /python/develop-eggs/
