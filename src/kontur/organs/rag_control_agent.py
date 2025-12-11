@@ -124,8 +124,19 @@ class RAGControlAgent:
         
         return result
     
-    def search_rag(self, query: str, limit: int = 5, doc_type: str = None) -> Dict[str, Any]:
-        """Hybrid search: vector (MLX GPU) + BM25 keyword search with metadata filtering + reranking"""
+    def expand_query(self, query: str) -> List[str]:
+        """Розширює запит для кращого пошуку (query expansion)"""
+        variations = [
+            query,
+            f"How to {query}",
+            f"AppleScript for {query}",
+            f"macOS automation {query}",
+            f"tell application {query}",
+        ]
+        return variations
+    
+    def search_rag(self, query: str, limit: int = 5, doc_type: str = None, use_expansion: bool = True) -> Dict[str, Any]:
+        """Hybrid search: vector (MLX GPU) + BM25 + rerank + metadata filter + query expansion"""
         if not self.collections:
             return {"status": "error", "message": "No collections found", "results": []}
         
@@ -133,94 +144,96 @@ class RAGControlAgent:
         try:
             start_time = time.time()
             
-            # 1. Vector search (MLX GPU or HuggingFace CPU)
-            query_vector = self.embed_text([query])[0]
-            embedding_time = time.time() - start_time
+            # 0. Query expansion для кращого пошуку
+            queries = self.expand_query(query) if use_expansion else [query]
             
-            vector_start = time.time()
-            vector_results = col.query(query_embeddings=[query_vector], n_results=limit * 3)
-            vector_time = time.time() - vector_start
+            # 1. Vector search для всіх варіантів запиту
+            seen_docs = set()
+            documents = []
+            embedding_time = 0
+            vector_time = 0
             
-            # 2. BM25 keyword search (for exact matches like "AppleScript", "keystroke")
+            for expanded_q in queries:
+                emb_start = time.time()
+                query_vector = self.embed_text([expanded_q])[0]
+                embedding_time += time.time() - emb_start
+                
+                vec_start = time.time()
+                vector_results = col.query(query_embeddings=[query_vector], n_results=limit * 3)
+                vector_time += time.time() - vec_start
+                
+                # Process vector results
+                if vector_results["documents"] and vector_results["documents"][0]:
+                    for doc, distance, metadata in zip(
+                        vector_results["documents"][0],
+                        vector_results["distances"][0],
+                        vector_results.get("metadatas", [[]])[0] if vector_results.get("metadatas") else [{}] * len(vector_results["documents"][0])
+                    ):
+                        doc_hash = hash(doc)
+                        if doc_hash not in seen_docs:
+                            seen_docs.add(doc_hash)
+                            similarity = 1 - distance
+                            doc_type_val = metadata.get("type", "unknown") if metadata else "unknown"
+                            
+                            # Filter by type if specified
+                            if doc_type and doc_type_val != doc_type:
+                                continue
+                            
+                            if similarity > 0.05:
+                                documents.append({
+                                    "text": doc[:200] + "..." if len(doc) > 200 else doc,
+                                    "similarity": round(similarity, 4),
+                                    "source": metadata.get("source", "unknown") if metadata else "unknown",
+                                    "type": doc_type_val,
+                                    "file_context": metadata.get("file_context", "") if metadata else "",
+                                    "search_method": "vector",
+                                })
+            
+            # 2. BM25 keyword search
             bm25_start = time.time()
             bm25_results = None
             try:
                 bm25_results = col.query(query_texts=[query], n_results=limit * 3)
+                
+                if bm25_results and bm25_results["documents"] and bm25_results["documents"][0]:
+                    for doc, distance, metadata in zip(
+                        bm25_results["documents"][0],
+                        bm25_results["distances"][0],
+                        bm25_results.get("metadatas", [[]])[0] if bm25_results.get("metadatas") else [{}] * len(bm25_results["documents"][0])
+                    ):
+                        doc_hash = hash(doc)
+                        if doc_hash not in seen_docs:
+                            seen_docs.add(doc_hash)
+                            similarity = 1 - distance
+                            doc_type_val = metadata.get("type", "unknown") if metadata else "unknown"
+                            
+                            if doc_type and doc_type_val != doc_type:
+                                continue
+                            
+                            if similarity > 0.05:
+                                documents.append({
+                                    "text": doc[:200] + "..." if len(doc) > 200 else doc,
+                                    "similarity": round(similarity, 4),
+                                    "source": metadata.get("source", "unknown") if metadata else "unknown",
+                                    "type": doc_type_val,
+                                    "file_context": metadata.get("file_context", "") if metadata else "",
+                                    "search_method": "bm25",
+                                })
             except:
                 pass
-            bm25_time = time.time() - bm25_start if bm25_results else 0
+            bm25_time = time.time() - bm25_start
             
-            # 3. Merge and deduplicate results with metadata filtering
-            seen_docs = set()
-            documents = []
-            
-            # Process vector results
-            if vector_results["documents"] and vector_results["documents"][0]:
-                for doc, distance, metadata in zip(
-                    vector_results["documents"][0],
-                    vector_results["distances"][0],
-                    vector_results.get("metadatas", [[]])[0] if vector_results.get("metadatas") else [{}] * len(vector_results["documents"][0])
-                ):
-                    doc_hash = hash(doc)
-                    if doc_hash not in seen_docs:
-                        seen_docs.add(doc_hash)
-                        similarity = 1 - distance
-                        doc_type_val = metadata.get("type", "unknown") if metadata else "unknown"
-                        
-                        # Filter by type if specified (AppleScript, PyObjC, JXA, etc.)
-                        if doc_type and doc_type_val != doc_type:
-                            continue
-                        
-                        if similarity > 0.05:  # Lower threshold for broader search
-                            documents.append({
-                                "text": doc[:200] + "..." if len(doc) > 200 else doc,
-                                "similarity": round(similarity, 4),
-                                "source": metadata.get("source", "unknown") if metadata else "unknown",
-                                "type": doc_type_val,
-                                "search_method": "vector",
-                            })
-            
-            # Process BM25 results (if available)
-            if bm25_results and bm25_results["documents"] and bm25_results["documents"][0]:
-                for doc, distance, metadata in zip(
-                    bm25_results["documents"][0],
-                    bm25_results["distances"][0],
-                    bm25_results.get("metadatas", [[]])[0] if bm25_results.get("metadatas") else [{}] * len(bm25_results["documents"][0])
-                ):
-                    doc_hash = hash(doc)
-                    if doc_hash not in seen_docs:
-                        seen_docs.add(doc_hash)
-                        similarity = 1 - distance
-                        doc_type_val = metadata.get("type", "unknown") if metadata else "unknown"
-                        
-                        # Filter by type if specified
-                        if doc_type and doc_type_val != doc_type:
-                            continue
-                        
-                        if similarity > 0.05:
-                            documents.append({
-                                "text": doc[:200] + "..." if len(doc) > 200 else doc,
-                                "similarity": round(similarity, 4),
-                                "source": metadata.get("source", "unknown") if metadata else "unknown",
-                                "type": doc_type_val,
-                                "search_method": "bm25",
-                            })
-            
-            # 4. Reranking with FlashRank (GPU-accelerated on M1 Max)
+            # 3. Reranking with FlashRank
             rerank_start = time.time()
             reranked_docs = documents
             try:
                 from flashrank import Ranker
                 ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
                 
-                # Prepare passages for reranking
                 passages = [{"id": i, "title": "", "text": doc["text"]} for i, doc in enumerate(documents)]
-                
-                # Rerank
                 ranked = ranker.rank(query, passages, batch_size=32)
                 reranked_docs = [documents[int(result["id"])] for result in ranked[:limit]]
-            except Exception as e:
-                # Fallback to similarity sorting if reranking fails
+            except Exception:
                 reranked_docs = sorted(documents, key=lambda x: x["similarity"], reverse=True)[:limit]
             
             rerank_time = time.time() - rerank_start
@@ -228,6 +241,8 @@ class RAGControlAgent:
             return {
                 "status": "success",
                 "query": query,
+                "query_expansion": use_expansion,
+                "expanded_queries": len(queries),
                 "results_count": len(reranked_docs),
                 "documents": reranked_docs,
                 "embedding_time_ms": round(embedding_time * 1000, 2),
@@ -236,8 +251,7 @@ class RAGControlAgent:
                 "rerank_time_ms": round(rerank_time * 1000, 2),
                 "embedding_model": EMBEDDING_MODEL,
                 "acceleration": "MLX (GPU)" if self.use_mlx else "CPU",
-                "search_type": "hybrid (vector + BM25 + rerank + metadata filter)",
-                "filter_type": doc_type,
+                "search_type": "hybrid (vector + BM25 + rerank + metadata + expansion)",
             }
         except Exception as e:
             return {"status": "error", "message": str(e), "results": []}
