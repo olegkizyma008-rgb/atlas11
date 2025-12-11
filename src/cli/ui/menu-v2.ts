@@ -1395,17 +1395,58 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const pythonPackages = [
+        // Core RAG
         { pkg: 'langchain', label: 'LangChain', critical: true },
         { pkg: 'chromadb', label: 'ChromaDB', critical: true },
+        { pkg: 'langchain_core', label: 'LangChain Core', critical: true },
+        { pkg: 'langchain_chroma', label: 'LangChain Chroma', critical: true },
+        { pkg: 'langchain_huggingface', label: 'LangChain HuggingFace', critical: true },
+        { pkg: 'langchain_text_splitters', label: 'LangChain Text Splitters', critical: true },
+        
+        // Hybrid Search & Reranking
         { pkg: 'flashrank', label: 'FlashRank (Reranking)', critical: true },
+        { pkg: 'bm25s', label: 'BM25S (Keyword Search)', critical: true },
+        
+        // GPU Acceleration
         { pkg: 'mlx_lm', label: 'MLX (GPU Acceleration)', critical: true },
-        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: true }
+        { pkg: 'mlx', label: 'MLX Core', critical: true },
+        
+        // macOS Automation
+        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: true },
+        { pkg: 'pyobjc_framework_Accessibility', label: 'PyObjC Accessibility Framework', critical: true },
+        { pkg: 'pyobjc_framework_Quartz', label: 'PyObjC Quartz Framework', critical: true },
+        
+        // Embeddings
+        { pkg: 'sentence_transformers', label: 'Sentence Transformers', critical: true },
+        { pkg: 'huggingface_hub', label: 'HuggingFace Hub', critical: true },
+        
+        // LangGraph
+        { pkg: 'langgraph', label: 'LangGraph', critical: true },
+        
+        // Vision & UI
+        { pkg: 'PIL', label: 'Pillow (Image Processing)', critical: false },
+        { pkg: 'pyautogui', label: 'PyAutoGUI (UI Automation)', critical: false },
+        
+        // Redis
+        { pkg: 'redis', label: 'Redis Client', critical: true },
+        
+        // Core
+        { pkg: 'rich', label: 'Rich (CLI UI)', critical: true },
+        { pkg: 'dotenv', label: 'Python Dotenv', critical: true },
+        { pkg: 'pydantic', label: 'Pydantic (Validation)', critical: true }
     ];
 
     for (const pkg of pythonPackages) {
         const pkgOk = checkPythonPackage(pkg.pkg);
         checks.push({ label: pkg.label, ok: pkgOk, critical: pkg.critical, category: 'python' });
-        const status = pkgOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        let status;
+        if (pkgOk) {
+            status = chalk.green('✓ OK');
+        } else if (pkg.critical) {
+            status = chalk.red('✗ MISSING');
+        } else {
+            status = chalk.yellow('⊘ OPTIONAL');
+        }
         console.log(`  │ ${chalk.green('●')} ${pkg.label.padEnd(28)} ${status}`);
     }
 
