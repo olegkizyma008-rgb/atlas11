@@ -173,7 +173,12 @@ Allowed actions ONLY:
 User request: ${task}
 Respond with the actions you perform and outcomes.`;
 
-        const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'rag-control' };
+        const env = { 
+            ...process.env, 
+            VISION_DISABLE: '1', 
+            AGENT_SCOPE: 'rag-control',
+            RAG_EMBEDDING_MODEL: 'BAAI/bge-m3'
+        };
         const cmd = './bin/tetyana';
         const args = [constrainedPrompt];
 
@@ -199,6 +204,9 @@ async function konturWorkflowAudit(): Promise<void> {
     showHeader('KONTUR Workflow Audit');
     console.log(chalk.gray('  Comprehensive KONTUR protocol & module compliance audit\n'));
 
+    // Set RAG embedding model for this agent
+    process.env.RAG_EMBEDDING_MODEL = 'BAAI/bge-m3';
+    
     const config = configManager.getAll();
     const konturEndpoints = [
         { key: 'KONTUR_CORE_URL', label: 'KONTUR Core URL' },
@@ -295,7 +303,7 @@ Analyze the codebase for KPP (KONTUR Protocol) compliance:
 Constraints: Analyze only, do not modify code.
 Report findings concisely.`;
 
-    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-protocol-audit' };
+    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-protocol-audit', RAG_EMBEDDING_MODEL: 'BAAI/bge-m3' };
     const spinner = ora('Auditing protocol compliance...').start();
     const proc = spawn('./bin/tetyana', [prompt], { env, stdio: 'pipe' });
     proc.stdout.on('data', d => {
@@ -351,7 +359,7 @@ Tasks:
 Constraints: Do NOT perform arbitrary macOS automation; only inspect/analyze KONTUR workflow state.
 Respond with detailed findings, architecture diagram (text), and remediation steps.`;
 
-    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-audit' };
+    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-audit', RAG_EMBEDDING_MODEL: 'BAAI/bge-m3' };
     const spinner = ora('Auditing KONTUR workflow...').start();
     const proc = spawn('./bin/tetyana', [prompt], { env, stdio: 'pipe' });
     proc.stdout.on('data', d => {
@@ -962,8 +970,8 @@ async function configureExecutionEngine(): Promise<void> {
 
         if (action === 'engine') {
             const engine = await select('Select Engine', [
-                { name: `Python Bridge    ${chalk.gray('Advanced automation via Open Interpreter')}`, value: 'python-bridge' },
-                { name: `Native (MCP)     ${chalk.gray('Standard Atlas MCP execution')}`, value: 'native' },
+                { name: 'Python Bridge    ', value: 'python-bridge' },
+                { name: 'Native (MCP)     ', value: 'native' },
                 { name: 'Back', value: 'back' }
             ]);
 
@@ -1423,7 +1431,11 @@ async function runPythonAgent(): Promise<void> {
     }
 
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
-    const env = { ...process.env, VISION_DISABLE: useVision ? '0' : '1' };
+    const env = { 
+        ...process.env, 
+        VISION_DISABLE: useVision ? '0' : '1',
+        RAG_EMBEDDING_MODEL: 'BAAI/bge-m3'
+    };
 
     // Streamed execution via ./bin/tetyana to show live logs
     const cmd = './bin/tetyana';
