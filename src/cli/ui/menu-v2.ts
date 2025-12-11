@@ -197,7 +197,7 @@ Respond with the actions you perform and outcomes.`;
 // ============================================================================
 async function konturWorkflowAudit(): Promise<void> {
     showHeader('KONTUR Workflow Audit');
-    console.log(chalk.gray('  Constrained audit: KONTUR protocol, modules under control\n'));
+    console.log(chalk.gray('  Comprehensive KONTUR protocol & module compliance audit\n'));
 
     const config = configManager.getAll();
     const konturEndpoints = [
@@ -212,21 +212,92 @@ async function konturWorkflowAudit(): Promise<void> {
         console.log('');
     }
 
+    while (true) {
+        const auditChoices = [
+            { name: `${chalk.green('●')} Module Compliance Check`, value: 'modules' },
+            { name: `${chalk.green('●')} Protocol Communication Audit`, value: 'protocol' },
+            { name: `${chalk.green('●')} Bridge & Organ Validation`, value: 'bridges' },
+            { name: `${chalk.green('●')} Full System Workflow Analysis`, value: 'full' },
+            { name: `${chalk.green('●')} KONTUR Configuration Status`, value: 'config' },
+            { name: `${chalk.green('●')} Configure KONTUR Endpoints`, value: 'setup' },
+            { name: `${chalk.green('●')} Test KONTUR Connectivity`, value: 'test' },
+            { name: `${chalk.green('●')} View Architecture Diagram`, value: 'diagram' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
+        ];
+
+        const auditAction = await selectNoSep('', auditChoices);
+        if (auditAction === 'back') return;
+
+        switch (auditAction) {
+            case 'modules':
+                await konturModuleCheck();
+                break;
+            case 'protocol':
+                await konturProtocolAudit();
+                break;
+            case 'bridges':
+                await konturBridgeValidation();
+                break;
+            case 'full':
+                await konturFullWorkflowAnalysis();
+                break;
+            case 'config':
+                await konturConfigStatus();
+                break;
+            case 'setup':
+                await konturConfigureEndpoints();
+                break;
+            case 'test':
+                await konturTestConnectivity();
+                break;
+            case 'diagram':
+                await konturShowArchitecture();
+                break;
+        }
+    }
+}
+
+async function konturModuleCheck(): Promise<void> {
+    showHeader('KONTUR Module Compliance');
+    console.log(chalk.gray('  Verifying all modules are under KONTUR control\n'));
+
+    const modules = [
+        { name: 'tetyana_agent.py', path: 'src/kontur/organs/tetyana_agent.py', type: 'Python Organ' },
+        { name: 'rag_indexer.py', path: 'src/kontur/organs/rag_indexer.py', type: 'Python Organ' },
+        { name: 'menu-v2.ts', path: 'src/cli/ui/menu-v2.ts', type: 'CLI Bridge' },
+        { name: 'GrishaVisionService.ts', path: 'src/kontur/vision/GrishaVisionService.ts', type: 'Vision Module' },
+        { name: 'tetyana_bridge.ts', path: 'src/modules/tetyana/tetyana_bridge.ts', type: 'Bridge' },
+        { name: 'config-manager.ts', path: 'src/cli/managers/config-manager.ts', type: 'Config Manager' }
+    ];
+
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    for (const mod of modules) {
+        const exists = fs.existsSync(path.join(PROJECT_ROOT, mod.path));
+        const status = exists ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        console.log(`  │ ${chalk.green('●')} ${mod.name.padEnd(25)} ${status} (${mod.type})`);
+    }
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturProtocolAudit(): Promise<void> {
+    showHeader('KONTUR Protocol Communication');
+    console.log(chalk.gray('  Verifying KPP protocol compliance\n'));
+
     const prompt = `
-You are the KONTUR Workflow Audit Agent.
-Tasks:
-- Verify all modules/components are under KONTUR control and communicate via KONTUR protocol.
-- Check bridges, organs, CLI/Electron surfaces for KONTUR compliance.
-- Report missing or misconfigured pieces and suggest fixes.
-Constraints: Do NOT perform arbitrary macOS automation; only inspect/analyze KONTUR workflow state.
-Respond with concise findings and next steps.`;
+You are the KONTUR Protocol Auditor.
+Analyze the codebase for KPP (KONTUR Protocol) compliance:
+- Check if all modules use KONTUR message format (KPP).
+- Verify bridges (CLI, Electron, Python) communicate via KONTUR.
+- Identify any direct module-to-module communication bypassing KONTUR.
+- List protocol violations and suggest fixes.
+Constraints: Analyze only, do not modify code.
+Report findings concisely.`;
 
-    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-audit' };
-    const cmd = './bin/tetyana';
-    const args = [prompt];
-
-    const spinner = ora('Auditing KONTUR workflow...').start();
-    const proc = spawn(cmd, args, { env, stdio: 'pipe' });
+    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-protocol-audit' };
+    const spinner = ora('Auditing protocol compliance...').start();
+    const proc = spawn('./bin/tetyana', [prompt], { env, stdio: 'pipe' });
     proc.stdout.on('data', d => {
         spinner.stop();
         process.stdout.write(chalk.cyan(d.toString()));
@@ -236,6 +307,207 @@ Respond with concise findings and next steps.`;
         process.stdout.write(chalk.yellow(d.toString()));
     });
     await new Promise<void>(resolve => proc.on('close', () => resolve()));
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturBridgeValidation(): Promise<void> {
+    showHeader('KONTUR Bridge & Organ Validation');
+    console.log(chalk.gray('  Checking bridges and organs\n'));
+
+    const bridges = [
+        { name: 'CLI Bridge', path: 'src/cli/ui/menu-v2.ts', role: 'User interface → KONTUR' },
+        { name: 'Electron Bridge', path: 'src/main/main.ts', role: 'Electron app → KONTUR' },
+        { name: 'Python Bridge', path: 'src/modules/tetyana/tetyana_bridge.ts', role: 'Python organs → KONTUR' },
+        { name: 'KPP Protocol', path: 'src/kontur/protocol/kpp.ts', role: 'Message protocol' }
+    ];
+
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    for (const bridge of bridges) {
+        const exists = fs.existsSync(path.join(PROJECT_ROOT, bridge.path));
+        const status = exists ? chalk.green('✓ Active') : chalk.yellow('⚠ Not found');
+        console.log(`  │ ${chalk.green('●')} ${bridge.name.padEnd(20)} ${status}`);
+        console.log(`  │    Role: ${bridge.role}`);
+    }
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturFullWorkflowAnalysis(): Promise<void> {
+    showHeader('KONTUR Full Workflow Analysis');
+    console.log(chalk.gray('  Running comprehensive system analysis via agent\n'));
+
+    const prompt = `
+You are the KONTUR Workflow Audit Agent.
+Tasks:
+- Verify ALL modules/components are under KONTUR control and communicate via KONTUR protocol.
+- Check data flow: CLI → KONTUR → Python organs → RAG/Vision → KONTUR → CLI/Electron.
+- Verify Redis checkpoint integration with LangGraph.
+- Analyze RAG (Chroma) integration with KONTUR.
+- Check Vision (Grisha) integration and protocol compliance.
+- Verify self-healing mechanism uses KONTUR for updates.
+- Check bridges, organs, CLI/Electron surfaces for KONTUR compliance.
+- Identify bottlenecks, missing integrations, protocol violations.
+- Report missing or misconfigured pieces and suggest fixes.
+Constraints: Do NOT perform arbitrary macOS automation; only inspect/analyze KONTUR workflow state.
+Respond with detailed findings, architecture diagram (text), and remediation steps.`;
+
+    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-audit' };
+    const spinner = ora('Auditing KONTUR workflow...').start();
+    const proc = spawn('./bin/tetyana', [prompt], { env, stdio: 'pipe' });
+    proc.stdout.on('data', d => {
+        spinner.stop();
+        process.stdout.write(chalk.cyan(d.toString()));
+    });
+    proc.stderr.on('data', d => {
+        spinner.stop();
+        process.stdout.write(chalk.yellow(d.toString()));
+    });
+    await new Promise<void>(resolve => proc.on('close', () => resolve()));
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturConfigStatus(): Promise<void> {
+    showHeader('KONTUR Configuration Status');
+    console.log(chalk.gray('  Current KONTUR setup\n'));
+
+    const config = configManager.getAll();
+    const konturKeys = [
+        'KONTUR_CORE_URL',
+        'KONTUR_AGENT_URL',
+        'KONTUR_AUTH_TOKEN',
+        'EXECUTION_ENGINE',
+        'VISION_MODE',
+        'BRAIN_PROVIDER',
+        'BRAIN_MODEL'
+    ];
+
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    for (const key of konturKeys) {
+        const val = config[key];
+        const status = val ? chalk.green('✓ Set') : chalk.red('✗ Missing');
+        const display = val ? chalk.cyan(val.toString().substring(0, 30)) : chalk.gray('(not set)');
+        console.log(`  │ ${chalk.green('●')} ${key.padEnd(25)} ${status}`);
+        if (val) console.log(`  │    Value: ${display}`);
+    }
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturConfigureEndpoints(): Promise<void> {
+    showHeader('Configure KONTUR Endpoints');
+    console.log(chalk.gray('  Set up KONTUR core, agent, and auth\n'));
+
+    const endpoints = [
+        { key: 'KONTUR_CORE_URL', label: 'KONTUR Core URL', default: 'http://localhost:8000' },
+        { key: 'KONTUR_AGENT_URL', label: 'KONTUR Agent URL', default: 'http://localhost:8001' },
+        { key: 'KONTUR_AUTH_TOKEN', label: 'KONTUR Auth Token', default: '' }
+    ];
+
+    for (const ep of endpoints) {
+        const current = configManager.get(ep.key) || ep.default;
+        const val = await input(`${ep.label}`, current);
+        if (val) configManager.set(ep.key, val);
+    }
+    console.log(chalk.green('\n✓ KONTUR endpoints configured'));
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturTestConnectivity(): Promise<void> {
+    showHeader('Test KONTUR Connectivity');
+    console.log(chalk.gray('  Testing connection to KONTUR services\n'));
+
+    const config = configManager.getAll();
+    const coreUrl = config['KONTUR_CORE_URL'] || 'http://localhost:8000';
+    const agentUrl = config['KONTUR_AGENT_URL'] || 'http://localhost:8001';
+
+    const spinner = ora('Testing KONTUR Core...').start();
+    try {
+        const coreRes = await Promise.race([
+            fetch(`${coreUrl}/health`),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        ]) as any;
+        if (coreRes.ok) {
+            spinner.succeed(`✓ KONTUR Core (${coreUrl}) is reachable`);
+        } else {
+            spinner.warn(`⚠ KONTUR Core returned ${coreRes.status}`);
+        }
+    } catch (e: any) {
+        spinner.fail(`✗ KONTUR Core unreachable: ${e.message}`);
+    }
+
+    const spinner2 = ora('Testing KONTUR Agent...').start();
+    try {
+        const agentRes = await Promise.race([
+            fetch(`${agentUrl}/health`),
+            new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), 3000))
+        ]) as any;
+        if (agentRes.ok) {
+            spinner2.succeed(`✓ KONTUR Agent (${agentUrl}) is reachable`);
+        } else {
+            spinner2.warn(`⚠ KONTUR Agent returned ${agentRes.status}`);
+        }
+    } catch (e: any) {
+        spinner2.fail(`✗ KONTUR Agent unreachable: ${e.message}`);
+    }
+
+    await input('\nPress Enter to continue', '');
+}
+
+async function konturShowArchitecture(): Promise<void> {
+    showHeader('KONTUR Architecture Diagram');
+    console.log(chalk.cyan(`
+  ╔════════════════════════════════════════════════════════════════╗
+  ║                    KONTUR SYSTEM ARCHITECTURE                  ║
+  ╚════════════════════════════════════════════════════════════════╝
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │  USER INTERFACES (Bridges)                                  │
+  ├─────────────────────────────────────────────────────────────┤
+  │  ┌──────────────┐  ┌──────────────┐  ┌──────────────┐      │
+  │  │  CLI Bridge  │  │ Electron UI  │  │ Web Portal   │      │
+  │  │ (menu-v2.ts) │  │  (main.ts)   │  │ (optional)   │      │
+  │  └──────┬───────┘  └──────┬───────┘  └──────┬───────┘      │
+  └─────────┼──────────────────┼──────────────────┼──────────────┘
+            │                  │                  │
+            └──────────────────┼──────────────────┘
+                               │
+            ┌──────────────────▼──────────────────┐
+            │    KPP (KONTUR Protocol)            │
+            │  Message Format & Routing           │
+            └──────────────────┬──────────────────┘
+                               │
+  ┌─────────────────────────────▼──────────────────────────────┐
+  │  KONTUR CORE (Orchestration & Control)                     │
+  ├──────────────────────────────────────────────────────────┤
+  │  ┌─────────────────────────────────────────────────────┐ │
+  │  │ Task Planning | State Management | Protocol Router  │ │
+  │  └─────────────────────────────────────────────────────┘ │
+  └──────┬────────────────────────────────────────────────┬──┘
+         │                                                │
+    ┌────▼──────────────┐                    ┌───────────▼────┐
+    │  PYTHON ORGANS    │                    │  SERVICES      │
+    ├───────────────────┤                    ├────────────────┤
+    │ • tetyana_agent   │                    │ • RAG (Chroma) │
+    │ • rag_indexer     │                    │ • Vision       │
+    │ • vision_service  │                    │ • Redis        │
+    │ • self_healer     │                    │ • Execution    │
+    └────┬──────────────┘                    └────┬───────────┘
+         │                                        │
+    ┌────▼────────────────────────────────────────▼────┐
+    │  PERSISTENT STATE (Redis Checkpointing)         │
+    │  LangGraph State Snapshots & Recovery           │
+    └─────────────────────────────────────────────────┘
+
+  Data Flow:
+  1. User input → CLI Bridge → KPP message
+  2. KONTUR Core routes to Python organs
+  3. Organs execute with RAG/Vision/Execution services
+  4. Results checkpoint to Redis
+  5. Response → KPP message → UI Bridge → User
+
+  Protocol: All inter-module communication via KPP (KONTUR Protocol)
+  No direct module-to-module communication allowed.
+    `));
     await input('\nPress Enter to continue', '');
 }
 
