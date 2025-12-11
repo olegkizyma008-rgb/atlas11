@@ -1401,20 +1401,24 @@ async function runPythonAgent(): Promise<void> {
     const task = await input('Enter task', 'Open Calculator');
     
     // Use saved defaults without prompting if they are set
-    const hasVisionDefault = config['DEFAULT_USE_VISION_CLI'] !== undefined;
-    const hasLiveLogDefault = config['DEFAULT_LIVE_LOG'] !== undefined;
+    const visionValue = config['DEFAULT_USE_VISION_CLI'];
+    const liveLogValue = config['DEFAULT_LIVE_LOG'];
+    const hasVisionDefault = visionValue !== undefined && visionValue !== '';
+    const hasLiveLogDefault = liveLogValue !== undefined && liveLogValue !== '';
     
     let useVision: boolean;
     let liveLog: boolean;
     
     if (hasVisionDefault) {
-        useVision = config['DEFAULT_USE_VISION_CLI'] === '1' || config['DEFAULT_USE_VISION_CLI'] === 'true';
+        useVision = visionValue === '1' || visionValue === 'true';
+        console.log(chalk.gray(`  Vision: ${useVision ? 'ON' : 'OFF'} (from settings)\n`));
     } else {
         useVision = await confirm('Use vision (screenshots & verification)?', false);
     }
     
     if (hasLiveLogDefault) {
-        liveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
+        liveLog = liveLogValue === '1' || liveLogValue === 'true';
+        console.log(chalk.gray(`  Live log: ${liveLog ? 'ON' : 'OFF'} (from settings)\n`));
     } else {
         liveLog = await confirm('Stream live log?', true);
     }
