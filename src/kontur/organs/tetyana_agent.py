@@ -183,7 +183,34 @@ RAG_AVAILABLE = False
 db = None
 
 try:
-    embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
+    # Try PyTorch + MPS for GPU acceleration on M1 Max
+    USE_MPS_TETYANA = os.getenv("USE_MPS", "1") in ("1", "true", "yes")
+    embeddings = None
+    
+    if USE_MPS_TETYANA:
+        try:
+            import torch
+            from sentence_transformers import SentenceTransformer
+            
+            if torch.backends.mps.is_available():
+                device = "mps"
+                st_model = SentenceTransformer("BAAI/bge-m3", device=device)
+                
+                # Wrapper function for Chroma compatibility
+                def mps_embed_fn(texts):
+                    return st_model.encode(texts, convert_to_tensor=False).tolist()
+                
+                embeddings = mps_embed_fn
+                console.print("[green]✅ PyTorch MPS available — using GPU acceleration on M1 Max[/green]")
+                console.print("[green]✅ Embedding dimension: 1024 (model: BAAI/bge-m3, MPS (GPU))[/green]")
+            else:
+                raise Exception("MPS not available")
+        except Exception as mps_err:
+            console.print(f"[yellow]⚠️ MPS failed: {mps_err}. Falling back to HuggingFace.[/yellow]")
+            embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
+    else:
+        embeddings = HuggingFaceEmbeddings(model_name="BAAI/bge-m3")
+    
     script_dir = Path(__file__).parent.parent
     rag_path = script_dir / "rag" / "chroma_mac"
     
@@ -209,12 +236,12 @@ def search_rag(query: str, k: int = 10) -> str:
 
 
 def add_to_rag(task: str, code: str, status: str = "success"):
-    """Додати успішне рішення в RAG (self-healing з MLX GPU acceleration)"""
+    """Додати успішне рішення в RAG (self-healing з MPS GPU acceleration)"""
     try:
-        # Import RAG Control Agent for self-healing with MLX
+        # Import RAG Control Agent for self-healing with MPS
         from rag_control_agent import RAGControlAgent
         
-        agent = RAGControlAgent(use_mlx=True)
+        agent = RAGControlAgent(use_mps=True)
         result = agent.add_to_rag(task, code, status)
         
         if result.get("status") == "success":

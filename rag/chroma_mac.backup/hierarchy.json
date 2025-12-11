@@ -1,0 +1,1364 @@
+{
+  "ed96e382-c240-492e-b498-824314a881c9": {
+    "source": "applescript_basics.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "-- AppleScript Basics for macOS Automation\n-- Fundamental patterns for controlling applications\n\n-- Open an application\ntell application \"Finder\""
+  },
+  "82b59a49-afef-4310-8e69-fd6eff037f9a": {
+    "source": "jxa_automation.js",
+    "type": "JXA",
+    "total_chunks": 2,
+    "file_context": "// JXA (JavaScript for Automation) - macOS Automation with JavaScript\n\n// Get the frontmost application\nconst app = Application.currentApplication();\napp.includeStandardAdditions = true;"
+  },
+  "06d391af-956d-441c-aa4c-86c994dcfafa": {
+    "source": "macos_automation_guide.md",
+    "type": "Documentation",
+    "total_chunks": 5,
+    "file_context": "# macOS Automation Guide\n\n## Introduction to macOS Automation\n\nmacOS provides several powerful tools for automation:"
+  },
+  "09605433-b8d9-4eaa-ac67-da0c0ab05aa6": {
+    "source": "macos_automation_repos.md",
+    "type": "Documentation",
+    "total_chunks": 5,
+    "file_context": "# Top Repositories for macOS Automation and Accessibility (2025)\n\n## AppleScript & macOS Automation Repositories\n\n| Repository | Description | Templates | Link | Notes |"
+  },
+  "88006591-d0d3-473f-9d74-ae492ffbbddc": {
+    "source": "shell_automation.sh",
+    "type": "Shell Script",
+    "total_chunks": 3,
+    "file_context": "#!/bin/bash\n# Shell Script Automation for macOS\n\n# Get the current user\nCURRENT_USER=$(whoami)"
+  },
+  "26002559-7511-494c-88cc-805a9b87d58f": {
+    "source": "automator-collection/StartCsgoCpuPriorityHigh.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set myfilepath to \"Mac OS:Applications:Counter-Strike Global Offensive\"\ntell application \"Finder\" to open myfilepath\ndelay 5\ntell application \"System Events\" to set unixID to unix id of process \"csgo_osx64\"\ndo shell script (\"renice -20 -p \" & unixID) password \"your password here\" with administrator "
+  },
+  "7dd38839-7516-4f5d-896d-898abddde6d1": {
+    "source": "applescript/Snippets/ScreenDimFlash.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Preferences\"\n\tactivate\n\treveal anchor \"displaysDisplayTab\" of pane id \"com.apple.preference.displays\"\n\t--\ttell application \"System Events\" to tell process \"iTerm2\" to set visible to false\n\t"
+  },
+  "521db2c9-b401-4d5e-b460-552f6a456bbd": {
+    "source": "applescript/Snippets/Get Parent Folder Of Selection.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\t\n\tset pathFile to selection as alias\n\tset pathFile to quoted form of POSIX path of pathFile\n\tset destFolder to do shell script \"dirname \" & pathFile"
+  },
+  "4d7d2728-3b04-4e09-8851-11cd9317cd40": {
+    "source": "applescript/Snippets/Terminal Busy Check Loop.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "repeat\n\ttell application \"Terminal\"\n\t\tset bizzy to busy of window 1\n\t\tif bizzy is true then\n\t\t\tdelay 120"
+  },
+  "99bf8fb0-e320-4d32-93ea-0fe327031127": {
+    "source": "applescript/Snippets/Check If Application Is Busy.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Terminal\"\n\tset butts to busy of window 1\nend tell\n"
+  },
+  "203ed377-f68a-4806-ab4c-99ce59bc6fd5": {
+    "source": "applescript/Snippets/Move A Selected File.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset mvfiles to selection\n\tset destFolderPath to choose folder\n\tset destFolder to name of destFolderPath\n\tset destFolder to destFolderPath as string"
+  },
+  "02617a11-4125-4a56-8906-8159a6f50e3e": {
+    "source": "applescript/Snippets/Screen Brightness.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Preferences\"\n\tactivate\n\treveal anchor \"displaysDisplayTab\" of pane id \"com.apple.preference.displays\"\n\ttell application \"System Events\"\n\t\tdelay 1"
+  },
+  "cf6c055e-f080-42ef-b642-3b851cf6def7": {
+    "source": "applescript/Snippets/Get Keychain Password for Service.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "-- lightly modified version of script from https://apps.inspira.io/bluesense/en/applescript/\n\non getPassword(keychainItemName)\n\tlocal password\n\tset password to do shell script (\"/usr/bin/security 2>&1 >/dev/null find-generic-password -gl \" & quoted form of keychainItemName & \" | cut -c 11-99 | sed '"
+  },
+  "75b4f69b-c2c9-4ff7-8ba7-b8e2d58b7b27": {
+    "source": "applescript/Snippets/Weekday Based Alarm.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set datte to current date\n\nset dayy to weekday of datte as text\nif dayy contains \"Monday\" then\n\tdisplay dialog \"yes\""
+  },
+  "c1e14574-976c-48be-a908-e2b4f0612a94": {
+    "source": "applescript/Snippets/Auto Save.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "\ntell application \"Microsoft Word\"\n\tactivate\n\ttell application \"System Events\"\n\t\tkey code 1 using command down"
+  },
+  "81d6a301-5487-424a-88fa-d23a19668a43": {
+    "source": "applescript/Snippets/Convert To PDF.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "do shell script \"/System/Library/Printers/Libraries/convert -f \" & pdfConvert & \" -o \" & pdfName\n"
+  },
+  "445b0572-970f-4727-9fed-9a1a61bec6aa": {
+    "source": "applescript/Snippets/Get Path Of Selection.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset pathFile to selection as text\n\tset pathFile to quoted form of POSIX path of pathFile\nend tell\n"
+  },
+  "43596706-5367-491c-b1bd-0ba007569434": {
+    "source": "applescript/Snippets/Copy FIle To New Location.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\t\n\tset copyfile to selection\n\tset copyfile to copyfile as text\n\tset copyfile to quoted form of POSIX path of copyfile"
+  },
+  "ecbb4da9-6a37-44a5-befa-f9f29c477549": {
+    "source": "applescript/Snippets/Current Date test.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set crrtdate to current date\nset crrtdate to (current date) as Unicode text\nif crrtdate contains \"8:27\" then\n\ttell application \"Google Chrome\"\n\t\tactivate"
+  },
+  "22ad9d94-346a-4d84-be68-baeac5d7a334": {
+    "source": "applescript/Snippets/Prompt with Hidden Entry.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set thisPw to \"secret\"\n\nrepeat 3 times\n\tset pw to text returned of (display dialog \"Enter your password\" default answer \"\" with icon stop buttons {\"Cancel\", \"Continue\"} default button \"Continue\" with hidden answer)\n\tif pw is thisPw then"
+  },
+  "ac2857fe-84e5-4c83-871c-c34d65ec4975": {
+    "source": "applescript/Snippets/Get Current Date.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set crrtdate to current date\nset crrtdate to (current date) as Unicode text\n\n"
+  },
+  "58f509cb-6f47-4d5c-8eae-9467cbac87ee": {
+    "source": "applescript/Snippets/Unhide App Windows.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset visible of every process to true\nend tell\n"
+  },
+  "a3d9e1f8-fbb1-41a5-9fb6-09e93939c146": {
+    "source": "applescript/Snippets/Display Folder Name.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set bsnm to choose folder\nset bsnm to POSIX path of bsnm\nset bsnmAlert to do shell script \"basename \" & bsnm & \"\"\nset bsnmAlert to bsnmAlert as list\ndisplay dialog bsnmAlert"
+  },
+  "87ca7c3b-8a17-4faf-aa4d-5432a0476564": {
+    "source": "applescript/Snippets/Set Finder Window Size.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nGet your desired window and sidebar size by running:\n\ntell application \"Finder\" to set bounds of window 1\ntell application \"Finder\" to get sidebar width of Finder window 1"
+  },
+  "39c3f94e-8199-423d-851f-75b0ad5a497d": {
+    "source": "applescript/Snippets/Get Bounds.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tget bounds of window 1\nend tell\n"
+  },
+  "6129a020-43f4-42b4-830c-a2d8d268afd9": {
+    "source": "applescript/Snippets/Time Based Alarm.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set larmtime to display dialog \"what time do you want to be alerted?\" default answer \"\"\nset larmtime to text returned of larmtime\nrepeat\n\tset datte to current date\n\tset hower to get hours of datte"
+  },
+  "f058188b-fd50-452b-b652-8e70c855398a": {
+    "source": "applescript/Snippets/Get Name Of Active Application.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "# this script will return the name of the active (frontmost) application\n\ntell application \"System Events\" \n  get name of application processes whose frontmost is true\nend tell"
+  },
+  "3bb32f0d-f4b9-450b-ab4e-fc15eec38b91": {
+    "source": "applescript/Snippets/Copy Path Of Selection.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset pathFile to selection as text\n\tset pathFile to get POSIX path of pathFile\n\tset the clipboard to pathFile\nend tell"
+  },
+  "4f7b367f-0553-43b9-a311-b78692f00406": {
+    "source": "applescript/Snippets/Get File Name Of Selection.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\t\n\tset pathFile to selection as alias\n\tset pathFile to quoted form of POSIX path of pathFile\n\tset destFolder to do shell script \"dirname \" & pathFile"
+  },
+  "d5bc9328-958c-4d63-9a4d-8acc5f52f65b": {
+    "source": "applescript/Snippets/Wait For Copy To Finish Before Execute.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "repeat\n\tset ffolder to \"Users:Me:Music\"\n\ttell application \"Finder\"\n\t\tset x to ffolder as alias\n\t\t"
+  },
+  "ecdfd5b2-c8e5-4309-92f7-9b3c636cbed8": {
+    "source": "applescript/Snippets/Get Chrome Tab Names.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set titleString to \"\"\n\ntell application \"Google Chrome\"\n\t\n\tset window_list to every window"
+  },
+  "690f3862-1079-4dee-958a-0b55a4975ef8": {
+    "source": "applescript/Snippets/AutoPurge.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "on idle\n\tdo shell script \"purge\"\n\treturn 1200\nend idle\n"
+  },
+  "a1fa5b86-f92f-4de7-8a6b-4aee13b65d81": {
+    "source": "applescript/Snippets/Get List of Selection.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset fileNames to {}\n\tset theItems to selection\n\trepeat with itemRef in theItems\n\t\tset end of fileNames to name of itemRef"
+  },
+  "2dad64a1-41f0-4905-9c2f-143cadd70e48": {
+    "source": "applescript/Snippets/Get Ext Of Selection.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset pathFile to selection as text\n\tset pathFile to quoted form of POSIX path of pathFile\n\tset destFolder to do shell script \"dirname \" & pathFile\n\tset baseName to do shell script \"basename \" & pathFile"
+  },
+  "183ab4ea-4868-4f4b-8376-89996b01642a": {
+    "source": "applescript/Snippets/Copy And Paste.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "## Copy\ntell application \"nvALT\"\n\tactivate\n\ttell application \"System Events\"\n\t\tkey code 7 using command down"
+  },
+  "84c2a4e0-599e-4940-8548-168cb22cb7d0": {
+    "source": "applescript/Snippets/Get Process ID Of Application.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set applaunch to text returned of (display dialog \"\" default answer \"\" buttons {\"Go\"} default button \"Go\")\ntell application \"System Events\"\n\tset {procesList, pidList} to the {name, unix id} of (every process whose name contains applaunch)\n\tif procesList contains applaunch then\n\t\tset pidList to pidLi"
+  },
+  "fc31acdc-9229-4a00-b7fc-eb07a9da5cb0": {
+    "source": "applescript/Snippets/Title Case Shell Script.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set testt to \"test test\"\ntell application \"Terminal\"\n\tdo script \"echo \" & testt & \" | tr \" & quote & \"[:upper:]\" & quote & \" \" & quote & \"[:lower:]\" & quote & \" | perl -ane ' foreach $wrd ( @F ) { print ucfirst($wrd).\" & quote & \" \" & quote & \"; } print \" & quote & \"\n\" & quote & \" ; '\"\nend tell"
+  },
+  "bc55535c-b915-4681-a0bc-91a7914a0041": {
+    "source": "applescript/Snippets/Get File Name Elements.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set source_file to choose file with prompt \"Where is the file?\"\nset path_file to POSIX path of source_file\n\nset dest_file to choose folder with prompt \"Where to save the markdown file?\"\nset dest_file to POSIX path of dest_file"
+  },
+  "1d1241d2-3aac-412d-95f3-04d91d18436a": {
+    "source": "applescript/Snippets/Change Volume.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set {vol, gave} to {button returned, gave up} of (display dialog \"Volume\" buttons {\"High\", \"Low\", \"Cancel\"} cancel button 3 with icon note giving up after 1800)\nif vol contains \"High\" then set volume 6\nif vol contains \"Low\" then set volume 4\n"
+  },
+  "2339dfe3-084f-4eb7-a1e6-6deee428ef3a": {
+    "source": "applescript/Snippets/Hide App Windows.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset visible of every process to false\nend tell\n"
+  },
+  "707b94f1-31f1-4db6-9815-41461f3df872": {
+    "source": "applescript/Snippets/Add Underscore To Filename.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset theFileFull to selection as text\n\tset theFileFull to quoted form of POSIX path of theFileFull\n\t\n\t"
+  },
+  "13deed79-c790-4372-8b37-c0d5ab6bc01f": {
+    "source": "applescript/Snippets/Random List Item Dialog.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set myList to {\"orange\", \"apple\", \"grape\", \"kiwi\", \"lychee\"}\nset listCount to count of myList\nset randItem to random number from 1 to listCount\nset myItem to item randItem of myList\ndisplay dialog myItem"
+  },
+  "659e07ff-e105-4ca3-a8a5-abb6536bd157": {
+    "source": "applescript/Snippets/Get Count of Files in Folder.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset ffolder to choose folder\n\tset sccripts to every item of ffolder whose kind is not \"folder\"\n\tget count of sccripts\nend tell"
+  },
+  "5ac3cffe-f1ff-4357-a3b6-bf1e9b5b3d1f": {
+    "source": "applescript/Snippets/Sound Out To Headphones.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Preferences\" to activate\ntell application \"System Events\"\n\tget properties\n\ttell process \"System Preferences\"\n\t\tclick menu item \"Sound\" of menu \"View\" of menu bar 1"
+  },
+  "30e4b42e-7cef-4d65-98c1-49338bf9c896": {
+    "source": "applescript/Snippets/process clipboard text.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "\ndo shell script \"pbpaste | sed -e 's/ /-/g' | awk '{print tolower($0)\n}' | pbcopy\"\n\n"
+  },
+  "728ddcc2-2fa2-461c-9948-8a92159449fd": {
+    "source": "applescript/Sound Scripts/NightVolume.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- I used to live below a couple who had a small child, so to avoid waking the baby, I automated my volume control.\n--- Change \"10:00:00 pm\" to a time of your choosing, and adjust the volume to your desired level (0 = off)\n--- could be useful for college students during class time or adults during "
+  },
+  "6536b709-42ed-4746-8ae1-2728b1e19a56": {
+    "source": "applescript/Sound Scripts/MuteInternalMic.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- Automated mic muting\n\ntell application \"System Events\" to set volume input volume 0\n"
+  },
+  "625c8663-273a-44a5-94f7-81855aa27397": {
+    "source": "applescript/Sound Scripts/GetVolumeSrettings.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset vol to output volume of (get volume settings)\nend tell"
+  },
+  "31e7590c-024f-48ca-b102-3cd7cc5b5903": {
+    "source": "applescript/Notational Velocity/NV-LinkAutomation.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "-- Highlight text, run the script to copy and process the text, text is then pasted back into NV with link brackets.\n\n\ntell application \"Notational Velocity\"\n\tactivate"
+  },
+  "acec3b9a-5e9c-4ab0-9029-00a892faf754": {
+    "source": "applescript/Notational Velocity/NV-TaskPaper.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- this script combines the \"show in finder\" and \"edit with\" commands in Notational Velocity\n--- select a note in NV, run the script and it will open in TaskPaper\n--- the TaskPaper application can be substituted with your default text editor/to do list manager\n\ntell application \"Finder\""
+  },
+  "5c9101a1-e580-4641-a90f-5401a0fee77d": {
+    "source": "applescript/Notational Velocity/NV-PasteAsNewNote.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- paste clipboard text as a new note in NV\n\ntell application \"nvALT\"\n\tactivate\n\ttell application \"System Events\" to key code 9 using {command down, shift down}"
+  },
+  "bcf81cff-1345-4fa8-9295-6985cb13ba37": {
+    "source": "applescript/Notational Velocity/NV-OpenTopBookmark.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- Opens the top bookmark in NV\n\n\ntell application \"nvALT\"\n\tactivate"
+  },
+  "39b760f0-6063-4e25-a576-30cc16a44a7f": {
+    "source": "applescript/Notational Velocity/NV-NewNoteFromDialog.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- create a new note without NV being open\n--- a dialog box allows you to select a name\n\n\nset newnote to display dialog \"Create a NV note\" default answer \"\""
+  },
+  "b473f72b-90c5-430e-bd66-07d8f560432a": {
+    "source": "applescript/Notational Velocity/NV-CopyToNV.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- copy text from the window of the current application\n--- (example: an open email, text from a code editor, etc)\n--- paste copied text as a new note in notational velocity\n--- with a dialog box allowing you to choose a name for you new note\n"
+  },
+  "b291eeaa-4b91-4947-a349-ae63b6db3a00": {
+    "source": "applescript/Notational Velocity/NV-Search.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- Use a dialog box to search NV\n\n\nset ssearch to display dialog \"Search Notational Velocity\" default answer \"\"\nset ssearch to text returned of ssearch"
+  },
+  "e04eb9b6-26ee-41e8-916d-ac4943b463e3": {
+    "source": "applescript/Location Helper Scripts/SearchByZip.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- uses the Location Helper application to search for a city by zipcode\n\ntell application \"Finder\"\n\tactivate\n\tset futureLocation to text returned of (display dialog \"Search for your location by entering a Zip or Post Code below\" default answer \"\" with icon note buttons {\"OK\"} default button {\"OK\"})"
+  },
+  "47a55c8b-f8a6-4edc-95dc-6b27dfc2f7c8": {
+    "source": "applescript/Location Helper Scripts/NoPassAtHome.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- use location helper to determine whether your computer needs to be woken with a password\n--- example: I don't need a password at home, but I would like one when I am at work or a coffee shop. \n--- use \"Get Yr Lat Long\" to determine the coordinates of your home location and enter it into the \"set"
+  },
+  "93a72e1a-dd5e-45fa-97f9-4f03afac9b7a": {
+    "source": "applescript/Location Helper Scripts/GetYourLatLong.applescript",
+    "type": "AppleScript",
+    "total_chunks": 4,
+    "file_context": "--- Find the lat and long of an address using the Location Helper application, and optionally copy the data to the clipboard or search with google\n--- really sorry for the crappy variable names...\n\ntell application \"Finder\"\n\tactivate"
+  },
+  "33c9b6f4-deb3-47fa-acc9-59fa20f1977d": {
+    "source": "applescript/Temperature Conversion/FahrenheitToCelsius.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- a simple tool to convert Fahrenheit to Celsius. \n--- because I was bored. \n\nset ftemp to text returned of (display dialog \"Convert Fahrenheit to Celsius\" default answer \"\" buttons {\"Cancel\", \"Convert\"} default button \"Convert\")\nset conversion1 to (ftemp - 32) * 5 / 9"
+  },
+  "c2e5b05f-c2bc-4606-be50-cb16b9d5225f": {
+    "source": "applescript/Temperature Conversion/TemperatureConverter.applescript",
+    "type": "AppleScript",
+    "total_chunks": 4,
+    "file_context": "--- Convert temperatures between Celsius, Fahrenheit, and Kelvin\n\nset whichconv to choose from list {\"Celsius to Fahrenheit\", \"Celsius to Kelvin\", \"Fahrenheit to Celsius\", \"Fahrenheit to Kelvin\", \"Kelvin to Celsius\", \"Kelvin to Fahrenheit\"} with title \"Convert Temperature\"\nset whichconv to whichconv"
+  },
+  "c842f89e-4941-4296-b88f-b16943b11a61": {
+    "source": "applescript/Temperature Conversion/CelsiusToFahrenheit.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- a simple tool to convert Celsius to Fahrenheit. \n--- because I was bored. \n\nset ftemp to text returned of (display dialog \"Convert Celsius to Fahrenheit\" default answer \"\" buttons {\"Cancel\", \"Convert\"} default button \"Convert\")\nset conversion1 to ftemp * 9 / 5 + 32"
+  },
+  "134abcc4-166e-4fc6-a32d-087f3c74b376": {
+    "source": "applescript/Terminal/GoToIterm.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Finder\"\n\tset pathFile to selection as text\n\tset pathFile to get POSIX path of pathFile\n\tset pathFile to quoted form of pathFile\n\tset the clipboard to pathFile"
+  },
+  "3d1a5f99-c482-4cd1-b6eb-321bf26fd25d": {
+    "source": "applescript/Terminal/ConvertImages.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- converts images from/to common formats\n--- select an image file in finder, choose the format you want to conver to \n--- the script uses the 'sips' command to create a new file of your chosen format in the same dir \n--- need a workaround for 4 letter extensions (e.g. tiff). note that this script "
+  },
+  "8f5bae1e-0cf0-497f-b907-16d5c35d718e": {
+    "source": "applescript/Terminal/ShowHideFilesFolders.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "# Show and Hide hidden files and folders, Show and Hide files and folders on the desktop\n# Hide hidden files and folders: hf\n# Show hidden files and folders: sf\n# Hide desktop files and folders: hd\n# Show desktop files and folders: sd"
+  },
+  "f0536182-a114-433b-bf78-b0a46ae8207f": {
+    "source": "applescript/Terminal/ScreeshotGUI.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "--- if, for some reason, you wanted to wanted to have a simple GUI for the built in screen capture tool\n--- helpful for old people, children, or the chronically lazy\n\ndisplay dialog \"This script uses your computers built-in screencapture tool. This script saves the file to your desktop by default.\"\n"
+  },
+  "47078ca5-5591-4c6f-ac40-eefb942b8b00": {
+    "source": "applescript/Terminal/PowerDialog.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- a stay open application that will display a dialog box containing your current battery power every 30 minutes once the power cable is unplugged\n\n\n\nrepeat"
+  },
+  "481936d9-168f-4bd1-b034-97c0685fc99c": {
+    "source": "applescript/Terminal/Shell.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "-- my alternative to \"Finder to Shell\" scripts, just for fun. \n-- select something in Finder and run the script, a new terminal window opens in the current Finder directory\n-- add to the Finder toolbar for easiest use\n\ntell application \"Finder\""
+  },
+  "349402c8-5f57-4e40-a483-f836dde00035": {
+    "source": "applescript/Terminal/CPUToClipboard.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- Copies your CPU usage (via terminal) to the clipboard \n\nset dispCPU to (do shell script \"/bin/ps -xco %cpu,command | /usr/bin/awk '{print $00}'\")\nset dispCPU to dispCPU as Unicode text\nset the clipboard to dispCPU"
+  },
+  "57f0f832-ad31-4c9c-bf66-98874f9a51ac": {
+    "source": "applescript/Terminal/NoTerminal.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- sometimes I don't want to open up the terminal just to run one command so i saved this script as an app \n--- uses the \"do shell script\" command\n\nset termcommand to text returned of (display dialog \"Enter a command to run:\" default answer \"\" buttons {\"Quit\", \"Run\"} default button \"Run\")\nif termco"
+  },
+  "47a7e611-f4c5-4b3d-a054-5e9f9ebf38c2": {
+    "source": "applescript/Terminal/AutoPurge.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- I work with video a lot and have limited RAM on my work computer, so I scripted to the \"purge\" command.\n--- Change the return time to whatever you want (in seconds)\n\non idle\n\tdo shell script \"purge\""
+  },
+  "2c956f24-4595-4cf7-a9ae-0f1bdb3d6d58": {
+    "source": "applescript/Terminal/RestartReminder.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- I like to be reminded to restart when my computer has been running for six or more days\n\nset upttime to (do shell script \"uptime\")\nif upttime contains \"6 days\" then\n\tdisplay alert \"Restart Your Computer\""
+  },
+  "c35c3f14-22a6-4859-835b-4cb289655183": {
+    "source": "applescript/Terminal/MakeSelectionCHMOD.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "# select a shell script in Finder and make it executable. \n# bind it to a key combo or run it with Alfred\n\ntell application \"Finder\"\n\tset chmodFile to selection as text"
+  },
+  "92216168-088a-4003-a032-59d12343d319": {
+    "source": "applescript/Display Settings/Bright 5.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Preferences\"\n\tactivate\n\treveal anchor \"displaysDisplayTab\" of pane id \"com.apple.preference.displays\"\n\ttell application \"System Events\"\n\t\tdelay 1"
+  },
+  "d43af847-9309-403e-bc3d-6ea66b902e2e": {
+    "source": "applescript/Display Settings/Bright 0.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Preferences\"\nactivate\n\treveal anchor \"displaysDisplayTab\" of pane id \"com.apple.preference.displays\"\n\ttell application \"System Events\"\n\t\tdelay 1"
+  },
+  "5a650db1-7fec-4d87-92b1-06a730412542": {
+    "source": "applescript/Display Settings/Bright 1.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Preferences\"\n\tactivate\n\treveal anchor \"displaysDisplayTab\" of pane id \"com.apple.preference.displays\"\n\ttell application \"System Events\"\n\t\tdelay 1"
+  },
+  "e0058382-31d9-4d9b-89ef-e717a296d199": {
+    "source": "applescript/Display Settings/Caff Bright 0.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Caffeine\" to turn on\ntell application \"System Preferences\"\n\tactivate\n\treveal anchor \"displaysDisplayTab\" of pane id \"com.apple.preference.displays\"\n\ttell application \"System Events\""
+  },
+  "fc21ca20-f4e7-41f1-beb6-2b159f0063e4": {
+    "source": "applescript/Display Settings/Toggle Dark Mode.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Events\"\n\ttell appearance preferences\n\t\tset dark mode to not dark mode\n\tend tell\nend tell"
+  },
+  "52e5034a-442b-47a4-ba0d-0b5d9c88feb9": {
+    "source": "applescript/File and Folder Actions/JPGtoPNG.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- converts jpg images to png\n--- the script removes 3 letter file extensions, so it should work with any image files fitting that criteria (tested with bmp and jpg).\n--- general use: select a jpg file in finder, run the script, the script makes a copy of the file as png, saves to same dir as orign"
+  },
+  "64791608-ba19-43c9-a030-0ac0c1913f1d": {
+    "source": "applescript/File and Folder Actions/ClipboardToFile.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- saves the text contents of the clipboard to a text file with a name you specify.\n--- be sure to specify an extension (e.g. use HTML if you want to save the copied text as a webpage)\n\nset d to the clipboard as «class utf8»\nset fn to choose file name"
+  },
+  "f7e116ea-d002-498d-8305-57e79d3127d2": {
+    "source": "applescript/File and Folder Actions/MoveFilesToFolder.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- I use this as an automator service to quickly clean up my desktop\n--- select files you need to move, run the service, choose the destination. thats it. \n\n\ntell application \"Finder\""
+  },
+  "ca1b1a99-8aff-4fd9-9e12-61781cc61a9e": {
+    "source": "applescript/File and Folder Actions/ReadFileContents.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set ffile to (choose file with prompt \"Get contents from…\" of type {\"txt\", \"md\", \"markdown\", \"rtf\"})\nset ffcont to read ffile\nset ffcont to ffcont as Unicode text\nset the clipboard to ffcont\ndo shell script \"pbpaste | textutil -convert txt -stdin -stdout -encoding 30 | pbcopy\""
+  },
+  "9d56a97c-bcf6-4287-ac7d-3e52ad685501": {
+    "source": "applescript/File and Folder Actions/ClipboardToFileAlt.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "-- like ClipboardToFile, but works as a Finder toolbar app\n-- select a folder, run ClipboardToFileAlt.applescript and enter a file name and extension\n-- the new file (created from your clipboard) will be added to the selected folder\n\ntell application \"Finder\""
+  },
+  "58fb489e-c872-4c28-a5de-52994f4ac53f": {
+    "source": "applescript/File and Folder Actions/CopyPath.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- use this to easily copy paths from finder\n--- saved as an automator service\n\ntell application \"Finder\"\n\tset pathFile to selection as text"
+  },
+  "b23e9d5b-bfe7-418c-85e7-cd11a32bb86b": {
+    "source": "applescript/File and Folder Actions/NewFile.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "-- Create a blank new file with a file name and extension you specify\n-- to be used as a Finder tool bar app\n\n-- select a folder, run ClipboardToFileAlt.applescript and enter a file name and extension\n-- the new file (created from your clipboard) will be added to the selected folder"
+  },
+  "1dcb29b2-5d71-41f0-bbeb-349ad37c7d1c": {
+    "source": "applescript/File and Folder Actions/ListFolderContents.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- saves the contents of your selected folder to a text file with a name you specify\n--- be sure to include the extension in the filename (although I guess you don't need to...)\n\nset ffolder to choose folder\ntell application \"Finder\""
+  },
+  "e37567c3-12ce-4e68-9a5c-be5dbdddc3d6": {
+    "source": "applescript/File and Folder Actions/ClearContents.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- I bound this script to a key combo\n--- As I select folders to empty (without removing the folder itself) I can do so without moving my hands from the keyboard\n--- useful for shared dropbox folders that are regularly updated with new files\n\n"
+  },
+  "47dd6a66-c471-4ccb-a510-012468fd2c39": {
+    "source": "applescript/File and Folder Actions/OpenFileWhenConnected.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- open a file when you regain an internet connection on your computer\n--- the script will stay open and ping google until a connection has been established\n\n\nset _choisir to button returned of (display dialog \"Choose a file to open when you regain an internet connection\" with icon note buttons {\"O"
+  },
+  "70fae803-ee06-467e-992f-b58adb48c64f": {
+    "source": "applescript/File and Folder Actions/MakeAlias.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "# select a file in finder\n# run this script\n# watch the alias appear as if magic\n\ntell application \"Finder\""
+  },
+  "16ed46b3-ca19-49ec-b5aa-05bc87aaa70c": {
+    "source": "applescript/File and Folder Actions/ScriptLauncher.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- a \"launcher\" for applescripts\n--- enter the name of the script you would like to run and click \"OK\" or press the enter button on your keyboard\n--- case does not matter, but spaces/special characters do. be sure to enter the script name exactly as it was saved. \n--- this script will automatically"
+  },
+  "0296e113-6d01-46f0-84a3-f5cc712f1686": {
+    "source": "applescript/Reminders App/New Reminder.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "# Lightly modified version of https://gist.github.com/n8henrie/c3a5bf270b8200e33591\n# the following two variables can be changed to the text returned from \"display dialog...\"\nset theLines to {\"task name 1\", \"task name 2\"}\nset theDueDateTime to \"Thursday, March 22, 2018 at 3:00:00 PM\"\nrepeat with eac"
+  },
+  "f7cd12a4-fee3-485e-9008-8b3e270e96d5": {
+    "source": "applescript/Battery Monitor/BatteryMonitor.applescript",
+    "type": "AppleScript",
+    "total_chunks": 10,
+    "file_context": "-- Function to format date in a consistent way\non formatDate(dateToFormat)\n    set y to year of dateToFormat\n    set m to month of dateToFormat\n    set d to day of dateToFormat"
+  },
+  "2c872bc7-08b2-41cd-97a9-0eebfecdafbc": {
+    "source": "applescript/Markdown Tools/markdownlinks.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "## copy a link to your clipboard and then choose your link text (for urls), alt text (for images), or your click through link (image links)\n\nset {linkinfo, linkbutton} to the {text returned, button returned} of (display dialog \"Enter your link text, alt text, or click-through url\" default answer \"\" "
+  },
+  "ce51695c-9a59-43ad-b959-9a1061d46d1e": {
+    "source": "applescript/Pandoc and Textutils/Pandoc-HTMLtoPDF.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set source_file to choose file with prompt \"Where is the HTML or HTM file?\" of type {\"htm\", \"html\"}\nset path_file to POSIX path of source_file\n\nset dest_file to choose folder with prompt \"Where to save the PDF file?\"\nset dest_file to POSIX path of dest_file"
+  },
+  "9025d4dc-04de-45b0-a460-a5963ae40aad": {
+    "source": "applescript/Pandoc and Textutils/Pandoc-HTMLtoMD.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set source_file to choose file with prompt \"Where is the HTML or HTM file?\" of type {\"htm\", \"html\"}\nset path_file to POSIX path of source_file\n\nset dest_file to choose folder with prompt \"Where to save the markdown file?\"\nset dest_file to POSIX path of dest_file"
+  },
+  "3ed20d48-a792-4028-9c3f-b84caa414f20": {
+    "source": "applescript/Pandoc and Textutils/Textutils-HTMLtoRTF.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set {tids, AppleScript's text item delimiters} to {AppleScript's text item delimiters, \".\"}\nset docDir to choose folder with prompt \"Choose a folder with HTML files\" default location (path to documents folder)\nset txtDir to choose folder with prompt \"Choose a folder to store the new RTF files\" defau"
+  },
+  "40f2dca0-d2b7-4f92-b448-53fac6e28d04": {
+    "source": "applescript/Pandoc and Textutils/Pandoc-MDtoRTF.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set source_file to choose file with prompt \"Where is the markdown file?\" of type {\"md\", \"markdown\"}\nset path_file to POSIX path of source_file\n\nset dest_file to choose folder with prompt \"Where to save the RTF file?\"\nset dest_file to POSIX path of dest_file"
+  },
+  "1e856116-5f92-4a83-bfe4-a27ffee80917": {
+    "source": "applescript/Pandoc and Textutils/Pandoc-MDtoDOCX.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set source_file to choose file with prompt \"Where is the markdown file?\" of type {\"md\", \"markdown\"}\nset path_file to POSIX path of source_file\n\nset dest_file to choose folder with prompt \"Where to save the docx file?\"\nset dest_file to POSIX path of dest_file"
+  },
+  "e8f32df5-8980-460e-8b07-4c2e0a7cd355": {
+    "source": "applescript/Pandoc and Textutils/Pandoc-MDtoHTML.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set source_file to choose file with prompt \"Where is the markdown file?\" of type {\"md\", \"markdown\"}\nset path_file to POSIX path of source_file\n\nset dest_file to choose folder with prompt \"Where to save the html file?\"\nset dest_file to POSIX path of dest_file"
+  },
+  "ffbfdf47-6eb1-4ee3-bd31-408d63e35224": {
+    "source": "applescript/Pandoc and Textutils/MarkdownToRTF.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- uses Pandoc to convert a markdown file to rtf (via HTML and textutils)\n--- V.1 this is a sloppy solution to converting files (they have to be saved in the same dir), but it seems to work decently\n--- Current version below has fixed issues with spaces in file/folder names and allows file to be sa"
+  },
+  "44ce0b29-69db-40c1-8010-1df4f1e4ea8d": {
+    "source": "applescript/Application Services/AppKiller.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\n\tLike app launcher, but just kills apps. Bind this script to a to a key combo for max efficiency. Enter the name of the app you would like to kill and press enter or \"Go\"\n\tThis may not work with applications that have many similarly named processes running (like \"Google Chrome Helper\" or \"Google "
+  },
+  "c8101e35-0760-41cf-bbe4-06cef025292b": {
+    "source": "applescript/Application Services/AppWatcher.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "--- Choose an application to watch\n--- Choose an application to open when this application is activated\n--- Can also be used for watching/launching documents/files/scripts (ostensibly. hasn't been tested)\n--- NOTE: sometimes does not work with applications that have multiple names\n"
+  },
+  "d3a998e2-9b81-4962-b27e-54b3ca89183e": {
+    "source": "applescript/Application Services/AppLauncher.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\n## Instructions:\n\nOpen Applications\n1. Enter the name of the application you would like to launch."
+  },
+  "75f8b87e-4ba8-41f5-91cc-223c858d2028": {
+    "source": "applescript/Application Services/Maximize.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Events\"\n\tset frontApplication to (get name of every process whose frontmost is true) as string\n\ttry\n\t\ttell process frontApplication\n\t\t\tclick button 2 of window 1"
+  },
+  "56721c53-d828-4464-aad7-fe8bd74a089a": {
+    "source": "applescript/Application Services/AppShutdown.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- Script for when you want to close an application in the future, but you don't want to be bothered to remember to do it\n--- Uses hours...script can be adjusted to use minutes\n\n\ndisplay dialog \"Choose the application you want to shut down\""
+  },
+  "146a188e-cbb6-4f80-9526-f63b02308439": {
+    "source": "applescript/Time and Date/Tomorrows Date.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set morrow to current date\nset morrow to morrow + days\nset the clipboard to (do shell script \"echo \" & morrow & \" | sed s/,[^,]*$//\")\n\n"
+  },
+  "ed08e187-305c-4dfe-b34c-79dc0434fc1c": {
+    "source": "applescript/Time and Date/DayTimer.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "--- Template for stay open scripts that can use the day of the week as a trigger\n--- change the day to whatever you want\n\nset datte to current date\n"
+  },
+  "d79677e8-ae58-4996-b958-a0c634129f5a": {
+    "source": "applescript/Time and Date/Future Date.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set dayss to text returned of (display dialog \"How many days from now?\" default answer \"\" buttons {\"OK\"} default button \"OK\")\nset morrow to current date\nset morrow to morrow + dayss * days\nset the clipboard to (do shell script \"echo \" & morrow & \" | sed s/,[^,]*$//\")\n"
+  },
+  "df229208-86b0-4333-b83b-5e906841746c": {
+    "source": "applescript/Time and Date/Time based alarm.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "set larmtime to display dialog \"what time do you want to be alerted?\" default answer \"\"\nset larmtime to text returned of larmtime\nrepeat\n\tset datte to current date\n\tset hower to get hours of datte"
+  },
+  "942f5a45-8e5e-4ef8-af56-cb8dd4f66dbd": {
+    "source": "applescript/Time and Date/TimeNotification.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "# Display the current time in Notification Center\n\nset ttime to time string of (current date)\nset ttime to do shell script \"echo \" & ttime & \" | sed s/:..//2\"\ndisplay notification ttime with title \"The time is now\""
+  },
+  "a3c80c58-5f74-4cd2-8cef-d5fe07afb404": {
+    "source": "applescript/Time and Date/Current time.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "\n(*\nset crrtdate to current date\nset crrtdate to (current date) as Unicode text\nset dateword to every word of crrtdate*)"
+  },
+  "4bb73b34-b3d7-4f5c-a2ba-016bd471fb36": {
+    "source": "AppleScripts/Scripts/Get 401k Prices.applescript",
+    "type": "AppleScript",
+    "total_chunks": 6,
+    "file_context": "(*\nGet 401k Prices\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "cec26b31-1358-4c06-9666-81a393014165": {
+    "source": "AppleScripts/Scripts/Move tasks from Things to OmniFocus.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nMove tasks from Things to OmniFocus\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "8de93b88-b761-4b22-b8d7-93ae87938d34": {
+    "source": "AppleScripts/Scripts/Pull List to OmniFocus.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "property LibLoader : load script file ((path to scripts folder from user domain as text) & \"Libraries:Library Loader.scpt\")\nproperty GrowlLib : LibLoader's loadScript(\"Libraries:Growl.applescript\")\nproperty TransmissionLib : LibLoader's loadScript(\"Libraries:Transmission.applescript\")\nproperty Safar"
+  },
+  "26e76968-fa97-48ed-861f-0fbbba322cb5": {
+    "source": "AppleScripts/Scripts/Load Torrent.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nLoad Torrent\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "2d2febde-53f2-4f5f-aafa-c6636f5b8b5a": {
+    "source": "AppleScripts/Scripts/Download Chase Activity.applescript",
+    "type": "AppleScript",
+    "total_chunks": 5,
+    "file_context": "(*\nDownload Chase Activity\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "f4407933-2078-4e9b-9184-891cbcabbc3d": {
+    "source": "AppleScripts/Scripts/Gather Financial Updates.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nGather Financial Updates\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "f2405376-36fc-43b4-a795-5a984beca447": {
+    "source": "AppleScripts/Scripts/Sync iTunes Devices.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\nSync iTunes Devices\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "b5426e69-8960-4ddb-b149-159d2a1a45a0": {
+    "source": "AppleScripts/Scripts/TiVo Import.applescript",
+    "type": "AppleScript",
+    "total_chunks": 4,
+    "file_context": "(*\nTiVo Import\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "8aff76d3-1248-4b4c-a6d5-02431f69271a": {
+    "source": "AppleScripts/Scripts/Download Starred Wallpapers.applescript",
+    "type": "AppleScript",
+    "total_chunks": 3,
+    "file_context": "(*\nDownload Starred Wallpapers\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "0a372aee-e1d6-4b87-aa60-2656267bf1a2": {
+    "source": "AppleScripts/Scripts/Rename Illustrator Exports.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nRename Illustrator Exports\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "2b542526-d033-4882-9b1c-23084d1ba03e": {
+    "source": "AppleScripts/Scripts/Get Navient Loan Splits.applescript",
+    "type": "AppleScript",
+    "total_chunks": 5,
+    "file_context": "(*\nGet Navient Loan Splits\nv1.2\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "36932790-8f8c-4574-bc98-9e3da2c1854b": {
+    "source": "AppleScripts/Scripts/Uncap Torrents.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nUncap Torrents\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "3c080fcb-5563-4713-8b49-2cdf16067575": {
+    "source": "AppleScripts/Scripts/Get Receipts from Notes.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nGet Receipts from Notes\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "2e97eeb5-7acc-4ffc-a91e-7b5f08fb78e5": {
+    "source": "AppleScripts/Scripts/Create OmniFocus Tasks for iCal events.applescript",
+    "type": "AppleScript",
+    "total_chunks": 7,
+    "file_context": "(*\nCreate OmniFocus Tasks for iCal events\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "78d1d5cd-0402-4e77-9dd0-1eafaee8aadf": {
+    "source": "AppleScripts/Scripts/Receipt to Yojimbo.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nReceipt to Yojimbo\nv1.0\nDov Frankel, 2017\nhttp://dovfrankel.com"
+  },
+  "de94db3b-3f30-401b-b1c4-47279176b183": {
+    "source": "AppleScripts/Scripts/Pay Stub to Yojimbo.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nPay Stub to Yojimbo\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "8a569fa8-8247-40b5-bc3d-f0104a5b4e4b": {
+    "source": "AppleScripts/Scripts/Get 401k Prices (JPMorgan-Putnam).applescript",
+    "type": "AppleScript",
+    "total_chunks": 6,
+    "file_context": "(*\nGet 401k Prices (JPMorgan & Putnam)\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "12f1987f-cf52-49c1-bce8-271cc42d5245": {
+    "source": "AppleScripts/Services/Encode With HandBrake.applescript",
+    "type": "AppleScript",
+    "total_chunks": 3,
+    "file_context": "on run {input, parameters}\n\tset handbrakeCli to \"/Applications/HandBrakeCLI\"\n\tset defaultPreset to 7\n\t\n\t-- Make sure HandBrakeCLI is installed"
+  },
+  "9872c281-f280-4bec-9099-d1763f3d4dad": {
+    "source": "AppleScripts/Services/Convert Script to Text.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\n\"Convert Script to Text\"\nby Dov Frankel\nhttp://dovfrankel.com\n"
+  },
+  "c4ac2e4d-79b1-4d46-a88c-9789a558e14f": {
+    "source": "AppleScripts/Services/Convert to UTF-8.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nConvert to UTF-8\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "5f0b7269-3f19-416a-905b-9be42531c063": {
+    "source": "AppleScripts/iTunes/Scripts/Instrumental Lyrics.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nInstrumental Lyrics\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "4567ce02-25c2-403f-92c2-fdfd75b1fe48": {
+    "source": "AppleScripts/iTunes/Scripts/Upgrade Tracks.applescript",
+    "type": "AppleScript",
+    "total_chunks": 21,
+    "file_context": "(*\nUpgrade Tracks\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "6dea7684-faf2-425c-96d3-ed3e67e666ad": {
+    "source": "AppleScripts/iTunes/Scripts/Make OmniFocus Tasks.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\nMake OmniFocus Tasks\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "ce8079ea-65df-4ac5-b362-432b6dc867dd": {
+    "source": "AppleScripts/iTunes/Scripts/Gruber Title.applescript",
+    "type": "AppleScript",
+    "total_chunks": 4,
+    "file_context": "(*\nGruber Title\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "77e2214e-3c25-4d3c-8588-30847209ee3a": {
+    "source": "AppleScripts/iTunes/Scripts/Re-import Lossless Tracks.applescript",
+    "type": "AppleScript",
+    "total_chunks": 12,
+    "file_context": "(*\n\"Re-import Lossless Tracks\"\nDov Frankel, 2013\nhttp://dovfrankel.com\n"
+  },
+  "5dc6ba8c-73ac-416d-a51a-89eca79ead65": {
+    "source": "AppleScripts/Scripts/Libraries/Transmission.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\nTransmission Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "38ad47a2-d472-4a3f-86a9-d16c78d28063": {
+    "source": "AppleScripts/Scripts/Libraries/Library Tests.applescript",
+    "type": "AppleScript",
+    "total_chunks": 12,
+    "file_context": "(*\nLibrary Tests\nv1.0\nDov Frankel, 2013\n*)"
+  },
+  "364281ed-70eb-448d-9504-181a5b3291ec": {
+    "source": "AppleScripts/Scripts/Libraries/Strings.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\nStrings Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "be6b40f8-9788-485a-ae72-d2e7cddde96a": {
+    "source": "AppleScripts/Scripts/Libraries/Filenames.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nFilenames Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "35acf22a-6cab-4fbe-943b-b0b9aac91946": {
+    "source": "AppleScripts/Scripts/Libraries/Dates.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\nDates Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "453fae9c-3032-41d3-9ed6-bfdc35408251": {
+    "source": "AppleScripts/Scripts/Libraries/Safari.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\nSafari Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "52d2e855-9c3e-4d4f-a024-28fa00d9b3f7": {
+    "source": "AppleScripts/Scripts/Libraries/Growl.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nGrowl Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "ef00d775-5685-4a9e-adb3-ea9dc2c03777": {
+    "source": "AppleScripts/Scripts/Libraries/OmniFocus.applescript",
+    "type": "AppleScript",
+    "total_chunks": 3,
+    "file_context": "(*\nOmniFocus Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "e48c660e-44ba-478f-a93b-46e4113cbfc0": {
+    "source": "AppleScripts/Scripts/Libraries/iTunes.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "(*\niTunes Library\nv1.0\nDov Frankel, 2013\n"
+  },
+  "58fc36b2-ffc1-44e2-ba3f-25109408d6cc": {
+    "source": "AppleScripts/Scripts/Libraries/Library Loader.applescript",
+    "type": "AppleScript",
+    "total_chunks": 3,
+    "file_context": "(*\nLibrary Loader\nv1.1\nDov Frankel, 2013\n"
+  },
+  "7d0a09d8-67f2-48c2-8fca-e3800bbb6735": {
+    "source": "AppleScripts/Scripts/Tumblr/New Movie Writeup.applescript",
+    "type": "AppleScript",
+    "total_chunks": 5,
+    "file_context": "(*\nTumblr - New Movie Writeup\nv1.0\nDov Frankel, 2013\nhttp://dovfrankel.com"
+  },
+  "9e56147c-82cb-4169-bc55-dfb114b70dfa": {
+    "source": "AppleScripts/Scripts/Applications/Safari/Open in Chrome.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "(*\nSafari Open in Chrome\nv1.0\nDov Frankel, 2013\n"
+  },
+  "42d93aa0-5c36-4ec2-8bbf-10a7cfc0506e": {
+    "source": "AppleScripts/Scripts/Applications/OmniFocus/Reschedule.applescript",
+    "type": "AppleScript",
+    "total_chunks": 4,
+    "file_context": "(*\nOmniFocus Reschedule\nv1.0\nDov Frankel, 2013\n"
+  },
+  "73a8d511-fa15-4268-96cd-f48361dc0ee5": {
+    "source": "mac-scripting/DEVONthink/DEVONthink_Notes_from_PDF_Annotations/DEVONthink_Notes_from_PDF_Annotations.applescript",
+    "type": "AppleScript",
+    "total_chunks": 49,
+    "file_context": "-- DEVONthink Notes from PDF Annotations\n-- version 1.3, licensed under the MIT license\n\n-- by Matthias Steffens, keypoints.app, mat(at)extracts(dot)de\n"
+  },
+  "ff09f17a-7d61-4456-ab76-8598728dc5d9": {
+    "source": "mac-scripting/ScriptingLibraries/KeypointsScriptingLib/KeypointsScriptingLib.applescript",
+    "type": "AppleScript",
+    "total_chunks": 87,
+    "file_context": "-- Keypoints Scripting Lib\n-- version 1.5, licensed under the MIT license\n\n-- by Matthias Steffens, keypoints.app, mat(at)extracts(dot)de\n"
+  },
+  "efd1a75b-39a0-42f7-9118-8ee6617e7bfa": {
+    "source": "mac-scripting/docs/Bookends/Getting_Started.applescript",
+    "type": "AppleScript",
+    "total_chunks": 7,
+    "file_context": "-- Sample scripts from the getting started guide\n-- \"Scripting Bookends 13 with AppleScript\"\n\n-- uncomment/comment the lines/blocks that you want to try out/ignore...\n-- block comments start with \"(*\" and end with \"*)\""
+  },
+  "339ffb10-01c1-4e2c-8c40-438dd7f9694c": {
+    "source": "mac-scripting/Bookends/Update_group_publications_from_attachment_name/Update_group_publications_from_attachment_name.applescript",
+    "type": "AppleScript",
+    "total_chunks": 11,
+    "file_context": "-- Update group publications from attachment name\n-- version 1.0, licensed under the MIT license\n\n-- by Matthias Steffens, keypoints.app, mat(at)extracts(dot)de\n"
+  },
+  "67585b22-4409-4b1e-885b-edf5fd860f46": {
+    "source": "mac-scripting/Papers3/Papers_To_Bookends/Papers_To_Bookends.applescript",
+    "type": "AppleScript",
+    "total_chunks": 16,
+    "file_context": "-- Papers to Bookends\n-- version 1.4, licensed under the MIT license\n\n-- by Matthias Steffens, keypointsapp.net, mat(at)extracts(dot)de\n"
+  },
+  "3ff6a425-570c-4fd7-9acf-99c59dcdbf7a": {
+    "source": "mac-scripting/Papers3/Papers_To_DEVONthink/Papers_To_DEVONthink.applescript",
+    "type": "AppleScript",
+    "total_chunks": 18,
+    "file_context": "-- Papers to DEVONthink\n-- version 1.0, licensed under the MIT license\n\n-- by Matthias Steffens, keypointsapp.net, mat(at)extracts(dot)de\n"
+  },
+  "8f33e753-b971-4507-9294-05975a41aee4": {
+    "source": "macos-automation/applescript/lib.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "use framework \"Foundation\"\nuse scripting additions\n\nproperty NSDate : a reference to current application's NSDate\nproperty NSNumber : a reference to current application's NSNumber"
+  },
+  "76bbef51-ee3c-47bc-9e6f-fc36bfe1557b": {
+    "source": "macos-automation/applescript/com.apple.iCal/search_events.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "on run argv\n  if argv's length is 0 then\n    set theQuery to \"\"\n  else\n    set theQuery to item 1 of argv"
+  },
+  "665b0077-42b1-4e67-921b-cd373eeac811": {
+    "source": "macos-automation/applescript/com.apple.iCal/link_event.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "on run argv\n  set theInputJson to item 1 of argv\n\n  tell application \"JSON Helper\"\n    set eventInfo to read JSON from theInputJson"
+  },
+  "600ef948-0fe1-44b7-a161-7271e4513757": {
+    "source": "macos-automation/applescript/com.apple.iCal/open_link.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "on run argv\n  if argv's length is 0 then\n    tell application \"Calendar\"\n      switch view to day view\n      view calendar at current date"
+  },
+  "71b2496f-4ad2-421c-84d8-e4b7657c65ef": {
+    "source": "macos-automation/applescript/com.apple.finder/add_or_edit_tags.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"System Events\"\n    click (first button whose description is \"Add Tags\" or description is \"Edit Tags\") of toolbar 0 of window 0 of application process \"Finder\"\nend tell\n"
+  },
+  "ca96358a-a19d-443d-8c0c-0e76ea3e75b6": {
+    "source": "macos-automation/applescript/com.apple.Safari/open_highlighted_link.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Safari\"\n\ttell window 1\n\t\ttell current tab\n\t\t\tdo JavaScript \"window.getSelection().anchorNode.parentElement.closest('a,button').click()\"\n\t\tend tell"
+  },
+  "31d58680-1814-4aa7-99ff-9ec2d7e2b31b": {
+    "source": "macos-automation/applescript/com.apple.Safari/copy_splunk_value.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Safari\"\n\ttell window 1\n\t\ttell current tab\n\t\t\tdo JavaScript \"navigator.clipboard.writeText($('.selected-segment').text())\"\n\t\tend tell"
+  },
+  "49e7720c-9195-411f-91ef-93fdf8515be5": {
+    "source": "macos-automation/applescript/com.apple.mail/copy_mail_message_url.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "tell application \"Mail\"\n\tset _sel to get selection\n\tset _textLinks to {}\n\tset _htmlLinks to {}\n\trepeat with _msg in _sel"
+  },
+  "e8999f3c-fb03-4fae-9000-22807ebd298b": {
+    "source": "macos-automation/applescript/com.google.Chrome/copy_page_link_as_markdown.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "-- Copies the frontmost Google Chrome tab as a Markdown link\ntell application \"Google Chrome\"\n\tset theTab to active tab of front window\n\tset theTitle to title of theTab\n\tset theURL to URL of theTab"
+  },
+  "e00d99e1-0aa4-4c25-a77c-1f1b851dfc31": {
+    "source": "macos-automation/applescript/com.apple.AddressBook/link_contact.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "on run argv\n  set contactId to item 1 of argv\n\n  if contactId is not \"\" then\n    tell application \"Contacts\""
+  },
+  "a04d86bd-0e44-463e-8ee8-7145f96262c1": {
+    "source": "macos-automation/applescript/com.apple.AddressBook/fetch_contacts.applescript",
+    "type": "AppleScript",
+    "total_chunks": 2,
+    "file_context": "on filteredContacts(query)\n  tell application \"Contacts\"\n    repeat with i from 0 to 4\n      try\n        set matches to {ids:id, names:name} of (people 1 thru (5 - i) whose name contains query)"
+  },
+  "04f8e781-cb9c-46ae-ad57-eb6dc33f918f": {
+    "source": "macos-automation/applescript/com.apple.AddressBook/view_in_alfred.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "property ADDRESSBOOK_DATA_DIR : \"~/Library/Application\\\\ Support/AddressBook\"\n\ntell application \"Contacts\"\n  set theSelection to selection\n  set theId to id of item 1 of theSelection"
+  },
+  "e2862190-f049-4625-9efa-f3e24625d198": {
+    "source": "macos-automation/apps/OpenNoteUrl.app/main.applescript",
+    "type": "AppleScript",
+    "total_chunks": 1,
+    "file_context": "on open location noteURL\n  tell application \"Notes\"\n    if (offset of (my NOTE_SHORTCUTS_URL_PREFIX) in noteURL) is 0 then\n      display dialog (\"Don't know how to handle the following URL: \" & noteURL) buttons { \"OK\" }\n      return"
+  },
+  "f467fc0d-6e6c-4e26-a12a-baf531bf141a": {
+    "source": "automator-collection/Unmount Hard Drive.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 1,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0003l\u0000\u0002\u0000\u0000\u0000\u0005\u0000\u0004ÿþÿý\n\u0000\u0004\u0000\u0003I\u0000\u0002\u0000\u0000\u0000\u0005ÿü\u0000\u0005ÿû\nÿü\u0000\u0018.sysoexecTEXTÿÿ\u0000\u0000\u0000\u0000\u0000TEXT\n\u0000\u0005\u0000\u0001m\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0006\u000e\u0000\u0006\u0000\u0001±\u0000\u0007\u0011\u0000\u0007\u00006\u0000d\u0000i\u0000s\u0000k\u0000u\u0000t\u0000i\u0000l\u0000 \u0000e\u0000j\u0000e\u0000c\u0000t\u0000 \u0000'\u0000H\u0000a\u0000r\u0000d\u0000 \u0000D\u0000r\u0000i\u0000v\u0000e\u0000'\u0002ÿû\u0000\u0000\u0001ÿþ\u0000\u0000\u0001ÿý\u0000\u0000\u000e\u0000\u0002\u0000\u0000\u000f\u0010\u0000\u0003\u0000\u0003ÿú\u0000\b\u0000\t\u0001ÿú\u0000\u0000\u0010\u0000\b\u0000\u0001ÿù"
+  },
+  "7f8e5273-1fe9-449b-816a-f030daa93299": {
+    "source": "automator-collection/Google Chrome Incognito.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 3,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0000\u001d\u0000\u0017Working in MacOS Sierra\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000.\u0000W\u0000o\u0000r\u0000k\u0000i\u0000n\u0000g\u0000 \u0000i\u0000n\u0000 \u0000M\u0000a\u0000c\u0000O\u0000S\u0000 \u0000S\u0000i\u0000e\u0000r\u0000r\u0000a\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "631d2c9b-cdda-4720-b664-5d29dba60ef7": {
+    "source": "automator-collection/Mount Hard Drive.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 1,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0003l\u0000\u0002\u0000\u0000\u0000\u0005\u0000\u0004ÿþÿý\n\u0000\u0004\u0000\u0003I\u0000\u0002\u0000\u0000\u0000\u0005ÿü\u0000\u0005ÿû\nÿü\u0000\u0018.sysoexecTEXTÿÿ\u0000\u0000\u0000\u0000\u0000TEXT\n\u0000\u0005\u0000\u0001m\u0000\u0000\u0000\u0000\u0000\u0001\u0000\u0006\u000e\u0000\u0006\u0000\u0001±\u0000\u0007\u0011\u0000\u0007\u0000\u0000d\u0000i\u0000s\u0000k\u0000u\u0000t\u0000i\u0000l\u0000 \u0000m\u0000o\u0000u\u0000n\u0000t\u0000 \u0000`\u0000d\u0000i\u0000s\u0000k\u0000u\u0000t\u0000i\u0000l\u0000 \u0000l\u0000i\u0000s\u0000t\u0000 \u0000|\u0000 \u0000g\u0000r\u0000e\u0000p\u0000 \u0000'\u0000H\u0000a\u0000r\u0000d\u0000 \u0000D\u0000r\u0000i\u0000v\u0000e\u0000'\u0000 \u0000|\u0000 \u0000g\u0000r\u0000e\u0000p\u0000 \u0000-\u0000o\u0000 \u0000'\u0000\\\u0000(\u0000d\u0000i\u0000s\u0000k\u0000[\u00000\u0000-\u00009\u0000s\u0000]\u0000*\u0000\\\u0000)\u0000'\u0000`\u0002ÿû\u0000\u0000\u0001ÿþ\u0000\u0000\u0001ÿý\u0000\u0000\u000e"
+  },
+  "c4a9d221-8669-41f6-b131-09c498b58aea": {
+    "source": "automator-collection/Chromium Incognito.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 2,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0002\u0000\u0000\u0000 \u0000\u0007ÿþÿý\n\u0000\u0007\u0000\u0002O\u0000\u0000\u0000\u0000\u0000 \u0000\b\u0000\t\n\u0000\b\u0000\u0001k\u0000\u0000\u0000\u0004\u0000\u001f\u0000"
+  },
+  "645abdee-0c07-4ebd-ac86-31b67105c5a5": {
+    "source": "automator-collection/Firefox Private Browsing.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 2,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0002\u0000\u0000\u0000 \u0000\u0007ÿþÿý\n\u0000\u0007\u0000\u0002O\u0000\u0000\u0000\u0000\u0000 \u0000\b\u0000\t\n\u0000\b\u0000\u0001k\u0000\u0000\u0000\u0004\u0000\u001f\u0000"
+  },
+  "45d56c21-60bb-467f-bcec-10f430b4e60b": {
+    "source": "automator-collection/Voice command tags example 2.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 4,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0002\u0000\u0000\u0000\u0006\u0000\u0007ÿþÿý\n\u0000\u0007\u0000\u0002r\u0000\u0000\u0000\u0000\u0000\u0006\u0000\b\u0000\t\n\u0000\b\u0000\u0001J\u0000\u0000\u0000\u0000\u0000\u0004\u0000"
+  },
+  "22ce8ffd-02c6-4de4-8b6b-af9bfb858d0e": {
+    "source": "automator-collection/Voice command tags example.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 3,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\t\u0000\u0007\u0000\b\u0000\t\n\u0000\u0007\u0000\u0002r\u0000\u0000\u0000\u0000\u0000\t\u0000\n\u0000\u000b"
+  },
+  "7128c82c-cac1-4435-a748-e942945378cb": {
+    "source": "automator-collection/Safari Private.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 2,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0000\u001d\u0000\u0017Working in MacOS Sierra\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000.\u0000W\u0000o\u0000r\u0000k\u0000i\u0000n\u0000g\u0000 \u0000i\u0000n\u0000 \u0000M\u0000a\u0000c\u0000O\u0000S\u0000 \u0000S\u0000i\u0000e\u0000r\u0000r\u0000a\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "f168bca4-e49e-41ae-9c38-03ad0a78efd6": {
+    "source": "automator-collection/CustomDownloads.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 2,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0000j\u0000d Keep \"Open safe downloads\" ticked in Safari, this script only opens files that Safari does not open\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000È\u0000 \u0000K\u0000e\u0000e\u0000p\u0000 \u0000\"\u0000O\u0000p\u0000e\u0000n\u0000 \u0000s\u0000a\u0000f\u0000e\u0000 \u0000d\u0000o\u0000w\u0000n\u0000l\u0000o\u0000a\u0000d\u0000s\u0000\"\u0000 \u0000t\u0000i\u0000c\u0000k\u0000e\u0000d\u0000 \u0000i\u0000n\u0000 \u0000S\u0000a\u0000f\u0000a\u0000r\u0000i\u0000,\u0000 \u0000t\u0000"
+  },
+  "ab7a534e-fdee-445d-b95c-cb260818ac24": {
+    "source": "automator-collection/WineRunProgram.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 1,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0003l\u0000\u0002\u0000\u0000\u0000\n\u0000\u0004ÿþÿý\n\u0000\u0004\u0000\u0002O\u0000\u0000\u0000\u0000\u0000\n\u0000\u0005\u0000\u0006"
+  },
+  "4f2b633f-0a0f-4687-9bd6-3d9b3342331c": {
+    "source": "applescript/Snippets/finder label red.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 1,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0003l\u0000\u0002\u0000\u0000\u00000\u0000\u0004ÿþÿý\n\u0000\u0004\u0000\u0003Q\u0000\u0000\u0000\u0000\u00000\u0000\u0005\u0000\u0006ÿü\n\u0000\u0005\u0000\u0002O\u0000\u0000\u0000\u0003\u0000'\u0000\u0007\u0000\b\n\u0000\u0007\u0000\u0003X\u0000\u0000\u0000\u0007\u0000&\u0000\tÿû\u0000"
+  },
+  "7803b429-26ed-4429-b30d-e87b66aacd7f": {
+    "source": "AppleScripts/Scripts/Libraries/Library Loader.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 11,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0000\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0003\u001c\u0003\u0016\nLibrary Loader\nv1.1"
+  },
+  "08a5af97-df1d-4ff0-aaf2-624e5e5bd984": {
+    "source": "mac-scripting/DEVONthink/DEVONthink_Notes_from_PDF_Annotations/DEVONthink_Notes_from_PDF_Annotations.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 177,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0000,\u0000& DEVONthink Notes from PDF Annotations\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000L\u0000 \u0000D\u0000E\u0000V\u0000O\u0000N\u0000t\u0000h\u0000i\u0000n\u0000k\u0000 \u0000N\u0000o\u0000t\u0000e\u0000s\u0000 \u0000f\u0000r\u0000o\u0000m\u0000 \u0000P\u0000D\u0000F\u0000 \u0000A\u0000n\u0000n\u0000o\u0000t\u0000a\u0000t\u0000i\u0000o\u0000n\u0000s\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "2b84474d-9346-4f4d-9ff8-0bb4afc1acb8": {
+    "source": "mac-scripting/docs/Bookends/Getting_Started.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 28,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u00004\u0000. Sample scripts from the getting started guide\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000\\\u0000 \u0000S\u0000a\u0000m\u0000p\u0000l\u0000e\u0000 \u0000s\u0000c\u0000r\u0000i\u0000p\u0000t\u0000s\u0000 \u0000f\u0000r\u0000o\u0000m\u0000 \u0000t\u0000h\u0000e\u0000 \u0000g\u0000e\u0000t\u0000t\u0000i\u0000n\u0000g\u0000 \u0000s\u0000t\u0000a\u0000r\u0000t\u0000e\u0000d\u0000 \u0000g\u0000u\u0000i\u0000d\u0000e\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "21238a48-9b4a-4464-a6fa-c75ceee60e13": {
+    "source": "mac-scripting/Bookends/Update_group_publications_from_attachment_name/Update_group_publications_from_attachment_name.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 43,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u00005\u0000/ Update group publications from attachment name\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000^\u0000 \u0000U\u0000p\u0000d\u0000a\u0000t\u0000e\u0000 \u0000g\u0000r\u0000o\u0000u\u0000p\u0000 \u0000p\u0000u\u0000b\u0000l\u0000i\u0000c\u0000a\u0000t\u0000i\u0000o\u0000n\u0000s\u0000 \u0000f\u0000r\u0000o\u0000m\u0000 \u0000a\u0000t\u0000t\u0000a\u0000c\u0000h\u0000m\u0000e\u0000n\u0000t\u0000 \u0000n\u0000a\u0000m\u0000e\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "63e3d6db-f903-4d05-8048-26a35ca1d913": {
+    "source": "mac-scripting/Papers3/Papers_To_Bookends/Papers_To_Bookends.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 67,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0000\u0019\u0000\u0013 Papers to Bookends\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000&\u0000 \u0000P\u0000a\u0000p\u0000e\u0000r\u0000s\u0000 \u0000t\u0000o\u0000 \u0000B\u0000o\u0000o\u0000k\u0000e\u0000n\u0000d\u0000s\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "981df29b-4c4e-4744-9d64-80b6bc474828": {
+    "source": "mac-scripting/Papers3/Papers_To_DEVONthink/Papers_To_DEVONthink.scpt",
+    "type": "AppleScript (compiled)",
+    "total_chunks": 69,
+    "file_context": "FasdUAS 1.101.10\u000e\u0000\u0000\u0000\u0004\u000fÿÿ\u0000\u0001\u0000\u0002\u0000\u0003\u0001ÿÿ\u0000\u0000\n\u0000\u0001\u0000\u0001k\u0000\u0000\u0000\u0000\u0000\u0000\u0000\u0004\u0002\u0000\u0004\u0000\u0002\u0000\u0005\u0000\u0006\n\u0000\u0005\u0000\u0003l\u0000\u0001\u0000\u0000\u0000\u0000ÿþ\u0000\u0007\u0000\b\u0001ÿþ\u0000\u0000\f\u0000\u0007\u0000\u001b\u0000\u0015 Papers to DEVONthink\u0000\u0002\u0000\u0000\u000e\u0000\b\u0000\u0001±\u0000\t\u0011\u0000\t\u0000*\u0000 \u0000P\u0000a\u0000p\u0000e\u0000r\u0000s\u0000 \u0000t\u0000o\u0000 \u0000D\u0000E\u0000V\u0000O\u0000N\u0000t\u0000h\u0000i\u0000n\u0000k\u0002\u0000\u0006\u0000\u0002\u0000\n\u0000\u000b\n\u0000"
+  },
+  "8af3ef34-a841-4729-a1fd-6b450500ad30": {
+    "source": "macos-automation/applescript/com.apple.iCal/show_event.js",
+    "type": "JXA",
+    "total_chunks": 1,
+    "file_context": "function run(argv) {\n\tvar input = JSON.parse(argv);\n\tvar {eventId, calendarId} = input;\n\tvar Calendar = Application(\"Calendar\");\n\tCalendar.switchView({to: \"day view\"});"
+  },
+  "4b7f1e65-fcf3-4e15-8647-a9c461ce04eb": {
+    "source": "macos-automation/applescript/com.apple.Safari/markdown_link.js",
+    "type": "JXA",
+    "total_chunks": 1,
+    "file_context": "var Safari = Application('Safari');\nSafari.includeStandardAdditions = true;\n\nvar currentWindow = Safari.windows[0];\nvar currentTab = currentWindow.currentTab();"
+  },
+  "eaa14d88-9085-4fb5-9c1b-5e6d512c7918": {
+    "source": "macos-automation/applescript/com.apple.Safari/github_link.js",
+    "type": "JXA",
+    "total_chunks": 1,
+    "file_context": "var Safari = Application('Safari');\nSafari.includeStandardAdditions = true;\n\nvar OmniFocus = Application('OmniFocus');\n"
+  },
+  "16bd082f-3b82-4aa9-8084-bbe7e9ad9d76": {
+    "source": "macos-automation/obsidian/dataview/recipe_overview.js",
+    "type": "JXA",
+    "total_chunks": 1,
+    "file_context": "const recipeFile = dv.current().file;\n\nconst ingredients = [];\nconst nutritionFacts = {\n    calories: 0,"
+  },
+  "7082e587-218f-4e25-9bd6-815748b8d178": {
+    "source": "macos-automation/obsidian/dataview/punchcard.js",
+    "type": "JXA",
+    "total_chunks": 2,
+    "file_context": "const rootNode = dv.el(\"div\", \"\");\ndv.container = rootNode;\n\nconst goals = dv.pages('\"Me/360\"');\nconst maxCheckins = [...goals].reduce((a, {checkins}) => (checkins.length > a ? checkins.length : a), 0);"
+  },
+  "43e301a0-ac2e-49b8-a56d-2288bea89ff9": {
+    "source": "macos-automation/obsidian/quickadd/capture_todo.js",
+    "type": "JXA",
+    "total_chunks": 1,
+    "file_context": "module.exports = async (ctx) => {\n    const todo = await ctx.quickAddApi.inputPrompt('TODO:');\n    const filename = todo\n        .replace(/\\[\\[(.+?)\\]\\]/g, '$1')\n        .replace(/\\[(.+?)\\]\\(.*?\\)/g, '$1')"
+  },
+  "7a747de4-8eb6-4ad0-a4b3-95ada54dec37": {
+    "source": "applescript/TODO.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "## Summary\n\n| Status        | Count |\n|---------------|-------|\n|  Total      | 54    |"
+  },
+  "e159bbd3-08df-48ab-8c44-002e18d17ffa": {
+    "source": "applescript/README.md",
+    "type": "Documentation",
+    "total_chunks": 8,
+    "file_context": "Applescript\n============\n\nThis repository is a collection of Applescript snippets that can be used individually or part of a larger project. Many of these snippets were written as I was learning to use Applescript and may not represent the best method of undertaking a particular task. Feel free to o"
+  },
+  "b1343a0f-94ab-4216-8d89-6d0035fb8b99": {
+    "source": "AppleScripts/readme.md",
+    "type": "Documentation",
+    "total_chunks": 3,
+    "file_context": "# Overview\n\nBasically, these are scripts I've written over the years to scratch various itches I've had. All parts of all scripts were written by me, unless otherwise stated. I don't really care how you make use of them, but it would be nice if you could give some type of attribution to me and/or my"
+  },
+  "b6bf0db5-fa81-467a-b08b-7fde6ee364e2": {
+    "source": "mac-scripting/README.md",
+    "type": "Documentation",
+    "total_chunks": 5,
+    "file_context": "# mac-scripting - Automation scripts for macOS\n\nThis repository contains an assortment of MIT-licensed AppleScript or JXA (JavaScript for Automation) scripts for various macOS applications.\n\n"
+  },
+  "de4eb1b6-76da-4bb4-9dc9-081c2958be2a": {
+    "source": "macapptree/README.md",
+    "type": "Documentation",
+    "total_chunks": 3,
+    "file_context": "[![MacPaw Research](https://pbs.twimg.com/profile_banners/3993798502/1720615716/1500x500)](https://research.macpaw.com)\n\n![PyPI - Version](https://img.shields.io/pypi/v/macapptree)\n\n# macapptree"
+  },
+  "913020b5-68b2-4510-b902-fa222ec20d63": {
+    "source": "macapptree/SECURITY.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "# Security Policy\n\n## Reporting Security Issues\nIf you believe you have found a security vulnerability in any MacPaw-owned repository, please report it to us through coordinated disclosure.\n"
+  },
+  "1895d334-d3b4-4225-9de6-358db3f2526e": {
+    "source": "macOS-Automation-Resources/README.md",
+    "type": "Documentation",
+    "total_chunks": 57,
+    "file_context": "# macOS Automation Resources\n\nThis is a collection of resources for macOS automation technologies. The resources have been organized by type, but there is otherwise no specific order to them. I recommend using Command+F to find materials relevant to your needs.\n\nFor each resource, links are provided"
+  },
+  "5298ff9a-94b8-460b-9dab-dd22e7ca99be": {
+    "source": "macOS-Automation-Resources/list_of_scriptable_applications.md",
+    "type": "Documentation",
+    "total_chunks": 19,
+    "file_context": "# List of AppleScript-Compatible Applications\n\n# Alphabetical\n\n## A"
+  },
+  "c7fb114f-dd02-4fe5-a2f8-7d8fdf80300f": {
+    "source": "macOS-Automation-Resources/applescript_changelog.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "# Changes in AppleScript Scripting Definitions\n\nThis file documents changes in the AppleScript scripting definitions of macOS applications across different versions of macOS.\n\n## Changes in macOS 15 (Sequoia)"
+  },
+  "4b75db79-2e2e-44ae-8003-d5b9a53eb96e": {
+    "source": "automator-collection/README.md",
+    "type": "Documentation",
+    "total_chunks": 7,
+    "file_context": "Automator\n=========\n\nAutomator and AppleScript programming!  \nMy collection of favourite scripts and workflows for my productive Mac!  "
+  },
+  "e5602580-3cd3-464f-b176-ee0424001a52": {
+    "source": "macos-automation/README.md",
+    "type": "Documentation",
+    "total_chunks": 3,
+    "file_context": "# macOS automation scripts\n\nA collection of my macOS automation scripts (Alfred workflow, AppleScript and JXA). To compile, run:\n\n``` bash"
+  },
+  "26995453-4ff0-4a33-8048-6a7870e060ab": {
+    "source": "Capable/CODE_OF_CONDUCT.md",
+    "type": "Documentation",
+    "total_chunks": 3,
+    "file_context": "# Contributor Covenant Code of Conduct\n\n## Our Pledge\n\nIn the interest of fostering an open and welcoming environment, we as"
+  },
+  "b7e33e47-76c8-4c5f-bfe7-08abad1be341": {
+    "source": "Capable/CHANGELOG.md",
+    "type": "Documentation",
+    "total_chunks": 4,
+    "file_context": "## Version 2.0.1\n\n### Bugfixes\n* [Fix build issue due to incorrect NSNotification name](https://github.com/chrs1885/Capable/pull/63). *(Thanks to @acosmicflamingo)*\n"
+  },
+  "0b9fee0e-b387-4308-b706-feb75621d503": {
+    "source": "Capable/README.md",
+    "type": "Documentation",
+    "total_chunks": 9,
+    "file_context": "<center><img src=\"https://user-images.githubusercontent.com/1390908/41822361-a14fafd2-77ee-11e8-8aa6-f18960566d0c.png\" width=\"400\">\n</center>\n\n---\n[![Awesome](https://camo.githubusercontent.com/13c4e50d88df7178ae1882a203ed57b641674f94/68747470733a2f2f63646e2e7261776769742e636f6d2f73696e647265736f726"
+  },
+  "2973d45c-f2c3-4586-95b0-bd65c932d1e4": {
+    "source": "AXSwift/README.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "# AXSwift\n\n[![Version](https://cocoapod-badges.herokuapp.com/v/AXSwift/badge.svg)](https://cocoapods.org/pods/AXSwift)\n[![Carthage compatible](https://img.shields.io/badge/Carthage-compatible-4BC51D.svg?style=flat)](https://github.com/Carthage/Carthage)\n"
+  },
+  "4992324b-d7e6-4cb0-867f-929b04686a38": {
+    "source": "applescript/Snippets/README.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "# Applescript Snippets  \n\nThis folder contains small, single task oriented applescript snippets designed to help with building of larger scripts. Anything missing or unclear? Open an issue or pull request!  "
+  },
+  "1d87e959-4b4b-4076-8ee8-305ca2cda355": {
+    "source": "applescript/Battery Monitor/README.md",
+    "type": "Documentation",
+    "total_chunks": 4,
+    "file_context": "# Battery Monitor\n\nA macOS AppleScript that helps maintain optimal battery health by monitoring battery levels and charging status, providing timely notifications when action is needed.\n\n## Features"
+  },
+  "4af9464c-941b-4f8f-b53e-b78a0e065800": {
+    "source": "applescript/Application Services/README.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "# Usage Notes for Application Services  \n\n\n**App Killer** will quit any application you choose. I have this bound to a key combination, and find that I use it saves me from having to \"activate\" applications that are not in focus just so I can quit them. There is a slight issue with apps that run mul"
+  },
+  "e2c2b70d-9e01-449b-9ce9-fcce3e3fbd86": {
+    "source": "mac-scripting/DEVONthink/DEVONthink_Notes_from_PDF_Annotations/README.md",
+    "type": "Documentation",
+    "total_chunks": 7,
+    "file_context": "# DEVONthink Notes from PDF Annotations\n\nFor each of the PDFs selected in DEVONthink, this script will iterate over its contained PDF annotations and create or update a Markdown record for each markup or text annotation.\n\nThe URL of each Markdown record will be set to a deep link that directly point"
+  },
+  "aa53aa24-dd9a-4d5a-be02-81643b5e3fe5": {
+    "source": "mac-scripting/ScriptingLibraries/KeypointsScriptingLib/README.md",
+    "type": "Documentation",
+    "total_chunks": 3,
+    "file_context": "# Keypoints Scripting Library\n\nThis script library contains useful AppleScript and AppleScriptObjC methods that can be used when\nwriting scripts for the Mac.\n"
+  },
+  "297953cd-ae48-4c84-b336-e101f24f491d": {
+    "source": "mac-scripting/docs/Bookends/Getting_Started.md",
+    "type": "Documentation",
+    "total_chunks": 20,
+    "file_context": "# Scripting Bookends 13 with AppleScript – A Getting Started Guide\n\n## About AppleScript\n\n[AppleScript](http://en.wikipedia.org/wiki/AppleScript) is an object-oriented scripting language with an English-like language syntax. It can be used on macOS to automate repetitive tasks, combine features from"
+  },
+  "ac9e3b16-6c0a-45ae-b9c8-01670a013e35": {
+    "source": "mac-scripting/docs/Papers3/Getting_Started.md",
+    "type": "Documentation",
+    "total_chunks": 17,
+    "file_context": "# Scripting Papers 3 for Mac with AppleScript – A Getting Started Guide\n\n## About AppleScript\n\n[AppleScript](http://en.wikipedia.org/wiki/AppleScript) is an object-oriented scripting language with an English-like language syntax. It can be used on OS X to automate repetitive tasks, combine features "
+  },
+  "585c1be5-2afe-4683-a274-ab0f82de177e": {
+    "source": "mac-scripting/Bookends/Update_group_publications_from_attachment_name/README.md",
+    "type": "Documentation",
+    "total_chunks": 2,
+    "file_context": "# Update group publications from attachment name\n\nThis sample script for Bookends 13.2 or greater shows how to extract information from attachment file names, and set publication metadata accordingly:\n\nFor all publications contained in the group chosen from your frontmost Bookends library window, th"
+  },
+  "0582c7e9-c310-4733-90e7-685a29e64f51": {
+    "source": "mac-scripting/Papers3/Papers_To_Bookends/README.md",
+    "type": "Documentation",
+    "total_chunks": 4,
+    "file_context": "# Papers to Bookends\n\nExports all publications selected in your Papers 3 library (incl. its primary PDFs) to Bookends.\n\nBesides the common publication metadata (supported by the RIS format), this export script will also transfer the following publication properties (if not disabled within the script"
+  },
+  "38706de0-8473-4dc6-976c-a32ef668c016": {
+    "source": "mac-scripting/Papers3/Papers_To_DEVONthink/README.md",
+    "type": "Documentation",
+    "total_chunks": 3,
+    "file_context": "# Papers to DEVONthink\n\nExports all notes & highlight annotations of all publications selected in your Papers 3 library to DEVONthink Pro.\n\nIf not disabled within the script, the publication's primary PDF will be also indexed in DEVONthink Pro."
+  },
+  "bbbee5ec-f20d-4817-a5a0-e7d5071b11a9": {
+    "source": "macos-automation/AlfredProcess/README.md",
+    "type": "Documentation",
+    "total_chunks": 4,
+    "file_context": "# Process\n\nProcess is a mega workflow for [Alfred](https://www.alfredapp.com) that contains a bunch of custom automations that I (Artem Chistyakov, [temochka.com](https://temochka.com)) built over the years.\n\n## Custom searches"
+  },
+  "f9f9bbe1-0cf4-4f0c-9a91-2a1df6b47ab9": {
+    "source": "Capable/Documentation/Reference/README.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "# Reference Documentation\n\n## Structs\n\n-   [Capable](structs/Capable.md)"
+  },
+  "ec3ac3f0-8a5c-475f-9a0c-aaa4526da0ec": {
+    "source": "Capable/Documentation/Reference/enums/CapableFeature.md",
+    "type": "Documentation",
+    "total_chunks": 2,
+    "file_context": "**ENUM**\n\n# `CapableFeature`\n\n```swift"
+  },
+  "ab8debcf-c3d7-445e-bdc2-cf1478c5c6fe": {
+    "source": "Capable/Documentation/Reference/extensions/Capable.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "**EXTENSION**\n\n# `Capable`\n```swift\npublic extension Capable"
+  },
+  "42268cf9-2279-47a3-b6a3-0b7bdfe5e191": {
+    "source": "Capable/Documentation/Reference/structs/FeatureStatus.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "**STRUCT**\n\n# `FeatureStatus`\n\n```swift"
+  },
+  "6d79d23f-cfac-4527-ae02-ea10e2dffed9": {
+    "source": "Capable/Documentation/Reference/structs/Capable.md",
+    "type": "Documentation",
+    "total_chunks": 1,
+    "file_context": "**STRUCT**\n\n# `Capable`\n\n```swift"
+  },
+  "d21db965-e9fb-4503-8a9d-2a9520d6e01d": {
+    "source": "pyatomac/COPYING.txt",
+    "type": "Text",
+    "total_chunks": 14,
+    "file_context": "                    GNU GENERAL PUBLIC LICENSE\n                       Version 2, June 1991\n\n Copyright (C) 1989, 1991 Free Software Foundation, Inc.,\n 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301 USA"
+  },
+  "b228aa21-12cb-44fa-9c22-dd8b12dff7a2": {
+    "source": "macapptree/requirements.txt",
+    "type": "Text",
+    "total_chunks": 1,
+    "file_context": "atomacos==3.3.0\npytest==7.4.4\npyobjc==10.3.1\nunidecode==1.3.8\n"
+  },
+  "ca5cacb3-8091-4e8b-99d9-e680758b41db": {
+    "source": "accessibility/LICENSE.txt",
+    "type": "Text",
+    "total_chunks": 1,
+    "file_context": "This project is licensed under the ISC License, reproduced below.\n\nCopyright (c) 2013-2014, Aaron Jacobs <atheriel@gmail.com>\n\nPermission to use, copy, modify, and/or distribute this software for any purpose "
+  },
+  "a6650c05-31bb-42e8-8221-a92f9da83e8f": {
+    "source": "pyatomac/upload.sh",
+    "type": "Shell Script",
+    "total_chunks": 1,
+    "file_context": "#!/usr/bin/env bash\n\nDIR=\"$( cd \"$( dirname \"${BASH_SOURCE[0]}\" )\" && pwd )\"\nsudo rm -rf ${DIR}/dist\nsudo rm -rf ${DIR}/build"
+  },
+  "6ae99f7d-3ebd-4bf1-94b9-7c602c47448a": {
+    "source": "macos-automation/AlfredProcess/assets/github.sh",
+    "type": "Shell Script",
+    "total_chunks": 1,
+    "file_context": "#!/bin/bash\nPATH=\"$PATH:/usr/local/bin\"\n\nif [[ -z $GITHUB_TOKEN ]]; then\n  echo \"Error: GITHUB_TOKEN is not set\""
+  },
+  "071b6ba4-8c36-4249-9df8-d86ca3089c31": {
+    "source": "Capable/Scripts/setup.sh",
+    "type": "Shell Script",
+    "total_chunks": 1,
+    "file_context": "#!/bin/sh\n# Run this script from the root directory just before starting to contribute code.\n\n#================================= Tooling =================================\necho \"Installing tools (SwiftLint, SwiftFormat, and SourceDocs\""
+  }
+}

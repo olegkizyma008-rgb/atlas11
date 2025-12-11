@@ -26,28 +26,32 @@ KNOWLEDGE_BASE = RAG_PATH / "knowledge_base" / "large_corpus"
 # Use the same embedding model as the indexer
 EMBEDDING_MODEL = "BAAI/bge-m3"
 
-# Try MLX first, fall back to HuggingFace
-USE_MLX = True
+# Try PyTorch + MPS for GPU acceleration on M1 Max
+USE_MPS = True
 try:
-    from mlx_lm import load as mlx_load
-    print("✅ MLX available — using GPU acceleration on M1 Max")
+    import torch
+    if torch.backends.mps.is_available():
+        print("✅ PyTorch MPS available — using GPU acceleration on M1 Max")
+    else:
+        USE_MPS = False
+        print("⚠️ MPS not available — falling back to CPU")
 except ImportError:
-    USE_MLX = False
-    print("⚠️ MLX not available — falling back to CPU")
+    USE_MPS = False
+    print("⚠️ PyTorch not available — falling back to CPU")
 
 
 class RAGControlAgent:
     """RAG Control Agent with MLX GPU acceleration and self-healing"""
     
-    def __init__(self, embedding_model: Optional[str] = None, use_mlx: bool = True):
+    def __init__(self, embedding_model: Optional[str] = None, use_mps: bool = True):
         import chromadb
         
         self.embedding_model_name = embedding_model or EMBEDDING_MODEL
-        self.use_mlx = use_mlx and USE_MLX
+        self.use_mps = use_mps and USE_MPS
         
-        # Initialize embeddings (MLX or HuggingFace)
-        if self.use_mlx:
-            self._init_mlx_embeddings()
+        # Initialize embeddings (PyTorch + MPS or HuggingFace)
+        if self.use_mps:
+            self._init_mps_embeddings()
         else:
             self._init_huggingface_embeddings()
         
@@ -58,15 +62,18 @@ class RAGControlAgent:
         # Validate embedding dimension compatibility
         self._validate_embedding_compatibility()
     
-    def _init_mlx_embeddings(self):
-        """Initialize MLX embeddings for M1 Max GPU acceleration"""
+    def _init_mps_embeddings(self):
+        """Initialize PyTorch + MPS embeddings for M1 Max GPU acceleration"""
         try:
             from sentence_transformers import SentenceTransformer
-            self.embeddings = SentenceTransformer(self.embedding_model_name)
+            import torch
+            
+            device = "mps" if torch.backends.mps.is_available() else "cpu"
+            self.embeddings = SentenceTransformer(self.embedding_model_name, device=device)
             self.embedding_dim = 1024  # BAAI/bge-m3 dimension
-            print(f"✅ MLX embeddings loaded: {self.embedding_model_name} (1024-dim)")
+            print(f"✅ PyTorch embeddings loaded: {self.embedding_model_name} (1024-dim, device: {device})")
         except Exception as e:
-            print(f"⚠️ MLX embedding failed: {e} — falling back to HuggingFace")
+            print(f"⚠️ MPS embedding failed: {e} — falling back to HuggingFace")
             self._init_huggingface_embeddings()
     
     def _init_huggingface_embeddings(self):
@@ -77,12 +84,12 @@ class RAGControlAgent:
         print(f"✅ HuggingFace embeddings loaded: {self.embedding_model_name} (CPU)")
     
     def embed_text(self, texts: List[str]) -> List[List[float]]:
-        """Generate embeddings using MLX or HuggingFace"""
+        """Generate embeddings using PyTorch + MPS or HuggingFace"""
         if isinstance(texts, str):
             texts = [texts]
         
-        if self.use_mlx:
-            # MLX embedding (GPU-accelerated)
+        if self.use_mps and hasattr(self.embeddings, 'encode'):
+            # PyTorch + MPS embedding (GPU-accelerated on M1 Max)
             return self.embeddings.encode(texts, convert_to_tensor=False).tolist()
         else:
             # HuggingFace embedding (CPU)
@@ -250,7 +257,7 @@ class RAGControlAgent:
                 "bm25_search_time_ms": round(bm25_time * 1000, 2),
                 "rerank_time_ms": round(rerank_time * 1000, 2),
                 "embedding_model": EMBEDDING_MODEL,
-                "acceleration": "MLX (GPU)" if self.use_mlx else "CPU",
+                "acceleration": "MPS (GPU)" if self.use_mps else "CPU",
                 "search_type": "hybrid (vector + BM25 + rerank + metadata + expansion)",
             }
         except Exception as e:
@@ -267,9 +274,13 @@ class RAGControlAgent:
             doc_text = f"TASK: {task}\nSOLUTION: {solution}\nSTATUS: {status}"
             doc_id = str(uuid.uuid4())
             
-            # Add to collection
+            # Generate embedding using agent's embedding function
+            embedding = self.embed_text([doc_text])[0]
+            
+            # Add to collection with pre-computed embedding
             col.add(
                 documents=[doc_text],
+                embeddings=[embedding],
                 metadatas=[{
                     "task": task,
                     "status": status,
@@ -395,7 +406,7 @@ class RAGControlAgent:
             
             # Store dimension info
             self.embedding_dim = test_dim
-            acceleration = "MLX (GPU)" if self.use_mlx else "CPU"
+            acceleration = "MPS (GPU)" if self.use_mps else "CPU"
             print(f"✅ Embedding dimension: {test_dim} (model: {self.embedding_model_name}, {acceleration})")
         except Exception as e:
             print(f"⚠️ Could not validate embedding: {e}")
@@ -443,7 +454,7 @@ def main():
                     args[key] = value
     
     # Initialize agent with optional embedding model
-    agent = RAGControlAgent(embedding_model=embedding_model)
+    agent = RAGControlAgent(embedding_model=embedding_model, use_mps=True)
     
     # Execute command
     result = agent.execute_command(command, args)

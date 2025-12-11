@@ -11,16 +11,17 @@ import json
 from pathlib import Path
 from typing import Generator, Tuple, List, Dict, Any
 
-# Опційно: використати MLX для максимальної швидкості на Apple Silicon
-USE_MLX = os.getenv("USE_MLX", "1") in ("1", "true", "yes")
-MLX_READY = False
+# Use PyTorch + MPS for GPU acceleration on Apple Silicon
+USE_MPS = os.getenv("USE_MPS", "1") in ("1", "true", "yes")
+MPS_READY = False
 try:
-    if USE_MLX:
-        import numpy as np
-        from mlx_lm import load as mlx_load
-        MLX_READY = True
+    if USE_MPS:
+        import torch
+        from sentence_transformers import SentenceTransformer
+        if torch.backends.mps.is_available():
+            MPS_READY = True
 except Exception:
-    MLX_READY = False
+    MPS_READY = False
 
 # === КОНФІГУРАЦІЯ ===
 KNOWLEDGE_SOURCES_DIRS = [
@@ -142,29 +143,35 @@ def main():
     
     embeddings_fn = None
     # Локальний прапорець, щоб не ламати глобал при fallback
-    mlx_ready = MLX_READY
+    mps_ready = MPS_READY
 
-    if mlx_ready:
-        console.print("[green]⚡ Використовується MLX (bge-m3) для прискорення на Apple Silicon[/green]")
+    if mps_ready:
+        console.print("[green]⚡ Використовується PyTorch + MPS (bge-m3) для прискорення на Apple Silicon[/green]")
         try:
-            model, tokenizer = mlx_load(EMBEDDING_MODEL)
+            import torch
+            from sentence_transformers import SentenceTransformer
+            
+            device = "mps" if torch.backends.mps.is_available() else "cpu"
+            st_model = SentenceTransformer(EMBEDDING_MODEL, device=device)
 
-            def embed_texts(texts: List[str]):
-                outputs = []
-                for t in texts:
-                    tokens = tokenizer(t, return_tensors="np", padding=True, truncation=True)
-                    hidden = model(**tokens).last_hidden_state
-                    vec = hidden.mean(axis=1)[0]
-                    outputs.append(vec.tolist())
-                return outputs
+            class MPSEmbeddingFunction:
+                def __init__(self, model):
+                    self.model = model
+                
+                def embed_documents(self, texts: List[str]) -> List[List[float]]:
+                    return self.model.encode(texts, convert_to_tensor=False).tolist()
+                
+                def embed_query(self, text: str) -> List[float]:
+                    return self.model.encode([text], convert_to_tensor=False).tolist()[0]
 
-            embeddings_fn = embed_texts
-        except FileNotFoundError as e:
-            console.print(f"[yellow]⚠️ MLX не зміг завантажити модель ({e}). Переходжу на HuggingFaceEmbeddings.[/yellow]")
-            mlx_ready = False
+            embeddings_fn = MPSEmbeddingFunction(st_model)
+            console.print(f"[green]✅ PyTorch embeddings loaded: {EMBEDDING_MODEL} (1024-dim, device: {device})[/green]")
+        except Exception as e:
+            console.print(f"[yellow]⚠️ MPS не зміг завантажити модель ({e}). Переходжу на HuggingFaceEmbeddings.[/yellow]")
+            mps_ready = False
 
     if embeddings_fn is None:
-        console.print("[yellow]MLX недоступний. Використовую HuggingFaceEmbeddings.[/yellow]")
+        console.print("[yellow]MPS недоступний. Використовую HuggingFaceEmbeddings.[/yellow]")
         from langchain_huggingface import HuggingFaceEmbeddings
         embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
         embeddings_fn = embedding_model.embed_documents
@@ -251,8 +258,8 @@ def main():
     
     console.print(f"[green]✅ Підготовлено {len(documents)} чанків (semantic + контекст + ієрархія)[/green]")
     
-    # === КРОК 4: Індексація в Chroma з MLX ===
-    console.print("\n[cyan]💾 Індексація в ChromaDB (з MLX GPU acceleration)...[/cyan]")
+    # === КРОК 4: Індексація в Chroma з MPS ===
+    console.print("\n[cyan]💾 Індексація в ChromaDB (з MPS GPU acceleration)...[/cyan]")
     
     from langchain_chroma import Chroma
     
@@ -268,7 +275,7 @@ def main():
         
         db = Chroma(
             persist_directory=CHROMA_PERSIST_DIR,
-            embedding_function=embeddings_fn if mlx_ready else None
+            embedding_function=embeddings_fn if mps_ready else None
         )
         
         for i in range(0, len(documents), BATCH_SIZE):
@@ -289,7 +296,7 @@ def main():
     console.print(f"[cyan]📊 Документів додано: {len(documents)}[/cyan]")
     console.print(f"[cyan]📁 База: {CHROMA_PERSIST_DIR}[/cyan]")
     console.print(f"[cyan]🧠 Embedding модель: {EMBEDDING_MODEL}[/cyan]")
-    console.print(f"[cyan]⚡ GPU acceleration: {'MLX (M1 Max)' if mlx_ready else 'CPU'}[/cyan]")
+    console.print(f"[cyan]⚡ GPU acceleration: {'MPS (M1 Max)' if mps_ready else 'CPU'}[/cyan]")
     console.print(f"[cyan]🔀 Semantic chunking: ✅ УВІМКНЕНО[/cyan]")
     console.print(f"[cyan]📝 Контекст: ✅ ДОДАНО (prev/next/file)[/cyan]")
     console.print(f"[cyan]📊 Hierarchical indexing: ✅ ДОДАНО ({len(document_hierarchy)} документів)[/cyan]")
