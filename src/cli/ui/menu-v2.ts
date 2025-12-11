@@ -1412,9 +1412,9 @@ async function runHealthCheck(): Promise<void> {
         { pkg: 'mlx', label: 'MLX Core', critical: true },
         
         // macOS Automation
-        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: true },
-        { pkg: 'pyobjc_framework_Accessibility', label: 'PyObjC Accessibility Framework', critical: true },
-        { pkg: 'pyobjc_framework_Quartz', label: 'PyObjC Quartz Framework', critical: true },
+        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: false },
+        { pkg: 'Accessibility', label: 'PyObjC Accessibility Framework', critical: true },
+        { pkg: 'Quartz', label: 'PyObjC Quartz Framework', critical: true },
         
         // Embeddings
         { pkg: 'sentence_transformers', label: 'Sentence Transformers', critical: true },
