@@ -1414,8 +1414,15 @@ async function runPythonAgent(): Promise<void> {
     // Use saved defaults without prompting if they are set
     const visionValue = config['DEFAULT_USE_VISION_CLI'];
     const liveLogValue = config['DEFAULT_LIVE_LOG'];
+    
+    // Debug: Show what values we're getting
+    console.log(chalk.gray(`  Debug: DEFAULT_USE_VISION_CLI = "${visionValue}"`));
+    console.log(chalk.gray(`  Debug: DEFAULT_LIVE_LOG = "${liveLogValue}"`));
+    
     const hasVisionDefault = visionValue !== undefined && visionValue !== '';
     const hasLiveLogDefault = liveLogValue !== undefined && liveLogValue !== '';
+    
+    console.log(chalk.gray(`  Debug: hasVisionDefault = ${hasVisionDefault}, hasLiveLogDefault = ${hasLiveLogDefault}\n`));
     
     let useVision: boolean;
     let liveLog: boolean;

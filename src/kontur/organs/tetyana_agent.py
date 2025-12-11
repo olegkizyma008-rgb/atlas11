@@ -75,6 +75,8 @@ def call_copilot(prompt: str, model: str = "gpt-4o", temperature: float = 0.2, t
             return text if text else None
         else:
             return None
+    except Exception:
+        return None
 
 
 def plan_with_copilot(task: str) -> Optional[list]:
