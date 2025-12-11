@@ -55,28 +55,73 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # ============================================================================
 
 
-def call_copilot(prompt: str, model: str = "gpt-4o", temperature: float = 0.2, timeout: int = 90) -> Optional[str]:
+def call_copilot(prompt: str, model: str = "gpt-4.1", temperature: float = 0.2, timeout: int = 90) -> Optional[str]:
     """
     Виклик GitHub Copilot CLI (якщо доступний). Повертає текст або None.
     Очікується, що користувач має встановлений `copilot` CLI та токен.
     """
     copilot_bin = os.getenv("COPILOT_BIN", "copilot")
     try:
+        # Copilot CLI current syntax (Dec 2025):
+        #   copilot -p "<prompt>" --model gpt-4.1 --temperature 0.2 -s
+        supported_models = {
+            "gpt-4.1",
+            "gpt-5",
+            "gpt-5.1",
+            "gpt-5.1-codex",
+            "gpt-5.1-codex-max",
+            "gpt-5.1-codex-mini",
+            "gpt-5-mini",
+            "claude-sonnet-4.5",
+            "claude-haiku-4.5",
+            "claude-opus-4.5",
+            "claude-sonnet-4",
+            "gemini-3-pro-preview",
+        }
+        model_to_use = model if model in supported_models else "gpt-4.1"
+
         cmd = [
             copilot_bin,
-            "--model", model,
-            "--temperature", str(temperature),
-            "--output", "text",
-            "--prompt", prompt
+            "-p", prompt,
+            "--model", model_to_use,
+            "-s",  # silent mode: only agent response
+            "--allow-all-tools",
+            "--allow-all-paths",
         ]
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
-        if result.returncode == 0:
-            text = result.stdout.strip()
-            return text if text else None
-        else:
-            return None
+        out = (result.stdout or "").strip()
+        err = (result.stderr or "").strip()
+        if out:
+            return out
+        if err:
+            return err
+        return None
     except Exception:
         return None
+
+
+def _parse_steps_from_text(text: str) -> Optional[list]:
+    """Спроба дістати JSON-масив рядків із відповіді Copilot."""
+    import re
+    import json
+    if not text:
+        return None
+    candidates = [text]
+    # Витягнути з ```json ... ``` або просто з першої дужки
+    blocks = re.findall(r"```json\s*(.*?)```", text, re.DOTALL)
+    if blocks:
+        candidates.extend(blocks)
+    bracket_match = re.search(r"(\[.*?\])", text, re.DOTALL)
+    if bracket_match:
+        candidates.append(bracket_match.group(1))
+    for cand in candidates:
+        try:
+            data = json.loads(cand)
+            if isinstance(data, list) and all(isinstance(s, str) for s in data):
+                return [s.strip() for s in data if s and s.strip()]
+        except Exception:
+            continue
+    return None
 
 
 def plan_with_copilot(task: str) -> Optional[list]:
@@ -88,18 +133,35 @@ def plan_with_copilot(task: str) -> Optional[list]:
 Ти — планувальник macOS automation. Розбий завдання на серії однорідних дій (не дрібнити на мікрокроки).
 Формат відповіді: JSON масив рядків, без пояснень.
 Завдання: \"{task}\"
-Приклад: ["Відкрий Safari і перейдій на google.com", "Знайди запит ..."]
-"""
+    Приклад: ["Відкрий Safari і перейдій на google.com", "Знайди запит ..."]
+    """
     result = call_copilot(prompt, model=os.getenv("COPILOT_PLAN_MODEL", "gpt-4o"), temperature=0.2, timeout=60)
-    if not result:
-        return None
-    try:
-        steps = json.loads(result)
-        if isinstance(steps, list) and all(isinstance(s, str) for s in steps):
-            return [s.strip() for s in steps if s.strip()]
-    except Exception:
-        return None
-    return None
+    steps = _parse_steps_from_text(result) if result else None
+
+    # Якщо Copilot не дав валідний список або дав 1 довгий крок, пробуємо жорсткіший промпт для списку застосунків
+    need_fallback = (steps is None or len(steps) <= 1) and ("," in task)
+    if need_fallback:
+        apps_tail = task.split(":", 1)[1] if ":" in task else task
+        # Список назв застосунків
+        apps = [a.strip(" .") for a in apps_tail.split(",") if a.strip()]
+        if apps:
+            # 1) Жорсткий промпт зі списком назви застосунків
+            fallback_prompt = f"""
+Ти — планувальник macOS automation. Є перелік застосунків (через кому). Поверни JSON масив кроків,
+де кожен елемент — рядок у форматі "Open <AppName>" у тій самій послідовності. Тільки масив без пояснень.
+Список: {apps_tail}
+"""
+            second = call_copilot(fallback_prompt, model=os.getenv("COPILOT_PLAN_MODEL", "gpt-4o"), temperature=0.1, timeout=60)
+            steps = _parse_steps_from_text(second) if second else None
+
+            # 2) Якщо все ще немає, передаємо Copilot готовий масив кроків і просимо повернути його як є
+            if steps is None or len(steps) <= 1:
+                app_steps = [f"Open {a}" for a in apps]
+                strict_prompt = f'Return ONLY JSON array of step strings to open these apps in order, no text: {json.dumps(app_steps, ensure_ascii=False)}'
+                strict_res = call_copilot(strict_prompt, model=os.getenv("COPILOT_PLAN_MODEL", "gpt-4o"), temperature=0.0, timeout=60)
+                steps = _parse_steps_from_text(strict_res) if strict_res else None
+
+    return steps if steps else None
 
 
 def generate_code_with_copilot(step: str, rag_text: str) -> Optional[str]:
@@ -124,7 +186,34 @@ def generate_code_with_copilot(step: str, rag_text: str) -> Optional[str]:
     block = re.findall(r"```applescript\n(.*?)```", result, re.DOTALL)
     if block:
         return block[0].strip()
-    return result.strip() if result.strip().lower().startswith("tell ") else None
+    if result and result.strip().lower().startswith("tell "):
+        return result.strip()
+    return None
+
+
+def fallback_applescript(step: str) -> str:
+    """
+    Простий генератор AppleScript, якщо Copilot недоступний.
+    Намагається відкрити/активувати зазначений застосунок.
+    """
+    import re
+
+    # Шукаємо назву застосунку після "open"/"launch" або беремо останнє слово з великої
+    app_name = None
+    m = re.search(r"(open|launch)\s+([A-Za-z0-9 ._-]+)", step, re.IGNORECASE)
+    if m:
+        app_name = m.group(2).strip()
+    else:
+        # heuristic: слова з великої літери
+        candidates = re.findall(r"\b([A-Z][A-Za-z0-9 ._-]+)\b", step)
+        if candidates:
+            app_name = candidates[-1].strip()
+    if not app_name:
+        app_name = "Calculator"
+
+    return f'''tell application "{app_name}"
+    activate
+end tell'''
 
 
 def vision_verify_with_copilot(step: str, screenshot_path: str) -> Optional[bool]:
@@ -320,8 +409,8 @@ def rag_search(state: AgentState) -> AgentState:
     if code_from_llm:
         state['current_code'] = code_from_llm
     else:
-        # fallback мінімальний
-        state['current_code'] = 'tell application "System Events"\n    delay 0.5\nend tell'
+        # fallback: згенерувати простий AppleScript для відкриття/активації app
+        state['current_code'] = fallback_applescript(state['current_step'])
     
     return state
 

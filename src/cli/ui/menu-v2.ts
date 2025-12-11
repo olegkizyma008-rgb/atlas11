@@ -1639,9 +1639,12 @@ async function runPythonAgent(): Promise<void> {
     }
 
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
+    // Force vision off per request (CLI headless)
     const env = { 
         ...process.env, 
-        VISION_DISABLE: useVision ? '0' : '1',
+        VISION_DISABLE: '1',
+        COPILOT_BIN: '/opt/homebrew/bin/copilot',
+        COPILOT_ALLOW_ALL: '1',
         RAG_EMBEDDING_MODEL: 'BAAI/bge-m3'
     };
 
