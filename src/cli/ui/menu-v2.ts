@@ -1048,7 +1048,8 @@ async function configureAppSettings(): Promise<void> {
         const useMlx = useMlxRaw === '1' || useMlxRaw === 'true' || useMlxRaw === 'on';
         const ragTopK = config['RAG_TOP_K'] || '5';
 
-        const defaultUseVision = config['DEFAULT_USE_VISION'] === '1' || config['DEFAULT_USE_VISION'] === 'true';
+        const defaultUseVisionCLI = config['DEFAULT_USE_VISION_CLI'] === '1' || config['DEFAULT_USE_VISION_CLI'] === 'true';
+        const defaultUseVisionElectron = config['DEFAULT_USE_VISION_ELECTRON'] === '1' || config['DEFAULT_USE_VISION_ELECTRON'] === 'true';
         const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
 
         const choices = [
@@ -1057,7 +1058,8 @@ async function configureAppSettings(): Promise<void> {
             { name: `${chalk.green('●')} Log Level        ${chalk.cyan(logLevel)}`, value: 'LOG_LEVEL' },
             { name: `${chalk.green('●')} USE_MLX          ${useMlx ? chalk.green('ON') : chalk.red('OFF')} ${chalk.gray('(fast embeddings on Apple Silicon)')}`, value: 'USE_MLX' },
             { name: `${chalk.green('●')} RAG Top-K        ${chalk.cyan(ragTopK)}`, value: 'RAG_TOP_K' },
-            { name: `${chalk.green('●')} Default Vision   ${defaultUseVision ? chalk.green('ON') : chalk.red('OFF')} ${chalk.gray('(screenshots & verification)')}`, value: 'DEFAULT_USE_VISION' },
+            { name: `${chalk.green('●')} Vision (CLI)     ${defaultUseVisionCLI ? chalk.green('ON') : chalk.red('OFF')} ${chalk.gray('(screenshots in terminal)')}`, value: 'DEFAULT_USE_VISION_CLI' },
+            { name: `${chalk.green('●')} Vision (Electron)${defaultUseVisionElectron ? chalk.green('ON') : chalk.red('OFF')} ${chalk.gray('(full window capture)')}`, value: 'DEFAULT_USE_VISION_ELECTRON' },
             { name: `${chalk.green('●')} Default Live Log ${defaultLiveLog ? chalk.green('ON') : chalk.red('OFF')} ${chalk.gray('(stream agent output)')}`, value: 'DEFAULT_LIVE_LOG' },
             { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
             { name: chalk.gray('← Back'), value: 'back' }
@@ -1099,13 +1101,20 @@ async function configureAppSettings(): Promise<void> {
         } else if (action === 'RAG_TOP_K') {
             const val = await input('RAG Top-K (results to fetch)', ragTopK);
             if (val) configManager.set('RAG_TOP_K', val);
-        } else if (action === 'DEFAULT_USE_VISION') {
-            const val = await select('Default Vision (screenshots & verification)', [
+        } else if (action === 'DEFAULT_USE_VISION_CLI') {
+            const val = await select('Vision (CLI) - screenshots in terminal', [
                 { name: 'ON (use screenshots)', value: '1' },
                 { name: 'OFF (no vision)', value: '0' },
                 { name: 'Back', value: 'back' }
             ]);
-            if (val !== 'back') configManager.set('DEFAULT_USE_VISION', val);
+            if (val !== 'back') configManager.set('DEFAULT_USE_VISION_CLI', val);
+        } else if (action === 'DEFAULT_USE_VISION_ELECTRON') {
+            const val = await select('Vision (Electron) - full window capture', [
+                { name: 'ON (use screenshots)', value: '1' },
+                { name: 'OFF (no vision)', value: '0' },
+                { name: 'Back', value: 'back' }
+            ]);
+            if (val !== 'back') configManager.set('DEFAULT_USE_VISION_ELECTRON', val);
         } else if (action === 'DEFAULT_LIVE_LOG') {
             const val = await select('Default Live Log (stream agent output)', [
                 { name: 'ON (show live output)', value: '1' },
@@ -1390,9 +1399,9 @@ async function runPythonAgent(): Promise<void> {
 
     const config = configManager.getAll();
     const task = await input('Enter task', 'Open Calculator');
-    const defaultUseVision = config['DEFAULT_USE_VISION'] === '1' || config['DEFAULT_USE_VISION'] === 'true';
+    const defaultUseVisionCLI = config['DEFAULT_USE_VISION_CLI'] === '1' || config['DEFAULT_USE_VISION_CLI'] === 'true';
     const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
-    const useVision = await confirm('Use vision (screenshots & verification)? (best in Electron UI)', defaultUseVision);
+    const useVision = await confirm('Use vision (screenshots & verification)?', defaultUseVisionCLI);
     const liveLog = await confirm('Stream live log?', defaultLiveLog);
 
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
