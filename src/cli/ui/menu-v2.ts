@@ -1279,7 +1279,7 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.gray('  Checking system configuration...\n'));
 
     const config = configManager.getAll();
-    const checks: { label: string; ok: boolean; detail?: string; category?: string }[] = [];
+    const checks: { label: string; ok: boolean; critical?: boolean; detail?: string; category?: string }[] = [];
 
     // === API KEYS & PROVIDERS ===
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
@@ -1287,17 +1287,24 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const requiredKeys = [
-        { key: 'GEMINI_API_KEY', label: 'Gemini API Key' },
-        { key: 'COPILOT_API_KEY', label: 'Copilot Token' },
-        { key: 'OPENAI_API_KEY', label: 'OpenAI API Key' },
-        { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key' },
-        { key: 'MISTRAL_API_KEY', label: 'Mistral API Key' }
+        { key: 'GEMINI_API_KEY', label: 'Gemini API Key', critical: true },
+        { key: 'COPILOT_API_KEY', label: 'Copilot Token', critical: true },
+        { key: 'OPENAI_API_KEY', label: 'OpenAI API Key', critical: false },
+        { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key', critical: false },
+        { key: 'MISTRAL_API_KEY', label: 'Mistral API Key', critical: false }
     ];
 
     for (const k of requiredKeys) {
-        const check = { label: k.label, ok: !!config[k.key], category: 'api' };
+        const check = { label: k.label, ok: !!config[k.key], critical: k.critical, category: 'api' };
         checks.push(check);
-        const status = check.ok ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        let status;
+        if (check.ok) {
+            status = chalk.green('✓ OK');
+        } else if (check.critical) {
+            status = chalk.red('✗ MISSING');
+        } else {
+            status = chalk.yellow('⊘ OPTIONAL');
+        }
         console.log(`  │ ${chalk.green('●')} ${check.label.padEnd(28)} ${status}`);
     }
 
@@ -1371,17 +1378,24 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const pythonPackages = [
-        { pkg: 'langchain', label: 'LangChain' },
-        { pkg: 'chromadb', label: 'ChromaDB' },
-        { pkg: 'flashrank', label: 'FlashRank (Reranking)' },
-        { pkg: 'mlx_lm', label: 'MLX (GPU Acceleration)' },
-        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)' }
+        { pkg: 'langchain', label: 'LangChain', critical: true },
+        { pkg: 'chromadb', label: 'ChromaDB', critical: true },
+        { pkg: 'flashrank', label: 'FlashRank (Reranking)', critical: false },
+        { pkg: 'mlx_lm', label: 'MLX (GPU Acceleration)', critical: false },
+        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: false }
     ];
 
     for (const pkg of pythonPackages) {
         const pkgOk = checkPythonPackage(pkg.pkg);
-        checks.push({ label: pkg.label, ok: pkgOk, category: 'python' });
-        const status = pkgOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        checks.push({ label: pkg.label, ok: pkgOk, critical: pkg.critical, category: 'python' });
+        let status;
+        if (pkgOk) {
+            status = chalk.green('✓ OK');
+        } else if (pkg.critical) {
+            status = chalk.red('✗ MISSING');
+        } else {
+            status = chalk.yellow('⊘ OPTIONAL');
+        }
         console.log(`  │ ${chalk.green('●')} ${pkg.label.padEnd(28)} ${status}`);
     }
 
@@ -1391,14 +1405,35 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const chromeOk = fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-    checks.push({ label: 'Google Chrome', ok: chromeOk, category: 'app' });
-    const chromeStatus = chromeOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    checks.push({ label: 'Google Chrome', ok: chromeOk, critical: false, category: 'app' });
+    const chromeStatus = chromeOk ? chalk.green('✓ OK') : chalk.yellow('⊘ OPTIONAL');
     console.log(`  │ ${chalk.green('●')} ${'Google Chrome'.padEnd(28)} ${chromeStatus}`);
 
     const safariOk = fs.existsSync('/Applications/Safari.app/Contents/MacOS/Safari');
-    checks.push({ label: 'Safari', ok: safariOk, category: 'app' });
-    const safariStatus = safariOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    checks.push({ label: 'Safari', ok: safariOk, critical: false, category: 'app' });
+    const safariStatus = safariOk ? chalk.green('✓ OK') : chalk.yellow('⊘ OPTIONAL');
     console.log(`  │ ${chalk.green('●')} ${'Safari'.padEnd(28)} ${safariStatus}`);
+
+    // === RAG & INDEXING ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ RAG & INDEXING'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const ragIndexerOk = fs.existsSync(path.join(PROJECT_ROOT, 'src/kontur/organs/rag_indexer.py'));
+    checks.push({ label: 'RAG Indexer Script', ok: ragIndexerOk, critical: true, category: 'rag' });
+    const ragIndexerStatus = ragIndexerOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'RAG Indexer Script'.padEnd(28)} ${ragIndexerStatus}`);
+
+    const ragControlOk = fs.existsSync(path.join(PROJECT_ROOT, 'src/kontur/organs/rag_control_agent.py'));
+    checks.push({ label: 'RAG Control Agent', ok: ragControlOk, critical: true, category: 'rag' });
+    const ragControlStatus = ragControlOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'RAG Control Agent'.padEnd(28)} ${ragControlStatus}`);
+
+    const chromaDbSize = chromaOk ? fs.statSync(chromaDb).size : 0;
+    const chromaDbSizeMB = (chromaDbSize / (1024 * 1024)).toFixed(2);
+    checks.push({ label: 'Chroma DB Size', ok: chromaDbSize > 0, critical: false, detail: `${chromaDbSizeMB} MB`, category: 'rag' });
+    const chromaSizeStatus = chromaDbSize > 0 ? chalk.green('✓ OK') : chalk.yellow('⊘ EMPTY');
+    console.log(`  │ ${chalk.green('●')} ${'Chroma DB Size'.padEnd(28)} ${chromaSizeStatus} ${chalk.gray(chromaDbSizeMB + ' MB')}`);
 
     // === HARDWARE & OS ===
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
@@ -1406,12 +1441,12 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const onAppleSilicon = process.platform === 'darwin' && process.arch === 'arm64';
-    checks.push({ label: 'Apple Silicon (M1+)', ok: onAppleSilicon, detail: process.arch, category: 'hardware' });
-    const silconStatus = onAppleSilicon ? chalk.green('✓ OK') : chalk.red('✗ NOT AVAILABLE');
+    checks.push({ label: 'Apple Silicon (M1+)', ok: onAppleSilicon, critical: false, detail: process.arch, category: 'hardware' });
+    const silconStatus = onAppleSilicon ? chalk.green('✓ OK') : chalk.yellow('⊘ NOT AVAILABLE');
     console.log(`  │ ${chalk.green('●')} ${'Apple Silicon (M1+)'.padEnd(28)} ${silconStatus} ${chalk.gray(process.arch)}`);
 
     const osVersion = os.platform() === 'darwin' ? 'macOS' : os.platform();
-    checks.push({ label: 'Operating System', ok: os.platform() === 'darwin', detail: osVersion, category: 'hardware' });
+    checks.push({ label: 'Operating System', ok: os.platform() === 'darwin', critical: true, detail: osVersion, category: 'hardware' });
     const osStatus = os.platform() === 'darwin' ? chalk.green('✓ OK') : chalk.red('✗ NOT MACOS');
     console.log(`  │ ${chalk.green('●')} ${'Operating System'.padEnd(28)} ${osStatus} ${chalk.gray(osVersion)}`);
 
@@ -1419,18 +1454,30 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const totalChecks = checks.length;
+    const criticalChecks = checks.filter(c => c.critical !== false);
     const passedChecks = checks.filter(c => c.ok).length;
-    const healthPercent = Math.round((passedChecks / totalChecks) * 100);
+    const passedCritical = checks.filter(c => c.ok && c.critical !== false).length;
+    
+    // Розраховуємо здоров'я на основі критичних компонентів
+    const criticalHealthPercent = criticalChecks.length > 0 ? Math.round((passedCritical / criticalChecks.length) * 100) : 100;
+    const overallHealthPercent = Math.round((passedChecks / totalChecks) * 100);
     
     console.log('');
-    console.log(chalk.cyan(`  Health Status: ${healthPercent}% (${passedChecks}/${totalChecks})`));
+    console.log(chalk.cyan(`  Critical Components: ${criticalHealthPercent}% (${passedCritical}/${criticalChecks.length})`));
+    console.log(chalk.cyan(`  Overall Health:     ${overallHealthPercent}% (${passedChecks}/${totalChecks})`));
     
-    if (healthPercent === 100) {
+    console.log('');
+    if (criticalHealthPercent === 100) {
         console.log(chalk.green('  ✓ All critical components configured!'));
-    } else if (healthPercent >= 80) {
-        console.log(chalk.yellow('  ⚠ Most components configured, some optional features missing'));
-    } else if (healthPercent >= 60) {
-        console.log(chalk.yellow('  ⚠ Core components present, but some important features missing'));
+        if (overallHealthPercent === 100) {
+            console.log(chalk.green('  ✓ System fully optimized with all optional features!'));
+        } else {
+            console.log(chalk.yellow(`  ⚠ ${totalChecks - passedChecks} optional features missing (can be added later)`));
+        }
+    } else if (criticalHealthPercent >= 80) {
+        console.log(chalk.yellow('  ⚠ Most critical components present, some missing'));
+    } else if (criticalHealthPercent >= 60) {
+        console.log(chalk.yellow('  ⚠ Core components present, but some critical features missing'));
     } else {
         console.log(chalk.red('  ✗ Critical components missing, system may not function properly'));
     }
