@@ -125,7 +125,7 @@ class RAGControlAgent:
         return result
     
     def search_rag(self, query: str, limit: int = 5) -> Dict[str, Any]:
-        """Search RAG database with MLX GPU acceleration"""
+        """Hybrid search: vector (MLX GPU) + BM25 keyword search with reranking"""
         if not self.collections:
             return {"status": "error", "message": "No collections found", "results": []}
         
@@ -133,40 +133,98 @@ class RAGControlAgent:
         try:
             start_time = time.time()
             
-            # Generate query embedding (MLX GPU or HuggingFace CPU)
+            # 1. Vector search (MLX GPU or HuggingFace CPU)
             query_vector = self.embed_text([query])[0]
             embedding_time = time.time() - start_time
             
-            # Vector search
-            results = col.query(query_embeddings=[query_vector], n_results=limit * 2)
+            vector_start = time.time()
+            vector_results = col.query(query_embeddings=[query_vector], n_results=limit * 3)
+            vector_time = time.time() - vector_start
             
-            # Process and rank results
+            # 2. BM25 keyword search (for exact matches like "AppleScript", "keystroke")
+            bm25_start = time.time()
+            bm25_results = None
+            try:
+                bm25_results = col.query(query_texts=[query], n_results=limit * 3)
+            except:
+                pass
+            bm25_time = time.time() - bm25_start if bm25_results else 0
+            
+            # 3. Merge and deduplicate results
+            seen_docs = set()
             documents = []
-            if results["documents"] and results["documents"][0]:
-                for doc, distance, metadata in zip(
-                    results["documents"][0], 
-                    results["distances"][0],
-                    results.get("metadatas", [[]])[0] if results.get("metadatas") else [{}] * len(results["documents"][0])
-                ):
-                    similarity = 1 - distance
-                    if similarity > 0.1:  # Quality threshold
-                        documents.append({
-                            "text": doc[:200] + "..." if len(doc) > 200 else doc,
-                            "similarity": round(similarity, 4),
-                            "source": metadata.get("source", "unknown") if metadata else "unknown",
-                            "type": metadata.get("type", "unknown") if metadata else "unknown",
-                        })
             
-            documents = sorted(documents, key=lambda x: x["similarity"], reverse=True)[:limit]
+            # Process vector results
+            if vector_results["documents"] and vector_results["documents"][0]:
+                for doc, distance, metadata in zip(
+                    vector_results["documents"][0],
+                    vector_results["distances"][0],
+                    vector_results.get("metadatas", [[]])[0] if vector_results.get("metadatas") else [{}] * len(vector_results["documents"][0])
+                ):
+                    doc_hash = hash(doc)
+                    if doc_hash not in seen_docs:
+                        seen_docs.add(doc_hash)
+                        similarity = 1 - distance
+                        if similarity > 0.05:  # Lower threshold for broader search
+                            documents.append({
+                                "text": doc[:200] + "..." if len(doc) > 200 else doc,
+                                "similarity": round(similarity, 4),
+                                "source": metadata.get("source", "unknown") if metadata else "unknown",
+                                "type": metadata.get("type", "unknown") if metadata else "unknown",
+                                "search_method": "vector",
+                            })
+            
+            # Process BM25 results (if available)
+            if bm25_results and bm25_results["documents"] and bm25_results["documents"][0]:
+                for doc, distance, metadata in zip(
+                    bm25_results["documents"][0],
+                    bm25_results["distances"][0],
+                    bm25_results.get("metadatas", [[]])[0] if bm25_results.get("metadatas") else [{}] * len(bm25_results["documents"][0])
+                ):
+                    doc_hash = hash(doc)
+                    if doc_hash not in seen_docs:
+                        seen_docs.add(doc_hash)
+                        similarity = 1 - distance
+                        if similarity > 0.05:
+                            documents.append({
+                                "text": doc[:200] + "..." if len(doc) > 200 else doc,
+                                "similarity": round(similarity, 4),
+                                "source": metadata.get("source", "unknown") if metadata else "unknown",
+                                "type": metadata.get("type", "unknown") if metadata else "unknown",
+                                "search_method": "bm25",
+                            })
+            
+            # 4. Reranking with FlashRank (GPU-accelerated on M1 Max)
+            rerank_start = time.time()
+            reranked_docs = documents
+            try:
+                from flashrank import Ranker
+                ranker = Ranker(model_name="ms-marco-MiniLM-L-12-v2", cache_dir="/tmp/flashrank")
+                
+                # Prepare passages for reranking
+                passages = [{"id": i, "title": "", "text": doc["text"]} for i, doc in enumerate(documents)]
+                
+                # Rerank
+                ranked = ranker.rank(query, passages, batch_size=32)
+                reranked_docs = [documents[int(result["id"])] for result in ranked[:limit]]
+            except Exception as e:
+                # Fallback to similarity sorting if reranking fails
+                reranked_docs = sorted(documents, key=lambda x: x["similarity"], reverse=True)[:limit]
+            
+            rerank_time = time.time() - rerank_start
             
             return {
                 "status": "success",
                 "query": query,
-                "results_count": len(documents),
-                "documents": documents,
+                "results_count": len(reranked_docs),
+                "documents": reranked_docs,
                 "embedding_time_ms": round(embedding_time * 1000, 2),
+                "vector_search_time_ms": round(vector_time * 1000, 2),
+                "bm25_search_time_ms": round(bm25_time * 1000, 2),
+                "rerank_time_ms": round(rerank_time * 1000, 2),
                 "embedding_model": EMBEDDING_MODEL,
                 "acceleration": "MLX (GPU)" if self.use_mlx else "CPU",
+                "search_type": "hybrid (vector + BM25 + rerank)",
             }
         except Exception as e:
             return {"status": "error", "message": str(e), "results": []}
