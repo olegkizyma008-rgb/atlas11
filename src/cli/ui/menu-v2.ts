@@ -1385,8 +1385,8 @@ async function runHealthCheck(): Promise<void> {
     // LangGraph State DB
     const langgraphDbPath = path.join(PROJECT_ROOT, 'data', 'langgraph.db');
     const langgraphDbOk = fs.existsSync(langgraphDbPath);
-    checks.push({ label: 'LangGraph State DB', ok: langgraphDbOk, critical: false, category: 'database' });
-    const langgraphDbStatus = langgraphDbOk ? chalk.green('✓ OK') : chalk.yellow('⊘ OPTIONAL');
+    checks.push({ label: 'LangGraph State DB', ok: langgraphDbOk, critical: true, category: 'database' });
+    const langgraphDbStatus = langgraphDbOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
     console.log(`  │ ${chalk.green('●')} ${'LangGraph State DB'.padEnd(28)} ${langgraphDbStatus}`);
 
     // === PYTHON ENVIRONMENT ===
@@ -1412,7 +1412,7 @@ async function runHealthCheck(): Promise<void> {
         { pkg: 'mlx', label: 'MLX Core', critical: true },
         
         // macOS Automation
-        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: false },
+        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: true },
         { pkg: 'Accessibility', label: 'PyObjC Accessibility Framework', critical: true },
         { pkg: 'Quartz', label: 'PyObjC Quartz Framework', critical: true },
         
@@ -1557,7 +1557,9 @@ function checkRedis(): boolean {
 
 function checkPythonPackage(pkgName: string): boolean {
     try {
-        const res = spawnSync('python3', ['-c', `import ${pkgName}`], { encoding: 'utf-8', timeout: 2000 });
+        const venvPython = path.join(PROJECT_ROOT, 'venv', 'bin', 'python3');
+        // Some heavy imports (mlx_lm, sentence_transformers) need more time; give them room.
+        const res = spawnSync(venvPython, ['-c', `import ${pkgName}`], { encoding: 'utf-8', timeout: 8000 });
         return res.status === 0;
     } catch {
         return false;

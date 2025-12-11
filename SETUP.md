@@ -51,7 +51,8 @@ bash setup.sh
 4. Створює уніфіковане venv у корені
 5. Встановлює всі Python залежності
 6. Встановлює Vision залежності (pyautogui, PIL)
-7. Індексує RAG базу (якщо існує)
+7. Завантажує BAAI/bge-m3 (safetensors) для MLX у кеш HF
+8. Індексує RAG базу (якщо існує)
 8. Запитує про Accessibility дозволи
 9. Налаштовує .env файл
 10. Оновлює tetyana бінарник
@@ -65,6 +66,9 @@ bash setup.sh
 ```bash
 # Через CLI (рекомендується)
 npm run cli "Відкрий Калькулятор"
+
+# Індексація RAG через CLI (авто USE_MLX=1 на Apple Silicon)
+npm run cli    # → RAG Control Agent → Index Chroma
 
 # Через бінарник (автоматично активує venv)
 ./bin/tetyana "Відкрий Калькулятор"
@@ -86,6 +90,7 @@ python3 src/kontur/organs/tetyana_agent.py "Відкрий Калькулято�
 | **Embeddings** | sentence-transformers, huggingface-hub | Vector embeddings & similarity search |
 | **Redis** | redis | State persistence & caching |
 | **Vision** | pillow, pyautogui | Screenshots & UI automation |
+| **MLX (Apple Silicon)** | mlx, mlx_lm, safetensors | Швидкі embeddings на M-серії |
 | **macOS** | pyobjc, atomacos, pyobjc-framework-* | Accessibility API & automation |
 | **Testing** | pytest | Unit & integration tests |
 
@@ -142,6 +147,7 @@ pip list
 |----------|---------|
 | "Python venv не знайдено" | `bash setup.sh` |
 | "ModuleNotFoundError" | `source venv/bin/activate && pip install -r requirements.txt` |
+| "No safetensors found (bge-m3)" | `rm -rf ~/.cache/huggingface/hub/models--BAAI--bge-m3 && hf download BAAI/bge-m3 --local-dir ~/.cache/huggingface/hub/models--BAAI--bge-m3 --include "*.safetensors"` |
 | "Permission denied" | `chmod +x bin/tetyana` |
 | "Vision не працює" | `pip install --upgrade pillow pyautogui` |
 | "RAG не індексована" | `python3 src/kontur/organs/index_rag.py` |

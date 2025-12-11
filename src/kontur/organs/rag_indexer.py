@@ -24,10 +24,10 @@ except Exception:
 
 # === КОНФІГУРАЦІЯ ===
 KNOWLEDGE_SOURCES_DIRS = [
-    os.path.expanduser("~/mac_assistant_rag/knowledge_sources"),
-    os.path.expanduser("~/mac_assistant_rag/knowledge_base/large_corpus"),
+    "/Users/dev/Documents/GitHub/atlas/rag/knowledge_sources",
+    "/Users/dev/Documents/GitHub/atlas/rag/knowledge_base/large_corpus",
 ]
-CHROMA_PERSIST_DIR = os.path.expanduser("~/mac_assistant_rag/chroma_mac")
+CHROMA_PERSIST_DIR = "/Users/dev/Documents/GitHub/atlas/rag/chroma_mac"
 EMBEDDING_MODEL = "BAAI/bge-m3"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200
@@ -140,21 +140,30 @@ def main():
     # === КРОК 2: Ініціалізація Embeddings (потребуємо для semantic chunking) ===
     console.print("\n[cyan]🧠 Завантаження embedding моделі...[/cyan]")
     
-    if MLX_READY:
+    embeddings_fn = None
+    # Локальний прапорець, щоб не ламати глобал при fallback
+    mlx_ready = MLX_READY
+
+    if mlx_ready:
         console.print("[green]⚡ Використовується MLX (bge-m3) для прискорення на Apple Silicon[/green]")
-        model, tokenizer = mlx_load(EMBEDDING_MODEL)
+        try:
+            model, tokenizer = mlx_load(EMBEDDING_MODEL)
 
-        def embed_texts(texts: List[str]):
-            outputs = []
-            for t in texts:
-                tokens = tokenizer(t, return_tensors="np", padding=True, truncation=True)
-                hidden = model(**tokens).last_hidden_state
-                vec = hidden.mean(axis=1)[0]
-                outputs.append(vec.tolist())
-            return outputs
+            def embed_texts(texts: List[str]):
+                outputs = []
+                for t in texts:
+                    tokens = tokenizer(t, return_tensors="np", padding=True, truncation=True)
+                    hidden = model(**tokens).last_hidden_state
+                    vec = hidden.mean(axis=1)[0]
+                    outputs.append(vec.tolist())
+                return outputs
 
-        embeddings_fn = embed_texts
-    else:
+            embeddings_fn = embed_texts
+        except FileNotFoundError as e:
+            console.print(f"[yellow]⚠️ MLX не зміг завантажити модель ({e}). Переходжу на HuggingFaceEmbeddings.[/yellow]")
+            mlx_ready = False
+
+    if embeddings_fn is None:
         console.print("[yellow]MLX недоступний. Використовую HuggingFaceEmbeddings.[/yellow]")
         from langchain_huggingface import HuggingFaceEmbeddings
         embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
@@ -259,7 +268,7 @@ def main():
         
         db = Chroma(
             persist_directory=CHROMA_PERSIST_DIR,
-            embedding_function=embeddings_fn if MLX_READY else None
+            embedding_function=embeddings_fn if mlx_ready else None
         )
         
         for i in range(0, len(documents), BATCH_SIZE):
@@ -280,7 +289,7 @@ def main():
     console.print(f"[cyan]📊 Документів додано: {len(documents)}[/cyan]")
     console.print(f"[cyan]📁 База: {CHROMA_PERSIST_DIR}[/cyan]")
     console.print(f"[cyan]🧠 Embedding модель: {EMBEDDING_MODEL}[/cyan]")
-    console.print(f"[cyan]⚡ GPU acceleration: {'MLX (M1 Max)' if MLX_READY else 'CPU'}[/cyan]")
+    console.print(f"[cyan]⚡ GPU acceleration: {'MLX (M1 Max)' if mlx_ready else 'CPU'}[/cyan]")
     console.print(f"[cyan]🔀 Semantic chunking: ✅ УВІМКНЕНО[/cyan]")
     console.print(f"[cyan]📝 Контекст: ✅ ДОДАНО (prev/next/file)[/cyan]")
     console.print(f"[cyan]📊 Hierarchical indexing: ✅ ДОДАНО ({len(document_hierarchy)} документів)[/cyan]")

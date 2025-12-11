@@ -139,6 +139,30 @@ echo -e "${BLUE}   Python: $(python3 --version)${NC}"
 echo -e "${BLUE}   Pip: $(pip --version)${NC}"
 
 # =============================================================================
+# 8. Prefetch MLX embedding model (BAAI/bge-m3) with safetensors
+# =============================================================================
+echo ""
+echo -e "${BLUE}🧠 Prefetching BAAI/bge-m3 (with safetensors) for MLX...${NC}"
+HF_MODEL_DIR="${HOME}/.cache/huggingface/hub/models--BAAI--bge-m3"
+if ls "${HF_MODEL_DIR}"/*.safetensors >/dev/null 2>&1; then
+    echo -e "${GREEN}✅ BAAI/bge-m3 already present with safetensors${NC}"
+else
+    echo -e "${YELLOW}⚠️  Downloading BAAI/bge-m3 (safetensors) into ${HF_MODEL_DIR}${NC}"
+    mkdir -p "${HF_MODEL_DIR}"
+    # Use new HF CLI; fallback to python module if hf is not on PATH
+    if command -v hf >/dev/null 2>&1; then
+        hf download BAAI/bge-m3 --local-dir "${HF_MODEL_DIR}" --local-dir-use-symlinks False --include "*.safetensors" "*.json" "*.model" "*.txt" "*.bin"
+    else
+        python3 -m huggingface_hub download BAAI/bge-m3 --local-dir "${HF_MODEL_DIR}" --local-dir-use-symlinks False --include "*.safetensors" "*.json" "*.model" "*.txt" "*.bin"
+    fi
+    if ls "${HF_MODEL_DIR}"/*.safetensors >/dev/null 2>&1; then
+        echo -e "${GREEN}✅ BAAI/bge-m3 safetensors downloaded${NC}"
+    else
+        echo -e "${YELLOW}⚠️  BAAI/bge-m3 downloaded but safetensors not found. MLX may fallback.${NC}"
+    fi
+fi
+
+# =============================================================================
 # 8. Verify Copilot CLI (optional but recommended)
 # =============================================================================
 echo ""
