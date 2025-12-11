@@ -1355,22 +1355,39 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  │ SERVICES & DATABASES'));
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
+    // Redis Service
     const redisOk = checkRedis();
-    checks.push({ label: 'Redis reachable', ok: redisOk, critical: true, category: 'service' });
+    checks.push({ label: 'Redis Service', ok: redisOk, critical: true, category: 'service' });
     const redisStatus = redisOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
-    console.log(`  │ ${chalk.green('●')} ${'Redis reachable'.padEnd(28)} ${redisStatus}`);
+    console.log(`  │ ${chalk.green('●')} ${'Redis Service'.padEnd(28)} ${redisStatus}`);
 
+    // Chroma DB
     const chromaDb = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'chroma.sqlite3');
     const chromaOk = fs.existsSync(chromaDb);
     checks.push({ label: 'Chroma DB (RAG)', ok: chromaOk, critical: true, category: 'database' });
     const chromaStatus = chromaOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
     console.log(`  │ ${chalk.green('●')} ${'Chroma DB (RAG)'.padEnd(28)} ${chromaStatus}`);
 
+    // RAG Hierarchy Index
     const hierarchyFile = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'hierarchy.json');
     const hierarchyOk = fs.existsSync(hierarchyFile);
     checks.push({ label: 'RAG Hierarchy Index', ok: hierarchyOk, critical: true, category: 'database' });
     const hierarchyStatus = hierarchyOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
     console.log(`  │ ${chalk.green('●')} ${'RAG Hierarchy Index'.padEnd(28)} ${hierarchyStatus}`);
+
+    // Knowledge Base
+    const knowledgeBasePath = path.join(PROJECT_ROOT, 'rag', 'knowledge_sources');
+    const knowledgeBaseOk = fs.existsSync(knowledgeBasePath);
+    checks.push({ label: 'Knowledge Base', ok: knowledgeBaseOk, critical: true, category: 'database' });
+    const knowledgeBaseStatus = knowledgeBaseOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'Knowledge Base'.padEnd(28)} ${knowledgeBaseStatus}`);
+
+    // LangGraph State DB
+    const langgraphDbPath = path.join(PROJECT_ROOT, 'data', 'langgraph.db');
+    const langgraphDbOk = fs.existsSync(langgraphDbPath);
+    checks.push({ label: 'LangGraph State DB', ok: langgraphDbOk, critical: false, category: 'database' });
+    const langgraphDbStatus = langgraphDbOk ? chalk.green('✓ OK') : chalk.yellow('⊘ OPTIONAL');
+    console.log(`  │ ${chalk.green('●')} ${'LangGraph State DB'.padEnd(28)} ${langgraphDbStatus}`);
 
     // === PYTHON ENVIRONMENT ===
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
