@@ -1356,19 +1356,19 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
     
     const redisOk = checkRedis();
-    checks.push({ label: 'Redis reachable', ok: redisOk, category: 'service' });
+    checks.push({ label: 'Redis reachable', ok: redisOk, critical: true, category: 'service' });
     const redisStatus = redisOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
     console.log(`  │ ${chalk.green('●')} ${'Redis reachable'.padEnd(28)} ${redisStatus}`);
 
     const chromaDb = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'chroma.sqlite3');
     const chromaOk = fs.existsSync(chromaDb);
-    checks.push({ label: 'Chroma DB (RAG)', ok: chromaOk, category: 'database' });
+    checks.push({ label: 'Chroma DB (RAG)', ok: chromaOk, critical: true, category: 'database' });
     const chromaStatus = chromaOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
     console.log(`  │ ${chalk.green('●')} ${'Chroma DB (RAG)'.padEnd(28)} ${chromaStatus}`);
 
     const hierarchyFile = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'hierarchy.json');
     const hierarchyOk = fs.existsSync(hierarchyFile);
-    checks.push({ label: 'RAG Hierarchy Index', ok: hierarchyOk, category: 'database' });
+    checks.push({ label: 'RAG Hierarchy Index', ok: hierarchyOk, critical: true, category: 'database' });
     const hierarchyStatus = hierarchyOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
     console.log(`  │ ${chalk.green('●')} ${'RAG Hierarchy Index'.padEnd(28)} ${hierarchyStatus}`);
 
@@ -1380,22 +1380,15 @@ async function runHealthCheck(): Promise<void> {
     const pythonPackages = [
         { pkg: 'langchain', label: 'LangChain', critical: true },
         { pkg: 'chromadb', label: 'ChromaDB', critical: true },
-        { pkg: 'flashrank', label: 'FlashRank (Reranking)', critical: false },
-        { pkg: 'mlx_lm', label: 'MLX (GPU Acceleration)', critical: false },
-        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: false }
+        { pkg: 'flashrank', label: 'FlashRank (Reranking)', critical: true },
+        { pkg: 'mlx_lm', label: 'MLX (GPU Acceleration)', critical: true },
+        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)', critical: true }
     ];
 
     for (const pkg of pythonPackages) {
         const pkgOk = checkPythonPackage(pkg.pkg);
         checks.push({ label: pkg.label, ok: pkgOk, critical: pkg.critical, category: 'python' });
-        let status;
-        if (pkgOk) {
-            status = chalk.green('✓ OK');
-        } else if (pkg.critical) {
-            status = chalk.red('✗ MISSING');
-        } else {
-            status = chalk.yellow('⊘ OPTIONAL');
-        }
+        const status = pkgOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
         console.log(`  │ ${chalk.green('●')} ${pkg.label.padEnd(28)} ${status}`);
     }
 
