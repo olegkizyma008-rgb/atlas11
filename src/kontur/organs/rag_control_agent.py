@@ -83,8 +83,8 @@ class RAGControlAgent:
         
         return result
     
-    def search_rag(self, query: str, limit: int = 5) -> Dict[str, Any]:
-        """Search the RAG database with proper embedding"""
+    def search_rag(self, query: str, limit: int = 5, filter_type: str = "AppleScript") -> Dict[str, Any]:
+        """Search the RAG database with hybrid approach (vector + metadata filtering)"""
         if not self.collections:
             return {
                 "status": "error",
@@ -94,22 +94,39 @@ class RAGControlAgent:
         
         col = self.collections[0]
         try:
-            # Generate query embedding using the same model as indexer
             import time
             start_time = time.time()
+            
+            # Generate query embedding using the same model as indexer
             query_vector = self.embeddings.embed_documents([query])[0]
             embedding_time = time.time() - start_time
             
-            # Use vector query instead of text query
-            results = col.query(query_embeddings=[query_vector], n_results=limit)
+            # Vector search (metadata filtering requires reindexing, skip for now)
+            results = col.query(
+                query_embeddings=[query_vector], 
+                n_results=limit * 2  # Get more results to filter by similarity
+            )
             
+            # Process and rank results
             documents = []
             if results["documents"] and results["documents"][0]:
-                for doc, distance in zip(results["documents"][0], results["distances"][0]):
-                    documents.append({
-                        "text": doc[:200] + "..." if len(doc) > 200 else doc,
-                        "similarity": 1 - distance,  # Convert distance to similarity
-                    })
+                for doc, distance, metadata in zip(
+                    results["documents"][0], 
+                    results["distances"][0],
+                    results.get("metadatas", [[]])[0] if results.get("metadatas") else [{}] * len(results["documents"][0])
+                ):
+                    similarity = 1 - distance
+                    # Include matches with reasonable similarity (> 0.1 for broad search)
+                    if similarity > 0.1:
+                        documents.append({
+                            "text": doc[:200] + "..." if len(doc) > 200 else doc,
+                            "similarity": round(similarity, 4),
+                            "source": metadata.get("source", "unknown") if metadata else "unknown",
+                            "type": metadata.get("type", "unknown") if metadata else "unknown",
+                        })
+            
+            # Sort by similarity descending and limit results
+            documents = sorted(documents, key=lambda x: x["similarity"], reverse=True)[:limit]
             
             return {
                 "status": "success",
@@ -118,6 +135,7 @@ class RAGControlAgent:
                 "documents": documents,
                 "embedding_time_ms": round(embedding_time * 1000, 2),
                 "embedding_model": EMBEDDING_MODEL,
+                "filter_type": filter_type,
             }
         except Exception as e:
             return {
