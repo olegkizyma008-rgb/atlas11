@@ -124,8 +124,8 @@ class RAGControlAgent:
         
         return result
     
-    def search_rag(self, query: str, limit: int = 5) -> Dict[str, Any]:
-        """Hybrid search: vector (MLX GPU) + BM25 keyword search with reranking"""
+    def search_rag(self, query: str, limit: int = 5, doc_type: str = None) -> Dict[str, Any]:
+        """Hybrid search: vector (MLX GPU) + BM25 keyword search with metadata filtering + reranking"""
         if not self.collections:
             return {"status": "error", "message": "No collections found", "results": []}
         
@@ -150,7 +150,7 @@ class RAGControlAgent:
                 pass
             bm25_time = time.time() - bm25_start if bm25_results else 0
             
-            # 3. Merge and deduplicate results
+            # 3. Merge and deduplicate results with metadata filtering
             seen_docs = set()
             documents = []
             
@@ -165,12 +165,18 @@ class RAGControlAgent:
                     if doc_hash not in seen_docs:
                         seen_docs.add(doc_hash)
                         similarity = 1 - distance
+                        doc_type_val = metadata.get("type", "unknown") if metadata else "unknown"
+                        
+                        # Filter by type if specified (AppleScript, PyObjC, JXA, etc.)
+                        if doc_type and doc_type_val != doc_type:
+                            continue
+                        
                         if similarity > 0.05:  # Lower threshold for broader search
                             documents.append({
                                 "text": doc[:200] + "..." if len(doc) > 200 else doc,
                                 "similarity": round(similarity, 4),
                                 "source": metadata.get("source", "unknown") if metadata else "unknown",
-                                "type": metadata.get("type", "unknown") if metadata else "unknown",
+                                "type": doc_type_val,
                                 "search_method": "vector",
                             })
             
@@ -185,12 +191,18 @@ class RAGControlAgent:
                     if doc_hash not in seen_docs:
                         seen_docs.add(doc_hash)
                         similarity = 1 - distance
+                        doc_type_val = metadata.get("type", "unknown") if metadata else "unknown"
+                        
+                        # Filter by type if specified
+                        if doc_type and doc_type_val != doc_type:
+                            continue
+                        
                         if similarity > 0.05:
                             documents.append({
                                 "text": doc[:200] + "..." if len(doc) > 200 else doc,
                                 "similarity": round(similarity, 4),
                                 "source": metadata.get("source", "unknown") if metadata else "unknown",
-                                "type": metadata.get("type", "unknown") if metadata else "unknown",
+                                "type": doc_type_val,
                                 "search_method": "bm25",
                             })
             
@@ -224,7 +236,8 @@ class RAGControlAgent:
                 "rerank_time_ms": round(rerank_time * 1000, 2),
                 "embedding_model": EMBEDDING_MODEL,
                 "acceleration": "MLX (GPU)" if self.use_mlx else "CPU",
-                "search_type": "hybrid (vector + BM25 + rerank)",
+                "search_type": "hybrid (vector + BM25 + rerank + metadata filter)",
+                "filter_type": doc_type,
             }
         except Exception as e:
             return {"status": "error", "message": str(e), "results": []}
