@@ -1400,6 +1400,17 @@ async function runPythonAgent(): Promise<void> {
     const config = configManager.getAll();
     const task = await input('Enter task', 'Open Calculator');
     
+    // Add local SIGINT handler for prompts
+    let promptSigintHandler: NodeJS.SignalListener | null = null;
+    const setupPromptSigint = () => {
+        if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
+        promptSigintHandler = () => {
+            console.log(chalk.yellow('\n(SIGINT) Use menu Exit to quit. Returning to main menu...\n'));
+            process.exit(0);
+        };
+        process.on('SIGINT', promptSigintHandler);
+    };
+    
     // Use saved defaults without prompting if they are set
     const visionValue = config['DEFAULT_USE_VISION_CLI'];
     const liveLogValue = config['DEFAULT_LIVE_LOG'];
@@ -1413,15 +1424,22 @@ async function runPythonAgent(): Promise<void> {
         useVision = visionValue === '1' || visionValue === 'true';
         console.log(chalk.gray(`  Vision: ${useVision ? 'ON' : 'OFF'} (from settings)\n`));
     } else {
+        setupPromptSigint();
         useVision = await confirm('Use vision (screenshots & verification)?', false);
+        if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
     }
     
     if (hasLiveLogDefault) {
         liveLog = liveLogValue === '1' || liveLogValue === 'true';
         console.log(chalk.gray(`  Live log: ${liveLog ? 'ON' : 'OFF'} (from settings)\n`));
     } else {
+        setupPromptSigint();
         liveLog = await confirm('Stream live log?', true);
+        if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
     }
+    
+    // Restore global SIGINT handler
+    if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
 
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
     const env = { ...process.env, VISION_DISABLE: useVision ? '0' : '1' };
