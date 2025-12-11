@@ -1399,10 +1399,25 @@ async function runPythonAgent(): Promise<void> {
 
     const config = configManager.getAll();
     const task = await input('Enter task', 'Open Calculator');
-    const defaultUseVisionCLI = config['DEFAULT_USE_VISION_CLI'] === '1' || config['DEFAULT_USE_VISION_CLI'] === 'true';
-    const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
-    const useVision = await confirm('Use vision (screenshots & verification)?', defaultUseVisionCLI);
-    const liveLog = await confirm('Stream live log?', defaultLiveLog);
+    
+    // Use saved defaults without prompting if they are set
+    const hasVisionDefault = config['DEFAULT_USE_VISION_CLI'] !== undefined;
+    const hasLiveLogDefault = config['DEFAULT_LIVE_LOG'] !== undefined;
+    
+    let useVision: boolean;
+    let liveLog: boolean;
+    
+    if (hasVisionDefault) {
+        useVision = config['DEFAULT_USE_VISION_CLI'] === '1' || config['DEFAULT_USE_VISION_CLI'] === 'true';
+    } else {
+        useVision = await confirm('Use vision (screenshots & verification)?', false);
+    }
+    
+    if (hasLiveLogDefault) {
+        liveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
+    } else {
+        liveLog = await confirm('Stream live log?', true);
+    }
 
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
     const env = { ...process.env, VISION_DISABLE: useVision ? '0' : '1' };
