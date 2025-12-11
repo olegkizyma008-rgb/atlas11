@@ -1272,13 +1272,20 @@ async function applyHeadlessVisionPreset(): Promise<void> {
 }
 
 /**
- * Run health check
+ * Run health check with extended coverage
  */
 async function runHealthCheck(): Promise<void> {
     showHeader('System Health Check');
     console.log(chalk.gray('  Checking system configuration...\n'));
 
     const config = configManager.getAll();
+    const checks: { label: string; ok: boolean; detail?: string; category?: string }[] = [];
+
+    // === API KEYS & PROVIDERS ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ API KEYS & PROVIDERS'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
     const requiredKeys = [
         { key: 'GEMINI_API_KEY', label: 'Gemini API Key' },
         { key: 'COPILOT_API_KEY', label: 'Copilot Token' },
@@ -1287,53 +1294,145 @@ async function runHealthCheck(): Promise<void> {
         { key: 'MISTRAL_API_KEY', label: 'Mistral API Key' }
     ];
 
-    const checks: { label: string; ok: boolean; detail?: string }[] = [];
-    const hasAllKeys = requiredKeys.every(k => !!config[k.key]);
     for (const k of requiredKeys) {
-        checks.push({ label: k.label, ok: !!config[k.key] });
+        const check = { label: k.label, ok: !!config[k.key], category: 'api' };
+        checks.push(check);
+        const status = check.ok ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        console.log(`  │ ${chalk.green('●')} ${check.label.padEnd(28)} ${status}`);
     }
 
-    // BRAIN/VISION/EXEC
-    checks.push({ label: 'Brain Provider', ok: !!config['BRAIN_PROVIDER'] });
-    checks.push({ label: 'Brain Model', ok: !!config['BRAIN_MODEL'] });
-    checks.push({ label: 'Vision Mode', ok: !!config['VISION_MODE'] });
-    checks.push({ label: 'Execution Engine', ok: !!config['EXECUTION_ENGINE'] });
+    // === CORE SERVICES ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ CORE SERVICES'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const coreServices = [
+        { key: 'BRAIN_PROVIDER', label: 'Brain Provider' },
+        { key: 'BRAIN_MODEL', label: 'Brain Model' },
+        { key: 'VISION_MODE', label: 'Vision Mode' },
+        { key: 'EXECUTION_ENGINE', label: 'Execution Engine' }
+    ];
 
-    // Binaries
-    checks.push(checkCommand('python3', 'python3 available'));
-    checks.push(checkCommand('copilot', 'copilot CLI available'));
-    checks.push(checkCommand('redis-cli', 'redis-cli available'));
+    for (const svc of coreServices) {
+        const check = { label: svc.label, ok: !!config[svc.key], detail: config[svc.key], category: 'core' };
+        checks.push(check);
+        const status = check.ok ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        const detail = check.detail ? ` ${chalk.gray(check.detail)}` : '';
+        console.log(`  │ ${chalk.green('●')} ${check.label.padEnd(28)} ${status}${detail}`);
+    }
 
-    // Redis ping
+    // === SYSTEM BINARIES ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ SYSTEM BINARIES'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const binaries = [
+        { cmd: 'python3', label: 'python3' },
+        { cmd: 'node', label: 'Node.js' },
+        { cmd: 'npm', label: 'npm' },
+        { cmd: 'copilot', label: 'Copilot CLI' },
+        { cmd: 'redis-cli', label: 'redis-cli' },
+        { cmd: 'git', label: 'Git' }
+    ];
+
+    for (const bin of binaries) {
+        const check = checkCommand(bin.cmd, bin.label);
+        checks.push({ ...check, category: 'binary' });
+        const status = check.ok ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        const detail = check.detail ? ` ${chalk.gray(check.detail)}` : '';
+        console.log(`  │ ${chalk.green('●')} ${check.label.padEnd(28)} ${status}${detail}`);
+    }
+
+    // === SERVICES & DATABASES ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ SERVICES & DATABASES'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
     const redisOk = checkRedis();
-    checks.push({ label: 'Redis reachable', ok: redisOk });
+    checks.push({ label: 'Redis reachable', ok: redisOk, category: 'service' });
+    const redisStatus = redisOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'Redis reachable'.padEnd(28)} ${redisStatus}`);
 
-    // Chrome present
-    const chromeOk = fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-    checks.push({ label: 'Google Chrome installed', ok: chromeOk });
-
-    // Chroma DB exists
     const chromaDb = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'chroma.sqlite3');
-    checks.push({ label: 'Chroma DB exists', ok: fs.existsSync(chromaDb) });
+    const chromaOk = fs.existsSync(chromaDb);
+    checks.push({ label: 'Chroma DB (RAG)', ok: chromaOk, category: 'database' });
+    const chromaStatus = chromaOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'Chroma DB (RAG)'.padEnd(28)} ${chromaStatus}`);
 
-    // MLX toggle hint
-    const onAppleSilicon = process.platform === 'darwin' && process.arch === 'arm64';
-    checks.push({ label: 'Apple Silicon (for MLX)', ok: onAppleSilicon, detail: onAppleSilicon ? 'arm64' : process.arch });
+    const hierarchyFile = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'hierarchy.json');
+    const hierarchyOk = fs.existsSync(hierarchyFile);
+    checks.push({ label: 'RAG Hierarchy Index', ok: hierarchyOk, category: 'database' });
+    const hierarchyStatus = hierarchyOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'RAG Hierarchy Index'.padEnd(28)} ${hierarchyStatus}`);
 
-    let healthy = checks.every(c => c.ok);
+    // === PYTHON ENVIRONMENT ===
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
-    for (const c of checks) {
-        const status = c.ok ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
-        const detail = c.detail ? ` ${chalk.gray(c.detail)}` : '';
-        console.log(`  │ ${chalk.green('●')} ${c.label.padEnd(28)} ${status}${detail}`);
+    console.log(chalk.cyan('  │ PYTHON ENVIRONMENT'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const pythonPackages = [
+        { pkg: 'langchain', label: 'LangChain' },
+        { pkg: 'chromadb', label: 'ChromaDB' },
+        { pkg: 'flashrank', label: 'FlashRank (Reranking)' },
+        { pkg: 'mlx_lm', label: 'MLX (GPU Acceleration)' },
+        { pkg: 'pyobjc', label: 'PyObjC (Accessibility)' }
+    ];
+
+    for (const pkg of pythonPackages) {
+        const pkgOk = checkPythonPackage(pkg.pkg);
+        checks.push({ label: pkg.label, ok: pkgOk, category: 'python' });
+        const status = pkgOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        console.log(`  │ ${chalk.green('●')} ${pkg.label.padEnd(28)} ${status}`);
     }
-    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
 
+    // === APPLICATIONS ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ APPLICATIONS'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const chromeOk = fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+    checks.push({ label: 'Google Chrome', ok: chromeOk, category: 'app' });
+    const chromeStatus = chromeOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'Google Chrome'.padEnd(28)} ${chromeStatus}`);
+
+    const safariOk = fs.existsSync('/Applications/Safari.app/Contents/MacOS/Safari');
+    checks.push({ label: 'Safari', ok: safariOk, category: 'app' });
+    const safariStatus = safariOk ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+    console.log(`  │ ${chalk.green('●')} ${'Safari'.padEnd(28)} ${safariStatus}`);
+
+    // === HARDWARE & OS ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan('  │ HARDWARE & OS'));
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const onAppleSilicon = process.platform === 'darwin' && process.arch === 'arm64';
+    checks.push({ label: 'Apple Silicon (M1+)', ok: onAppleSilicon, detail: process.arch, category: 'hardware' });
+    const silconStatus = onAppleSilicon ? chalk.green('✓ OK') : chalk.red('✗ NOT AVAILABLE');
+    console.log(`  │ ${chalk.green('●')} ${'Apple Silicon (M1+)'.padEnd(28)} ${silconStatus} ${chalk.gray(process.arch)}`);
+
+    const osVersion = os.platform() === 'darwin' ? 'macOS' : os.platform();
+    checks.push({ label: 'Operating System', ok: os.platform() === 'darwin', detail: osVersion, category: 'hardware' });
+    const osStatus = os.platform() === 'darwin' ? chalk.green('✓ OK') : chalk.red('✗ NOT MACOS');
+    console.log(`  │ ${chalk.green('●')} ${'Operating System'.padEnd(28)} ${osStatus} ${chalk.gray(osVersion)}`);
+
+    // === SUMMARY ===
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    
+    const totalChecks = checks.length;
+    const passedChecks = checks.filter(c => c.ok).length;
+    const healthPercent = Math.round((passedChecks / totalChecks) * 100);
+    
     console.log('');
-    if (healthy) {
+    console.log(chalk.cyan(`  Health Status: ${healthPercent}% (${passedChecks}/${totalChecks})`));
+    
+    if (healthPercent === 100) {
         console.log(chalk.green('  ✓ All critical components configured!'));
+    } else if (healthPercent >= 80) {
+        console.log(chalk.yellow('  ⚠ Most components configured, some optional features missing'));
+    } else if (healthPercent >= 60) {
+        console.log(chalk.yellow('  ⚠ Core components present, but some important features missing'));
     } else {
-        console.log(chalk.yellow('  ⚠ Some components need configuration'));
+        console.log(chalk.red('  ✗ Critical components missing, system may not function properly'));
     }
 
     await input('\nPress Enter to continue', '');
@@ -1353,6 +1452,15 @@ function checkRedis(): boolean {
     try {
         const res = spawnSync('redis-cli', ['ping'], { encoding: 'utf-8', timeout: 1000 });
         return res.status === 0 && res.stdout.trim().toLowerCase() === 'pong';
+    } catch {
+        return false;
+    }
+}
+
+function checkPythonPackage(pkgName: string): boolean {
+    try {
+        const res = spawnSync('python3', ['-c', `import ${pkgName}`], { encoding: 'utf-8', timeout: 2000 });
+        return res.status === 0;
     } catch {
         return false;
     }
