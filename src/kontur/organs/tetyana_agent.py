@@ -18,6 +18,8 @@ import datetime
 import json
 import uuid
 import time
+import shlex
+import base64
 from typing import TypedDict, Optional, Annotated, Sequence
 from pathlib import Path
 
@@ -47,6 +49,110 @@ except ImportError:
 
 console = Console()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
+# ============================================================================
+# LLM HELPERS (Copilot gpt-4o with graceful fallback)
+# ============================================================================
+
+
+def call_copilot(prompt: str, model: str = "gpt-4o", temperature: float = 0.2, timeout: int = 90) -> Optional[str]:
+    """
+    Виклик GitHub Copilot CLI (якщо доступний). Повертає текст або None.
+    Очікується, що користувач має встановлений `copilot` CLI та токен.
+    """
+    copilot_bin = os.getenv("COPILOT_BIN", "copilot")
+    try:
+        cmd = [
+            copilot_bin,
+            "--model", model,
+            "--temperature", str(temperature),
+            "--output", "text",
+            "--prompt", prompt
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout)
+        if result.returncode == 0:
+            text = result.stdout.strip()
+            return text if text else None
+        else:
+            return None
+
+
+def plan_with_copilot(task: str) -> Optional[list]:
+    """
+    Викликає Copilot для розбиття завдання на серії однорідних дій.
+    Формат очікуваної відповіді: JSON масив рядків.
+    """
+    prompt = f"""
+Ти — планувальник macOS automation. Розбий завдання на серії однорідних дій (не дрібнити на мікрокроки).
+Формат відповіді: JSON масив рядків, без пояснень.
+Завдання: \"{task}\"
+Приклад: ["Відкрий Safari і перейдій на google.com", "Знайди запит ..."]
+"""
+    result = call_copilot(prompt, model=os.getenv("COPILOT_PLAN_MODEL", "gpt-4o"), temperature=0.2, timeout=60)
+    if not result:
+        return None
+    try:
+        steps = json.loads(result)
+        if isinstance(steps, list) and all(isinstance(s, str) for s in steps):
+            return [s.strip() for s in steps if s.strip()]
+    except Exception:
+        return None
+    return None
+
+
+def generate_code_with_copilot(step: str, rag_text: str) -> Optional[str]:
+    """
+    Виклик Copilot для генерації AppleScript з урахуванням RAG прикладів.
+    """
+    prompt = f"""
+Ти — macOS automation інженер. Згенеруй AppleScript для кроку:
+КРОК: \"{step}\"
+
+Приклади з бази (можеш використати структури):
+{rag_text[:4000]}
+
+Вимоги:
+- Тільки AppleScript код у ```applescript``` без пояснень.
+- Дбайливо використовуй System Events / Google Chrome / Safari / Finder залежно від кроку.
+"""
+    result = call_copilot(prompt, model=os.getenv("COPILOT_CODE_MODEL", "gpt-4o"), temperature=0.2, timeout=90)
+    if not result:
+        return None
+    # Витягнути блок applescript
+    block = re.findall(r"```applescript\n(.*?)```", result, re.DOTALL)
+    if block:
+        return block[0].strip()
+    return result.strip() if result.strip().lower().startswith("tell ") else None
+
+
+def vision_verify_with_copilot(step: str, screenshot_path: str) -> Optional[bool]:
+    """
+    Верифікація скріншоту через Copilot-vision (gpt-4o). Передаємо base64 (обрізаний) у промпт.
+    """
+    try:
+        with open(screenshot_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode("utf-8")
+        b64_short = b64[:50000]  # обмеження розміру
+    except Exception:
+        return None
+
+    prompt = f"""
+Ти перевіряєш виконання кроку macOS. Є скріншот у base64 нижче.
+КРОК: \"{step}\"
+Визнач, чи крок виконано. Відповідь: "yes" або "no".
+
+SCREENSHOT_BASE64:
+{b64_short}
+"""
+    result = call_copilot(prompt, model=os.getenv("COPILOT_VISION_MODEL", "gpt-4o"), temperature=0, timeout=90)
+    if not result:
+        return None
+    text = result.strip().lower()
+    if "yes" in text and "no" not in text:
+        return True
+    if "no" in text and "yes" not in text:
+        return False
+    return None
 
 # ============================================================================
 # STATE DEFINITION
@@ -126,6 +232,9 @@ def add_to_rag(task: str, code: str, status: str = "success"):
 
 def take_screenshot() -> str:
     """Зробити скріншот"""
+    # Дозвіл на вимкнення Vision через ENV (для headless CLI)
+    if os.getenv("VISION_DISABLE") in ("1", "true", "yes"):
+        return ""
     if not VISION_AVAILABLE:
         return ""
     
@@ -153,16 +262,9 @@ def plan_task(state: AgentState) -> AgentState:
     if rag_context:
         console.print("[dim]📚 Знайдено приклади в RAG[/dim]")
     
-    # Розбиття на кроки
+    # Розбиття на кроки (серії однорідних дій) через Copilot
     console.print("[bold magenta]🤖 Розбиття на кроки...[/bold magenta]")
-    
-    # Простий парсинг кроків з завдання
-    steps = [state['task']]  # За замовчуванням одне завдання
-    
-    # Якщо завдання містить "і", розбиваємо на кроки
-    if " і " in state['task'].lower() or " then " in state['task'].lower():
-        parts = re.split(r'\s+(?:і|then)\s+', state['task'], flags=re.IGNORECASE)
-        steps = [p.strip() for p in parts if p.strip()]
+    steps = plan_with_copilot(state['task']) or [state['task']]
     
     state['steps'] = steps
     state['current_step_idx'] = 0
@@ -180,27 +282,19 @@ def rag_search(state: AgentState) -> AgentState:
     # Пошук в RAG
     rag_results = search_rag(state['current_step'], k=5)
     
+    # Якщо є RAG — використовуємо Copilot з контекстом; якщо ні — fallback
+    code_from_llm = None
     if rag_results:
         console.print("[dim]✓ Знайдено рішення в RAG[/dim]")
-        # Витяг AppleScript з RAG
-        applescript_blocks = re.findall(r'```applescript\n(.*?)\n```', rag_results, re.DOTALL)
-        if applescript_blocks:
-            state['current_code'] = applescript_blocks[0].strip()
-        else:
-            # Витяг просто коду
-            lines = rag_results.split('\n')
-            script_lines = []
-            in_script = False
-            for line in lines:
-                if 'tell application' in line.lower() or in_script:
-                    script_lines.append(line)
-                    in_script = True
-                    if 'end tell' in line.lower():
-                        in_script = False
-            state['current_code'] = '\n'.join(script_lines) if script_lines else 'tell application "System Events"\n    delay 0.5\nend tell'
+        code_from_llm = generate_code_with_copilot(state['current_step'], rag_results)
     else:
-        # Мінімальний скрипт якщо RAG не знайшов
-        console.print("[yellow]⚠️ RAG не знайшов рішення[/yellow]")
+        console.print("[yellow]⚠️ RAG не знайшов рішення, генеруємо з нуля[/yellow]")
+        code_from_llm = generate_code_with_copilot(state['current_step'], "")
+
+    if code_from_llm:
+        state['current_code'] = code_from_llm
+    else:
+        # fallback мінімальний
         state['current_code'] = 'tell application "System Events"\n    delay 0.5\nend tell'
     
     return state
@@ -235,13 +329,23 @@ def execute(state: AgentState) -> AgentState:
 
 
 def vision_check(state: AgentState) -> AgentState:
-    """Node 4: Перевірка через Vision"""
-    console.print("[bold yellow]📸 Перевірка результату...[/bold yellow]")
-    
-    if VISION_AVAILABLE:
-        screenshot = take_screenshot()
+    """Node 4: Vision перевірка результату"""
+    # Якщо вимкнено через ENV, пропускаємо vision
+    if os.getenv("VISION_DISABLE") in ("1", "true", "yes"):
+        console.print("[yellow]⚠️ Vision вимкнено (VISION_DISABLE=1)[/yellow]")
+        return state
+
+    screenshot = take_screenshot()
+    if screenshot:
         state['screenshot_path'] = screenshot
-        console.print(f"[dim]✓ Скріншот: {screenshot}[/dim]")
+        console.print(f"[dim]📸 Скріншот: {screenshot}[/dim]")
+
+        # Верифікація через Copilot-vision (On-Demand)
+        verify = vision_verify_with_copilot(state['current_step'], screenshot)
+        if verify is False:
+            state['error'] = "Vision check failed"
+        elif verify is True:
+            state['error'] = None
     
     return state
 

@@ -8,6 +8,17 @@ import sys
 from pathlib import Path
 from typing import Generator, Tuple, List
 
+# Опційно: використати MLX для максимальної швидкості на Apple Silicon
+USE_MLX = os.getenv("USE_MLX", "0") in ("1", "true", "yes")
+MLX_READY = False
+try:
+    if USE_MLX:
+        import numpy as np
+        from mlx_lm import load as mlx_load
+        MLX_READY = True
+except Exception:
+    MLX_READY = False
+
 # === КОНФІГУРАЦІЯ ===
 KNOWLEDGE_SOURCES_DIRS = [
     os.path.expanduser("~/mac_assistant_rag/knowledge_sources"),
@@ -127,8 +138,27 @@ def main():
     # === КРОК 3: Ініціалізація Embeddings ===
     console.print("\n[cyan]🧠 Завантаження embedding моделі...[/cyan]")
     
-    from langchain_huggingface import HuggingFaceEmbeddings
-    embeddings = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+    if MLX_READY:
+        console.print("[green]⚡ Використовується MLX (bge-m3) для прискорення на Apple Silicon[/green]")
+        model, tokenizer = mlx_load(EMBEDDING_MODEL)
+
+        def embed_texts(texts: List[str]):
+            outputs = []
+            for t in texts:
+                tokens = tokenizer(t, return_tensors="np", padding=True, truncation=True)
+                hidden = model(**tokens).last_hidden_state  # (1, seq, dim)
+                vec = hidden.mean(axis=1)[0]
+                outputs.append(vec.tolist())
+            return outputs
+
+        embedding_fn = embed_texts
+    else:
+        console.print("[yellow]MLX недоступний або USE_MLX не встановлено. Використовую HuggingFaceEmbeddings.[/yellow]")
+        from langchain_huggingface import HuggingFaceEmbeddings
+        embedding_model = HuggingFaceEmbeddings(model_name=EMBEDDING_MODEL)
+
+        def embedding_fn(texts: List[str]):
+            return embedding_model.embed_documents(texts)
     
     # === КРОК 4: Індексація в Chroma ===
     console.print("\n[cyan]💾 Індексація в ChromaDB...[/cyan]")
@@ -147,7 +177,7 @@ def main():
         
         db = Chroma(
             persist_directory=CHROMA_PERSIST_DIR,
-            embedding_function=embeddings
+            embedding_function=embedding_fn
         )
         
         for i in range(0, len(documents), BATCH_SIZE):

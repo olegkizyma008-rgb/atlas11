@@ -6,11 +6,19 @@
 
 import chalk from 'chalk';
 import ora from 'ora';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { spawn, execSync, spawnSync } from 'child_process';
 import { select, input, confirm } from './prompts.js';
 import { configManager } from '../managers/config-manager.js';
 import { modelRegistry } from '../managers/model-registry.js';
 import { selectConfigItems, manageConfigItem, displayConfigSummary, ConfigSection, ConfigItem } from './config-list.js';
 import { displayRagStatus, displayRagSearch, getRagIndexStatus } from './rag-status.js';
+
+const PROJECT_ROOT = process.cwd();
+const STAGING_DIR = path.join(PROJECT_ROOT, 'rag', 'knowledge_sources'); // чорнова база
+const ACTIVE_DIR = path.join(PROJECT_ROOT, 'rag', 'knowledge_base', 'large_corpus'); // бойова база
 
 // Service definitions
 const SERVICES = [
@@ -20,7 +28,7 @@ const SERVICES = [
     { key: 'vision', label: 'Vision', desc: 'Visual Analysis (Grisha)' },
     { key: 'reasoning', label: 'Reasoning', desc: 'Deep Thinking' },
     { key: 'execution', label: 'Execution', desc: 'Agent Engine' }
-] as const;
+];
 
 const PROVIDERS = ['gemini', 'copilot', 'openai', 'anthropic', 'mistral', 'web', 'ukrainian'];
 
@@ -32,6 +40,106 @@ const PROVIDER_API_KEYS: Record<string, string> = {
     mistral: 'MISTRAL_API_KEY'
 };
 
+// Swallow SIGINT to avoid ExitPromptError in prompts; user should exit via menu
+let SIGINT_GUARD = false;
+process.on('SIGINT', () => {
+    if (SIGINT_GUARD) return;
+    SIGINT_GUARD = true;
+    console.log(chalk.yellow('\n(SIGINT ignored) Use menu Exit to quit. Ongoing tasks keep running.\n'));
+    setTimeout(() => { SIGINT_GUARD = false; }, 500);
+});
+
+// Top repositories bundle for quick staging fetch
+const TOP_REPOS = [
+    'https://github.com/kevin-funderburg/AppleScripts.git',
+    'https://github.com/extracts/mac-scripting.git',
+    'https://github.com/temochka/macos-automation.git',
+    'https://github.com/SKaplanOfficial/macOS-Automation-Resources.git',
+    'https://github.com/unforswearing/applescript.git',
+    'https://github.com/princelundgren/automator-collection.git',
+    'https://github.com/abbeycode/AppleScripts.git',
+    'https://github.com/MacPaw/macapptree.git',
+    'https://github.com/alex-kostirin/pyatomac.git',
+    'https://github.com/atheriel/accessibility.git',
+    'https://github.com/chrs1885/Capable.git',
+    'https://github.com/tmandry/AXSwift.git'
+];
+
+// ============================================================================
+// RAG CONTROL AGENT HELPERS
+// ============================================================================
+
+function ensureDir(dir: string) {
+    fs.mkdirSync(dir, { recursive: true });
+}
+
+function selectNoSep<T extends { value: any; disabled?: any }>(message: string, choices: T[], options: any = {}): Promise<any> {
+    const filtered = choices.filter(c => !c.disabled && !(typeof c.value === 'string' && c.value.startsWith('_sep')));
+    return select(message, filtered as any, options);
+}
+
+async function showRagStats(): Promise<void> {
+    showHeader('RAG Stats');
+    const load = os.loadavg();
+    const totalMem = os.totalmem();
+    const freeMem = os.freemem();
+    const usedMem = totalMem - freeMem;
+    const cores = os.cpus().length;
+
+    let diskInfo = '';
+    let chromaSize = '';
+    try {
+        diskInfo = execSync(`df -h ${PROJECT_ROOT}`, { encoding: 'utf-8' }).split('\n')[1] || '';
+    } catch {
+        diskInfo = 'n/a';
+    }
+    try {
+        chromaSize = execSync(`du -sh rag/chroma_mac || true`, { encoding: 'utf-8' }).trim();
+    } catch {
+        chromaSize = 'n/a';
+    }
+
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(`  ${chalk.green('●')} CPU cores/load    ${cores} cores | load ${load.map(l => l.toFixed(2)).join(', ')}`);
+    console.log(`  ${chalk.green('●')} Memory            used ${formatBytes(usedMem)} / total ${formatBytes(totalMem)}`);
+    console.log(`  ${chalk.green('●')} Disk (project)    ${chalk.gray(diskInfo.trim() || 'n/a')}`);
+    console.log(`  ${chalk.green('●')} Chroma size       ${chalk.cyan(chromaSize || 'n/a')}`);
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    await input('Press Enter to continue', '');
+}
+
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${Math.round((bytes / Math.pow(k, i)) * 100) / 100} ${sizes[i]}`;
+}
+
+function listDirSafe(dir: string): string[] {
+    try {
+        if (!fs.existsSync(dir)) return [];
+        return fs.readdirSync(dir);
+    } catch {
+        return [];
+    }
+}
+
+async function printList(title: string, dir: string, items: string[]): Promise<void> {
+    console.clear();
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.cyan(`  │ ${chalk.green('●')} ${title} (${items.length})`.padEnd(42, ' ')) + `${chalk.green('●')} │`);
+    console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
+    console.log(chalk.gray(`  Path: ${dir}\n`));
+    if (!items.length) {
+        console.log(chalk.yellow('  (empty)\n'));
+    } else {
+        for (const it of items) console.log(`  ${chalk.green('●')} ${it}`);
+        console.log('');
+    }
+    await input('Press Enter to continue', '');
+}
+
 /**
  * Display header with title and decorative elements
  */
@@ -42,6 +150,268 @@ function showHeader(title: string): void {
     console.log(chalk.cyan(`  │ ${chalk.green('●')} ${title.padEnd(36)} ${chalk.green('●')} │`));
     console.log(chalk.cyan('  ◆─────────────────────────────────────◆'));
     console.log('');
+}
+
+// ============================================================================
+// RAG CONVERSATIONAL AGENT (natural language, constrained to RAG/config/search)
+// ============================================================================
+async function ragConversationalAgent(): Promise<void> {
+    showHeader('RAG Conversational Agent');
+    console.log(chalk.gray('  Natural language control (staging/active, fetch, search, index, cleanup)\n'));
+
+    while (true) {
+        const task = await input('Your request (enter to exit)', '');
+        if (!task) return;
+
+        const constrainedPrompt = `
+You are the RAG Control Agent for Tetyana v12.
+Allowed actions ONLY:
+- Manage staging dir (rag/knowledge_sources) and active dir (rag/knowledge_base/large_corpus).
+- Fetch sources (git/url/path), validate accessibility, move to staging, promote to active.
+- Search/index/reset Chroma; manage documents (delete/inspect quality); suggest refinements.
+- Do NOT perform arbitrary macOS automation outside RAG tasks.
+User request: ${task}
+Respond with the actions you perform and outcomes.`;
+
+        const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'rag-control' };
+        const cmd = './bin/tetyana';
+        const args = [constrainedPrompt];
+
+        const spinner = ora('Running rag-control agent...').start();
+        const proc = spawn(cmd, args, { env, stdio: 'pipe' });
+        proc.stdout.on('data', d => {
+            spinner.stop();
+            process.stdout.write(chalk.cyan(d.toString()));
+        });
+        proc.stderr.on('data', d => {
+            spinner.stop();
+            process.stdout.write(chalk.yellow(d.toString()));
+        });
+        await new Promise<void>(resolve => proc.on('close', () => resolve()));
+        await input('\nPress Enter to continue', '');
+    }
+}
+
+// ============================================================================
+// KONTUR WORKFLOW AUDIT (agent-based constrained check)
+// ============================================================================
+async function konturWorkflowAudit(): Promise<void> {
+    showHeader('KONTUR Workflow Audit');
+    console.log(chalk.gray('  Constrained audit: KONTUR protocol, modules under control\n'));
+
+    const config = configManager.getAll();
+    const konturEndpoints = [
+        { key: 'KONTUR_CORE_URL', label: 'KONTUR Core URL' },
+        { key: 'KONTUR_AGENT_URL', label: 'KONTUR Agent URL' },
+        { key: 'KONTUR_AUTH_TOKEN', label: 'KONTUR Auth Token' }
+    ];
+    const missing = konturEndpoints.filter(e => !config[e.key]);
+    if (missing.length) {
+        console.log(chalk.yellow('  ⚠ Missing KONTUR config:'));
+        missing.forEach(m => console.log(`    - ${m.label} (${m.key})`));
+        console.log('');
+    }
+
+    const prompt = `
+You are the KONTUR Workflow Audit Agent.
+Tasks:
+- Verify all modules/components are under KONTUR control and communicate via KONTUR protocol.
+- Check bridges, organs, CLI/Electron surfaces for KONTUR compliance.
+- Report missing or misconfigured pieces and suggest fixes.
+Constraints: Do NOT perform arbitrary macOS automation; only inspect/analyze KONTUR workflow state.
+Respond with concise findings and next steps.`;
+
+    const env = { ...process.env, VISION_DISABLE: '1', AGENT_SCOPE: 'kontur-audit' };
+    const cmd = './bin/tetyana';
+    const args = [prompt];
+
+    const spinner = ora('Auditing KONTUR workflow...').start();
+    const proc = spawn(cmd, args, { env, stdio: 'pipe' });
+    proc.stdout.on('data', d => {
+        spinner.stop();
+        process.stdout.write(chalk.cyan(d.toString()));
+    });
+    proc.stderr.on('data', d => {
+        spinner.stop();
+        process.stdout.write(chalk.yellow(d.toString()));
+    });
+    await new Promise<void>(resolve => proc.on('close', () => resolve()));
+    await input('\nPress Enter to continue', '');
+}
+
+// ============================================================================
+// RAG CONTROL AGENT (staging/active, fetch/add/delete/promote)
+// ============================================================================
+
+async function ragControlAgent(): Promise<void> {
+    ensureDir(STAGING_DIR);
+    ensureDir(ACTIVE_DIR);
+
+    while (true) {
+        showHeader('RAG Control Agent');
+        console.log(chalk.gray('  Manage staging/active corpora, fetch sources, promote, clean\n'));
+
+        const stagingItems = listDirSafe(STAGING_DIR);
+        const activeItems = listDirSafe(ACTIVE_DIR);
+
+        const choices = [
+            { name: `${chalk.green('●')} Add source to staging (git/url/path)`, value: 'add' },
+            { name: `${chalk.green('●')} Fetch top repositories bundle → staging`, value: 'fetch_top' },
+            { name: `${chalk.green('●')} Quick ingest top bundle → active + index`, value: 'ingest_top' },
+            { name: `${chalk.green('●')} Search (RAG preview)`, value: 'search' },
+            { name: `${chalk.green('●')} Promote staging → active`, value: 'promote' },
+            { name: `${chalk.green('●')} List staging (${stagingItems.length})`, value: 'list_staging' },
+            { name: `${chalk.green('●')} List active (${activeItems.length})`, value: 'list_active' },
+            { name: `${chalk.green('●')} Clean staging (delete)`, value: 'clean_staging' },
+            { name: `${chalk.green('●')} Clean active (delete)`, value: 'clean_active' },
+            { name: `${chalk.green('●')} Index active (use MLX on Apple Silicon)`, value: 'index_active' },
+            { name: `${chalk.green('●')} Resource & RAG Stats (live snapshot)`, value: 'stats' },
+            { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
+            { name: chalk.gray('← Back'), value: 'back' }
+        ];
+
+        const action = await selectNoSep('', choices);
+        if (action === 'back') return;
+
+        switch (action) {
+            case 'add':
+                await addSourceToStaging();
+                break;
+            case 'fetch_top':
+                await fetchTopReposToStaging();
+                break;
+            case 'ingest_top':
+                await ingestTopBundle();
+                break;
+            case 'search':
+                await ragQuickSearch();
+                break;
+            case 'promote':
+                await promoteStagingToActive();
+                break;
+            case 'list_staging':
+                await printList('Staging', STAGING_DIR, stagingItems);
+                break;
+            case 'list_active':
+                await printList('Active', ACTIVE_DIR, activeItems);
+                break;
+            case 'clean_staging':
+                await cleanDir(STAGING_DIR, 'staging');
+                break;
+            case 'clean_active':
+                await cleanDir(ACTIVE_DIR, 'active');
+                break;
+            case 'index_active':
+                await indexChroma(); // reuse; will pick USE_MLX on Apple Silicon
+                break;
+            case 'stats':
+                await showRagStats();
+                break;
+        }
+    }
+}
+
+async function addSourceToStaging(): Promise<void> {
+    ensureDir(STAGING_DIR);
+    const src = await input('Enter git URL or local path to add to staging', 'https://github.com/kevin-funderburg/AppleScripts.git');
+    if (!src) return;
+    const spinner = ora('Adding source...').start();
+    try {
+        if (src.startsWith('http://') || src.startsWith('https://')) {
+            const name = src.split('/').pop()?.replace('.git', '') || `repo_${Date.now()}`;
+            const target = path.join(STAGING_DIR, name);
+            fs.rmSync(target, { recursive: true, force: true });
+            const result = spawnSync('git', ['clone', '--depth=1', src, target], { stdio: 'pipe', encoding: 'utf-8' });
+            if (result.status !== 0) throw new Error(result.stderr || 'git clone failed');
+        } else if (fs.existsSync(src)) {
+            const base = path.basename(src);
+            const target = path.join(STAGING_DIR, base);
+            fs.rmSync(target, { recursive: true, force: true });
+            fs.cpSync(src, target, { recursive: true });
+        } else {
+            throw new Error('Source not found');
+        }
+        spinner.succeed('Source added to staging');
+    } catch (e: any) {
+        spinner.fail('Failed to add source');
+        console.log(chalk.red(`  ✗ ${e.message || e}`));
+    }
+    await new Promise(r => setTimeout(r, 1200));
+}
+
+async function ingestTopBundle(): Promise<void> {
+    ensureDir(STAGING_DIR);
+    ensureDir(ACTIVE_DIR);
+    const confirmIngest = await confirm('Fetch top repos → staging, promote to active, then index?', true);
+    if (!confirmIngest) return;
+    await fetchTopReposToStaging();
+    await promoteStagingToActive();
+    await indexChroma();
+}
+
+async function ragQuickSearch(): Promise<void> {
+    showHeader('RAG Search (Preview)');
+    const query = await input('Search query', 'open Safari');
+    if (!query) return;
+    const refine = await input('Add refinement (optional)', '');
+    const finalQuery = refine ? `${query}. ${refine}` : query;
+    await displayRagSearch(finalQuery);
+}
+
+async function fetchTopReposToStaging(): Promise<void> {
+    ensureDir(STAGING_DIR);
+    const spinner = ora('Fetching top repositories bundle...').start();
+    try {
+        for (const repo of TOP_REPOS) {
+            const name = repo.split('/').pop()?.replace('.git', '') || `repo_${Date.now()}`;
+            const target = path.join(STAGING_DIR, name);
+            fs.rmSync(target, { recursive: true, force: true });
+            const result = spawnSync('git', ['clone', '--depth=1', repo, target], { stdio: 'pipe', encoding: 'utf-8' });
+            if (result.status !== 0) throw new Error(result.stderr || `git clone failed for ${repo}`);
+        }
+        spinner.succeed('Top repositories fetched to staging');
+    } catch (e: any) {
+        spinner.fail('Failed to fetch top repositories');
+        console.log(chalk.red(`  ✗ ${e.message || e}`));
+    }
+    await new Promise(r => setTimeout(r, 1200));
+}
+
+async function promoteStagingToActive(): Promise<void> {
+    ensureDir(STAGING_DIR);
+    ensureDir(ACTIVE_DIR);
+    const confirmMove = await confirm('Promote staging → active (overwrite duplicates)?', false);
+    if (!confirmMove) return;
+    const spinner = ora('Promoting...').start();
+    try {
+        const items = fs.readdirSync(STAGING_DIR);
+        for (const item of items) {
+            const src = path.join(STAGING_DIR, item);
+            const dst = path.join(ACTIVE_DIR, item);
+            fs.rmSync(dst, { recursive: true, force: true });
+            fs.cpSync(src, dst, { recursive: true });
+        }
+        spinner.succeed('Promoted staging to active');
+    } catch (e: any) {
+        spinner.fail('Promote failed');
+        console.log(chalk.red(`  ✗ ${e.message || e}`));
+    }
+    await new Promise(r => setTimeout(r, 1200));
+}
+
+async function cleanDir(dir: string, label: string): Promise<void> {
+    const ok = await confirm(`Delete all contents of ${label} (${dir})?`, false);
+    if (!ok) return;
+    const spinner = ora(`Cleaning ${label}...`).start();
+    try {
+        fs.rmSync(dir, { recursive: true, force: true });
+        fs.mkdirSync(dir, { recursive: true });
+        spinner.succeed(`Cleaned ${label}`);
+    } catch (e: any) {
+        spinner.fail(`Failed to clean ${label}`);
+        console.log(chalk.red(`  ✗ ${e.message || e}`));
+    }
+    await new Promise(r => setTimeout(r, 1200));
 }
 
 /**
@@ -93,7 +463,9 @@ export async function mainMenuV2(): Promise<void> {
             { name: `${chalk.green('●')} Secrets & Keys`, value: 'secrets' },
             { name: `${chalk.green('●')} App Settings`, value: 'settings' },
             { name: `${chalk.green('●')} System Health`, value: 'health' },
-            { name: `${chalk.green('●')} RAG Status & Search`, value: 'rag' },
+            { name: `${chalk.green('●')} KONTUR Workflow Audit`, value: 'kontur_audit' },
+            { name: `${chalk.green('●')} RAG Control Agent`, value: 'rag_agent' },
+            { name: `${chalk.green('●')} RAG Conversational Agent`, value: 'rag_conversational' },
             { name: chalk.cyan('◆─────────────────────────────────────────────────◆'), value: '_sep2', disabled: true },
             { name: `${chalk.green('●')} Build & Deploy`, value: 'build' },
             { name: `${chalk.green('●')} Run macOS Agent`, value: 'run_agent' },
@@ -101,7 +473,7 @@ export async function mainMenuV2(): Promise<void> {
             { name: chalk.yellow('✕ Exit'), value: 'exit' }
         ];
 
-        const action = await select('', choices);
+        const action = await selectNoSep('', choices);
 
         if (action === 'exit') {
             console.log(chalk.gray('\n  Exiting...\n'));
@@ -117,8 +489,12 @@ export async function mainMenuV2(): Promise<void> {
             await configureAppSettings();
         } else if (action === 'health') {
             await runHealthCheck();
-        } else if (action === 'rag') {
-            await ragMenu();
+        } else if (action === 'kontur_audit') {
+            await konturWorkflowAudit();
+        } else if (action === 'rag_agent') {
+            await ragControlAgent();
+        } else if (action === 'rag_conversational') {
+            await ragConversationalAgent();
         } else if (action === 'build') {
             await buildAndDeployMenu();
         } else if (action === 'test_tetyana') {
@@ -170,7 +546,7 @@ async function configureService(service: string): Promise<void> {
             { name: 'Back', value: 'back' }
         ];
 
-        const action = await select('', choices);
+        const action = await selectNoSep('Provider', choices);
 
         if (action === 'back') return;
 
@@ -214,6 +590,8 @@ async function configureVision(): Promise<void> {
             { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep1', disabled: true },
             { name: `${chalk.green('●')} Live Stream      ${chalk.gray(liveProvider)}`, value: 'live' },
             { name: `${chalk.green('●')} On-Demand        ${chalk.gray(onDemandProvider)}`, value: 'ondemand' },
+            { name: `${chalk.green('●')} Preset: Electron (Live gemini → Fallback on-demand copilot)`, value: 'preset_electron' },
+            { name: `${chalk.green('●')} Preset: CLI headless (disable vision)`, value: 'preset_headless' },
             { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep2', disabled: true },
             { name: chalk.gray('← Back'), value: 'back' }
         ];
@@ -234,6 +612,12 @@ async function configureVision(): Promise<void> {
                 break;
             case 'ondemand':
                 await configureVisionMode('On-Demand', 'VISION_ONDEMAND');
+                break;
+            case 'preset_electron':
+                await applyElectronVisionPreset();
+                break;
+            case 'preset_headless':
+                await applyHeadlessVisionPreset();
                 break;
         }
     }
@@ -388,11 +772,16 @@ async function configureAppSettings(): Promise<void> {
         const language = config['APP_LANGUAGE'] || 'uk';
         const theme = config['APP_THEME'] || 'dark';
         const logLevel = config['LOG_LEVEL'] || 'info';
+        const useMlxRaw = `${config['USE_MLX'] || ''}`.toLowerCase();
+        const useMlx = useMlxRaw === '1' || useMlxRaw === 'true' || useMlxRaw === 'on';
+        const ragTopK = config['RAG_TOP_K'] || '5';
 
         const choices = [
             { name: `${chalk.green('●')} Language         ${language === 'uk' ? chalk.cyan('Українська') : chalk.gray('English')}`, value: 'APP_LANGUAGE' },
             { name: `${chalk.green('●')} Theme            ${theme === 'dark' ? chalk.magenta('Dark') : chalk.yellow('Light')}`, value: 'APP_THEME' },
             { name: `${chalk.green('●')} Log Level        ${chalk.cyan(logLevel)}`, value: 'LOG_LEVEL' },
+            { name: `${chalk.green('●')} USE_MLX          ${useMlx ? chalk.green('ON') : chalk.red('OFF')} ${chalk.gray('(fast embeddings on Apple Silicon)')}`, value: 'USE_MLX' },
+            { name: `${chalk.green('●')} RAG Top-K        ${chalk.cyan(ragTopK)}`, value: 'RAG_TOP_K' },
             { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
             { name: chalk.gray('← Back'), value: 'back' }
         ];
@@ -423,6 +812,16 @@ async function configureAppSettings(): Promise<void> {
                 { name: 'Back', value: 'back' }
             ]);
             if (level !== 'back') configManager.set('LOG_LEVEL', level);
+        } else if (action === 'USE_MLX') {
+            const val = await select('USE_MLX (fast embeddings on Apple Silicon)', [
+                { name: 'ON (recommended on Apple Silicon)', value: '1' },
+                { name: 'OFF', value: '0' },
+                { name: 'Back', value: 'back' }
+            ]);
+            if (val !== 'back') configManager.set('USE_MLX', val);
+        } else if (action === 'RAG_TOP_K') {
+            const val = await input('RAG Top-K (results to fetch)', ragTopK);
+            if (val) configManager.set('RAG_TOP_K', val);
         }
     }
 }
@@ -471,7 +870,7 @@ async function selectModel(providerKey: string, modelKey: string): Promise<void>
         }));
         choices.push({ name: 'Back', value: 'back' });
 
-        const selected = await select('Model', choices, { pageSize: 20 });
+        const selected = await selectNoSep('Model', choices, { pageSize: 20 });
         if (selected !== 'back') {
             configManager.set(modelKey, selected);
         }
@@ -493,7 +892,7 @@ async function selectFallback(fallbackKey: string, primaryProvider?: string): Pr
         { name: 'Back', value: 'back' }
     ];
 
-    const selected = await select('Fallback Provider', choices);
+    const selected = await selectNoSep('Fallback Provider', choices);
     if (selected !== 'back') {
         configManager.set(fallbackKey, selected);
     }
@@ -540,8 +939,28 @@ async function selectVisionFallbackMode(modeKey: string, currentMode: string): P
 function getEffectiveApiKey(provider: string): string {
     const config = configManager.getAll();
     const providerKeyName = PROVIDER_API_KEYS[provider];
-    if (config[providerKeyName]) return config[providerKeyName];
-    return config['GEMINI_API_KEY'] || '';
+    return (providerKeyName && config[providerKeyName]) || config['GEMINI_API_KEY'] || '';
+}
+
+async function applyElectronVisionPreset(): Promise<void> {
+    // Live: gemini, On-Demand: copilot, Fallback: on-demand
+    configManager.set('VISION_MODE', 'live');
+    configManager.set('VISION_FALLBACK_MODE', 'on-demand');
+    configManager.set('VISION_LIVE_PROVIDER', 'gemini');
+    configManager.set('VISION_ONDEMAND_PROVIDER', 'copilot');
+    console.log(chalk.green('\n  ✓ Electron preset applied (Live: gemini, Fallback: On-Demand copilot)\n'));
+    await new Promise(r => setTimeout(r, 1200));
+}
+
+async function applyHeadlessVisionPreset(): Promise<void> {
+    // Disable vision for CLI headless runs; user can still enable per-run prompt
+    configManager.set('VISION_MODE', 'on-demand');
+    configManager.set('VISION_FALLBACK_MODE', '');
+    // Mark providers but vision can be turned off at run time
+    configManager.set('VISION_LIVE_PROVIDER', 'gemini');
+    configManager.set('VISION_ONDEMAND_PROVIDER', 'copilot');
+    console.log(chalk.yellow('\n  ⚠️ Vision will be disabled at runtime if you choose headless in agent run.\n'));
+    await new Promise(r => setTimeout(r, 1200));
 }
 
 /**
@@ -552,21 +971,53 @@ async function runHealthCheck(): Promise<void> {
     console.log(chalk.gray('  Checking system configuration...\n'));
 
     const config = configManager.getAll();
-    const checks = [
-        { name: 'BRAIN_PROVIDER', label: 'Brain Provider' },
-        { name: 'BRAIN_MODEL', label: 'Brain Model' },
-        { name: 'VISION_MODE', label: 'Vision Mode' },
-        { name: 'EXECUTION_ENGINE', label: 'Execution Engine' },
-        { name: 'GEMINI_API_KEY', label: 'Gemini API Key' }
+    const requiredKeys = [
+        { key: 'GEMINI_API_KEY', label: 'Gemini API Key' },
+        { key: 'COPILOT_API_KEY', label: 'Copilot Token' },
+        { key: 'OPENAI_API_KEY', label: 'OpenAI API Key' },
+        { key: 'ANTHROPIC_API_KEY', label: 'Anthropic API Key' },
+        { key: 'MISTRAL_API_KEY', label: 'Mistral API Key' }
     ];
 
-    let healthy = true;
+    const checks: { label: string; ok: boolean; detail?: string }[] = [];
+    const hasAllKeys = requiredKeys.every(k => !!config[k.key]);
+    for (const k of requiredKeys) {
+        checks.push({ label: k.label, ok: !!config[k.key] });
+    }
+
+    // BRAIN/VISION/EXEC
+    checks.push({ label: 'Brain Provider', ok: !!config['BRAIN_PROVIDER'] });
+    checks.push({ label: 'Brain Model', ok: !!config['BRAIN_MODEL'] });
+    checks.push({ label: 'Vision Mode', ok: !!config['VISION_MODE'] });
+    checks.push({ label: 'Execution Engine', ok: !!config['EXECUTION_ENGINE'] });
+
+    // Binaries
+    checks.push(checkCommand('python3', 'python3 available'));
+    checks.push(checkCommand('copilot', 'copilot CLI available'));
+    checks.push(checkCommand('redis-cli', 'redis-cli available'));
+
+    // Redis ping
+    const redisOk = checkRedis();
+    checks.push({ label: 'Redis reachable', ok: redisOk });
+
+    // Chrome present
+    const chromeOk = fs.existsSync('/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
+    checks.push({ label: 'Google Chrome installed', ok: chromeOk });
+
+    // Chroma DB exists
+    const chromaDb = path.join(PROJECT_ROOT, 'rag', 'chroma_mac', 'chroma.sqlite3');
+    checks.push({ label: 'Chroma DB exists', ok: fs.existsSync(chromaDb) });
+
+    // MLX toggle hint
+    const onAppleSilicon = process.platform === 'darwin' && process.arch === 'arm64';
+    checks.push({ label: 'Apple Silicon (for MLX)', ok: onAppleSilicon, detail: onAppleSilicon ? 'arm64' : process.arch });
+
+    let healthy = checks.every(c => c.ok);
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
-    for (const check of checks) {
-        const value = config[check.name];
-        const status = value ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
-        console.log(`  │ ${chalk.green('●')} ${check.label.padEnd(23)} ${status}`);
-        if (!value) healthy = false;
+    for (const c of checks) {
+        const status = c.ok ? chalk.green('✓ OK') : chalk.red('✗ MISSING');
+        const detail = c.detail ? ` ${chalk.gray(c.detail)}` : '';
+        console.log(`  │ ${chalk.green('●')} ${c.label.padEnd(28)} ${status}${detail}`);
     }
     console.log(chalk.cyan('  ◆─────────────────────────────────────────◆'));
 
@@ -577,7 +1028,26 @@ async function runHealthCheck(): Promise<void> {
         console.log(chalk.yellow('  ⚠ Some components need configuration'));
     }
 
-    await new Promise(r => setTimeout(r, 2000));
+    await input('\nPress Enter to continue', '');
+}
+
+function checkCommand(cmdName: string, label: string): { label: string; ok: boolean; detail?: string } {
+    try {
+        const which = spawnSync('which', [cmdName], { encoding: 'utf-8' });
+        if (which.status === 0 && which.stdout.trim()) {
+            return { label, ok: true, detail: which.stdout.trim() };
+        }
+    } catch {}
+    return { label, ok: false };
+}
+
+function checkRedis(): boolean {
+    try {
+        const res = spawnSync('redis-cli', ['ping'], { encoding: 'utf-8', timeout: 1000 });
+        return res.status === 0 && res.stdout.trim().toLowerCase() === 'pong';
+    } catch {
+        return false;
+    }
 }
 
 /**
@@ -626,40 +1096,45 @@ async function testTetyanaMode(): Promise<void> {
 async function runPythonAgent(): Promise<void> {
     showHeader('Run macOS Automation Agent - Tetyana v12 LangGraph');
     console.log(chalk.gray('  Reliable automation with replan and verification\n'));
-    
-    // Import and use OpenInterpreterBridge
-    try {
-        const { OpenInterpreterBridge } = await import('../../modules/tetyana/open_interpreter_bridge.js');
-        
-        if (!OpenInterpreterBridge.checkEnvironment()) {
-            console.log(chalk.red('  ✗ Python environment not found'));
-            console.log(chalk.gray('  ' + OpenInterpreterBridge.getVersionInfo().split('\n').join('\n  ')));
-            await new Promise(r => setTimeout(r, 2000));
-            return;
-        }
-        
-        const task = await input('Enter task', 'Open Finder');
-        console.log(chalk.gray(`\n  Executing: "${task}"\n`));
-        
-        const bridge = new OpenInterpreterBridge();
-        
-        console.log(chalk.cyan(`  ◆ Starting Tetyana v12 LangGraph (Production)...\n`));
-        
-        try {
-            const result = await bridge.execute(task);
-            
-            console.log(chalk.green('\n  ✓ Agent completed successfully\n'));
-            console.log(chalk.gray('  Result:'));
-            console.log(chalk.cyan('  ' + result.split('\n').join('\n  ')));
-            await new Promise(r => setTimeout(r, 1500));
-        } catch (error: any) {
-            console.log(chalk.red(`\n  ✗ Agent failed: ${error.message}\n`));
-            await new Promise(r => setTimeout(r, 2000));
-        }
-    } catch (error: any) {
-        console.log(chalk.red(`  ✗ Error: ${error.message}`));
-        await new Promise(r => setTimeout(r, 2000));
+
+    const task = await input('Enter task', 'Open Finder');
+    const useVision = await confirm('Use vision (screenshots & verification)? (best in Electron UI)', true);
+    const liveLog = await confirm('Stream live log?', true);
+
+    console.log(chalk.gray(`\n  Executing: "${task}"\n`));
+    const env = { ...process.env, VISION_DISABLE: useVision ? '0' : '1' };
+
+    // Streamed execution via ./bin/tetyana to show live logs
+    const cmd = './bin/tetyana';
+    const args = [task];
+
+    const spinner = liveLog ? null : ora('Running agent...').start();
+    const proc = spawn(cmd, args, { env, stdio: liveLog ? 'inherit' : 'pipe' });
+
+    if (!liveLog && proc.stdout) {
+        proc.stdout.on('data', (data) => {
+            if (spinner) spinner.stop();
+            process.stdout.write(chalk.cyan(data.toString()));
+        });
     }
+    if (!liveLog && proc.stderr) {
+        proc.stderr.on('data', (data) => {
+            if (spinner) spinner.stop();
+            process.stdout.write(chalk.yellow(data.toString()));
+        });
+    }
+
+    await new Promise<void>((resolve) => {
+        proc.on('close', (code) => {
+            if (spinner) spinner.stop();
+            if (code === 0) {
+                console.log(chalk.green('\n  ✓ Agent completed\n'));
+            } else {
+                console.log(chalk.red(`\n  ✗ Agent exited with code ${code}\n`));
+            }
+            resolve();
+        });
+    });
 }
 
 /**
@@ -764,6 +1239,9 @@ async function ragMenu(): Promise<void> {
         const choices = [
             { name: `${chalk.green('●')} View Status           ${statusText}`, value: 'status' },
             { name: `${chalk.green('●')} Search Repository     ${chalk.gray('Find documents')}`, value: 'search' },
+            { name: `${chalk.green('●')} Index Chroma (50k)    ${chalk.gray('Build vectors')}`, value: 'index' },
+            { name: `${chalk.green('●')} Reset Chroma          ${chalk.gray('Clear DB')}`, value: 'reset' },
+            { name: `${chalk.green('●')} Manage Docs           ${chalk.gray('Delete by source pattern')}`, value: 'manage_docs' },
             { name: chalk.cyan('◆─────────────────────────────────────────◆'), value: '_sep', disabled: true },
             { name: chalk.gray('← Back'), value: 'back' }
         ];
@@ -777,8 +1255,102 @@ async function ragMenu(): Promise<void> {
         } else if (action === 'search') {
             const query = await input('Search query', 'open Safari');
             if (query) {
-                await displayRagSearch(query);
+                const refine = await input('Add refinement (optional)', '');
+                const finalQuery = refine ? `${query}. ${refine}` : query;
+                await displayRagSearch(finalQuery);
             }
+        } else if (action === 'index') {
+            await indexChroma();
+        } else if (action === 'reset') {
+            await resetChroma();
+        } else if (action === 'manage_docs') {
+            await deleteChromaDocs();
         }
     }
+}
+
+/**
+ * Run RAG indexer (build 50k+ embeddings if corpus available)
+ */
+async function indexChroma(): Promise<void> {
+    showHeader('Index Chroma (RAG)');
+    console.log(chalk.gray('  Running: python3 src/kontur/organs/rag_indexer.py\n'));
+    try {
+        const spinner = ora('Indexing...').start();
+        const env = { ...process.env };
+        if (isAppleSilicon()) {
+            env.USE_MLX = '1';
+        }
+        execSync('python3 src/kontur/organs/rag_indexer.py', { stdio: 'pipe', env });
+        spinner.succeed('Indexing completed');
+        console.log(chalk.green('\n  ✓ Chroma index built\n'));
+        await new Promise(r => setTimeout(r, 1500));
+    } catch (error: any) {
+        console.log(chalk.red(`\n  ✗ Indexing failed: ${error.message}\n`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * Reset Chroma database (dangerous)
+ */
+async function resetChroma(): Promise<void> {
+    const confirmed = await confirm('Reset Chroma database? This will clear rag/chroma_mac', false);
+    if (!confirmed) return;
+
+    showHeader('Reset Chroma');
+    const ragPath = path.join(process.cwd(), 'rag', 'chroma_mac');
+    try {
+        if (fs.existsSync(ragPath)) {
+            fs.rmSync(ragPath, { recursive: true, force: true });
+        }
+        fs.mkdirSync(ragPath, { recursive: true });
+        console.log(chalk.green('\n  ✓ Chroma database reset\n'));
+        await new Promise(r => setTimeout(r, 1500));
+    } catch (error: any) {
+        console.log(chalk.red(`\n  ✗ Reset failed: ${error.message}\n`));
+        await new Promise(r => setTimeout(r, 2000));
+    }
+}
+
+/**
+ * Delete documents from Chroma by source pattern
+ */
+async function deleteChromaDocs(): Promise<void> {
+    const pattern = await input('Delete docs where source LIKE (e.g., %.md or folder%)', '');
+    if (!pattern) return;
+    const confirmed = await confirm(`Delete documents matching "${pattern}"?`, false);
+    if (!confirmed) return;
+
+    showHeader('Delete Chroma Documents');
+    try {
+        const pythonScript = `
+import sqlite3
+import json
+db = 'rag/chroma_mac/chroma.sqlite3'
+conn = sqlite3.connect(db)
+cur = conn.cursor()
+try:
+    cur.execute("DELETE FROM documents WHERE metadata LIKE ?", ('%${pattern}%',))
+    conn.commit()
+    print('OK')
+except Exception as e:
+    print('ERR', e)
+finally:
+    conn.close()
+`;
+        const output = execSync(`python3 -c "${pythonScript.replace(/"/g, '\\"')}"`, { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'ignore'] }).trim();
+        if (output.startsWith('OK')) {
+            console.log(chalk.green('\n  ✓ Documents deleted\n'));
+        } else {
+            console.log(chalk.yellow(`\n  ⚠ ${output}\n`));
+        }
+    } catch (error: any) {
+        console.log(chalk.red(`\n  ✗ Delete failed: ${error.message}\n`));
+    }
+    await new Promise(r => setTimeout(r, 1500));
+}
+
+function isAppleSilicon(): boolean {
+    return process.platform === 'darwin' && process.arch === 'arm64';
 }

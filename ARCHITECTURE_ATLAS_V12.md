@@ -278,3 +278,36 @@ python3 src/kontur/organs/tetyana_bridge.py "Тест"
 ---
 
 **ATLAS v12 — готова до production! 🚀**
+
+atlas/
+├── src/
+│   ├── kontur/              ✅ KONTUR архітектура (12 компонентів)
+│   ├── modules/             ✅ TypeScript модулі (7 активних)
+│   ├── main/                ✅ Electron main
+│   ├── renderer/            ✅ UI (React)
+│   ├── cli/                 ✅ CLI інтерфейс
+│   ├── preload/             ✅ Preload
+│   └── types/               ✅ TypeScript типи
+├── docs/                    ✅ Документація
+│   ├── 01-GETTING_STARTED.md
+│   ├── 02-ARCHITECTURE.md
+│   ├── ... (інші)
+│   ├── KONTUR_COMPLIANCE_REPORT.md
+│   ├── FINAL_CLEANUP_REPORT.md
+│   └── archive/             ✅ Архівна документація (33 файли)
+├── rag/                     ✅ RAG база
+├── bin/                     ✅ Бінарники
+├── __tests__/               ✅ Jest тести
+├── test/                    ✅ Інші тести
+├── python/                  ✅ Python (тільки venv)
+├── .env                     ✅ Конфіг
+├── .env.example             ✅ Приклад
+├── .gitignore               ✅ Ігнорування
+├── ARCHITECTURE_ATLAS_V12.md ✅ Архітектура
+├── README.md                ✅ Документація
+├── deploy.yaml              ✅ Deployment
+├── electron.vite.config.ts  ✅ Vite
+├── package.json             ✅ Проект
+├── requirements.txt         ✅ Python залежності
+├── tailwind.config.js       ✅ Tailwind
+└── tsconfig.json            ✅ TypeScript
