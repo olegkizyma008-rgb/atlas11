@@ -48,10 +48,19 @@ sdist/
 var/
 wheels/
 *.egg-info/
-.installed.cfg
-*.egg
-pip-log.txt
-pip-delete-this-directory.txt
+
+# ============================================================================
+# ATLAS v12 + TETYANA v12 — .gitignore (Unified Environment)
+# Автор: Кізима Олег Миколайович
+# Україна, 2025 | Всі права захищені 
+# =============================================================================
+
+# Unified venv in project root
+/venv/
+/venv/**
+
+# Backward compatibility symlink
+/python/venv
 
 # ============================================================================
 # RAG DATABASE (LARGE FILES - REGENERATE WITH index_rag.py)

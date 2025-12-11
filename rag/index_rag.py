@@ -9,11 +9,14 @@ from pathlib import Path
 from typing import Generator, Tuple, List
 
 # === КОНФІГУРАЦІЯ ===
+# Визначаємо шляхи відносно проекту
+PROJECT_ROOT = Path(__file__).parent.parent
 KNOWLEDGE_SOURCES_DIRS = [
-    os.path.expanduser("~/mac_assistant_rag/knowledge_sources"),
-    os.path.expanduser("~/mac_assistant_rag/knowledge_base/large_corpus"),
+    PROJECT_ROOT / "rag" / "knowledge_sources",
+    PROJECT_ROOT / "rag" / "knowledge_base" / "large_corpus",
+    PROJECT_ROOT / "rag" / "macOS-automation-knowledge-base",
 ]
-CHROMA_PERSIST_DIR = os.path.expanduser("~/mac_assistant_rag/chroma_mac")
+CHROMA_PERSIST_DIR = PROJECT_ROOT / "rag" / "chroma_mac"
 EMBEDDING_MODEL = "BAAI/bge-m3"
 CHUNK_SIZE = 1000
 CHUNK_OVERLAP = 200

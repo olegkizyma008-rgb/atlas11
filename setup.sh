@@ -1,15 +1,25 @@
 #!/bin/bash
 # =============================================================================
-# ATLAS v12 + TETYANA v12 — Setup & Installation Script
+# ATLAS v12 + TETYANA v12 — Complete Setup & Installation Script
 # Автор: Кізима Олег Миколайович
 # Україна, 2025 | Всі права захищені ©
+# =============================================================================
+# This script sets up the COMPLETE environment:
+# - System dependencies (Homebrew, Chrome, Redis, Node.js, Python)
+# - Node.js dependencies
+# - Unified Python venv in project root
+# - Vision dependencies (pyautogui, PIL)
+# - Copilot CLI verification
+# - RAG database indexing
+# - Accessibility permissions
+# - Project build
 # =============================================================================
 
 set -e
 
 echo "╔════════════════════════════════════════════════════════════════╗"
-echo "║  ATLAS v12 + TETYANA v12 — Setup & Installation               ║"
-echo "║  LangGraph + Redis + Vision + Self-healing                    ║"
+echo "║  ATLAS v12 + TETYANA v12 — Complete Setup & Installation      ║"
+echo "║  LangGraph + Redis + Vision + Self-healing + RAG              ║"
 echo "╚════════════════════════════════════════════════════════════════╝"
 echo ""
 
@@ -18,6 +28,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Check OS
@@ -26,74 +37,62 @@ if [[ "$OSTYPE" != "darwin"* ]]; then
     exit 1
 fi
 
-echo -e "${BLUE}📋 Checking system requirements...${NC}"
-echo ""
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+cd "$PROJECT_ROOT"
 
 # =============================================================================
-# 1. Check & Install Homebrew
+# 1. Check and install Homebrew
 # =============================================================================
+echo ""
+echo -e "${BLUE}🍺 Checking Homebrew...${NC}"
 if ! command -v brew &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Homebrew not found. Installing...${NC}"
+    echo -e "${YELLOW}⚠️  Installing Homebrew...${NC}"
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-else
-    echo -e "${GREEN}✅ Homebrew found${NC}"
 fi
+echo -e "${GREEN}✅ Homebrew ready${NC}"
 
 # =============================================================================
-# 2. Install Chrome (REQUIRED)
+# 2. Check and install Chrome
 # =============================================================================
 echo ""
-echo -e "${BLUE}📦 Installing Chrome...${NC}"
+echo -e "${BLUE}🌐 Checking Chrome...${NC}"
 if ! command -v google-chrome &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Chrome not found. Installing...${NC}"
-    brew install google-chrome
-    echo -e "${GREEN}✅ Chrome installed${NC}"
-else
-    echo -e "${GREEN}✅ Chrome already installed${NC}"
-    google-chrome --version
+    echo -e "${YELLOW}⚠️  Installing Chrome...${NC}"
+    brew install --cask google-chrome
 fi
+echo -e "${GREEN}✅ Chrome ready${NC}"
 
 # =============================================================================
-# 3. Install Redis (REQUIRED)
+# 3. Check and install Redis
 # =============================================================================
 echo ""
-echo -e "${BLUE}📦 Installing Redis...${NC}"
+echo -e "${BLUE}🔴 Checking Redis...${NC}"
 if ! command -v redis-server &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Redis not found. Installing...${NC}"
+    echo -e "${YELLOW}⚠️  Installing Redis...${NC}"
     brew install redis
-    echo -e "${GREEN}✅ Redis installed${NC}"
-else
-    echo -e "${GREEN}✅ Redis already installed${NC}"
-    redis-server --version
 fi
+echo -e "${GREEN}✅ Redis ready${NC}"
 
 # =============================================================================
-# 4. Install Node.js (if needed)
+# 4. Check and install Node.js
 # =============================================================================
 echo ""
-echo -e "${BLUE}📦 Checking Node.js...${NC}"
+echo -e "${BLUE}⬢ Checking Node.js...${NC}"
 if ! command -v node &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Node.js not found. Installing...${NC}"
+    echo -e "${YELLOW}⚠️  Installing Node.js...${NC}"
     brew install node
-    echo -e "${GREEN}✅ Node.js installed${NC}"
-else
-    echo -e "${GREEN}✅ Node.js found${NC}"
-    node --version
 fi
+echo -e "${GREEN}✅ Node.js ready${NC}"
 
 # =============================================================================
-# 5. Install Python 3 (if needed)
+# 5. Install Python 3.12 (REQUIRED for LangChain + LangGraph)
 # =============================================================================
 echo ""
-echo -e "${BLUE}📦 Checking Python 3...${NC}"
-if ! command -v python3 &> /dev/null; then
-    echo -e "${YELLOW}⚠️  Python 3 not found. Installing...${NC}"
-    brew install python@3.11
-    echo -e "${GREEN}✅ Python 3 installed${NC}"
-else
-    echo -e "${GREEN}✅ Python 3 found${NC}"
-    python3 --version
-fi
+echo -e "${BLUE}🐍 Installing Python 3.12...${NC}"
+brew install python@3.12 2>&1 | grep -E "already|installed|Downloading" | tail -1
+PYTHON_BIN="/opt/homebrew/opt/python@3.12/bin/python3.12"
+PYTHON_VERSION=$($PYTHON_BIN --version 2>&1 | awk '{print $2}')
+echo -e "${GREEN}✅ Python ${PYTHON_VERSION} ready${NC}"
 
 # =============================================================================
 # 6. Install Node dependencies
@@ -104,28 +103,114 @@ npm install
 echo -e "${GREEN}✅ Node dependencies installed${NC}"
 
 # =============================================================================
-# 7. Install Python dependencies
+# 7. Install Python dependencies (Unified venv - Python 3.12)
 # =============================================================================
 echo ""
-echo -e "${BLUE}📦 Installing Python dependencies...${NC}"
+echo -e "${BLUE}📦 Installing Python dependencies (Python 3.12)...${NC}"
+echo -e "${BLUE}   Location: ./venv (unified for entire project)${NC}"
+echo ""
 
-# Create virtual environment if it doesn't exist
-if [ ! -d "python/venv" ]; then
-    echo -e "${YELLOW}⚠️  Creating Python virtual environment...${NC}"
-    python3 -m venv python/venv
+# Видаляємо старі venv якщо існують
+if [ -d "venv" ] || [ -d ".venv" ] || [ -d "python/venv" ]; then
+    echo -e "${YELLOW}⚠️  Removing old venv directories...${NC}"
+    rm -rf venv .venv python/venv 2>/dev/null || true
+    echo -e "${GREEN}✅ Old venv removed${NC}"
 fi
 
-# Activate virtual environment
-source python/venv/bin/activate
+# Створюємо новий venv з Python 3.12
+echo -e "${YELLOW}⚠️  Creating unified Python 3.12 virtual environment...${NC}"
+$PYTHON_BIN -m venv venv
+echo -e "${GREEN}✅ Virtual environment created at ./venv${NC}"
 
-# Install requirements
-pip install --upgrade pip
+# Активуємо venv
+source venv/bin/activate
+
+# Оновлюємо pip, setuptools, wheel
+echo -e "${BLUE}📦 Upgrading pip, setuptools, wheel...${NC}"
+pip install --upgrade pip setuptools wheel
+
+# Встановлюємо всі залежності з requirements.txt
+echo -e "${BLUE}📦 Installing all dependencies from requirements.txt...${NC}"
 pip install -r requirements.txt
 
 echo -e "${GREEN}✅ Python dependencies installed${NC}"
+echo -e "${BLUE}   venv location: $(pwd)/venv${NC}"
+echo -e "${BLUE}   Python: $(python3 --version)${NC}"
+echo -e "${BLUE}   Pip: $(pip --version)${NC}"
 
 # =============================================================================
-# 8. Create .env file if it doesn't exist
+# 8. Verify Copilot CLI (optional but recommended)
+# =============================================================================
+echo ""
+echo -e "${BLUE}🔍 Checking GitHub Copilot CLI...${NC}"
+if command -v copilot &> /dev/null; then
+    echo -e "${GREEN}✅ GitHub Copilot CLI found${NC}"
+    copilot --version
+else
+    echo -e "${YELLOW} GitHub Copilot CLI not found (optional)${NC}"
+    echo "   Install with: npm install -g @github/copilot-cli"
+fi
+
+# =============================================================================
+# 9. Install Vision dependencies (pyautogui, PIL)
+# =============================================================================
+echo ""
+echo -e "${BLUE} Installing Vision dependencies...${NC}"
+source venv/bin/activate
+pip install --upgrade pillow pyautogui
+echo -e "${GREEN} Vision dependencies installed${NC}"
+
+# =============================================================================
+# 10. Index RAG database (if knowledge base exists)
+# =============================================================================
+echo ""
+echo -e "${BLUE} Indexing RAG database...${NC}"
+echo -e "${BLUE}📚 Indexing RAG database...${NC}"
+
+# Перевіряємо наявність RAG скрипту
+if [ -f "rag/index_rag.py" ]; then
+    echo -e "${YELLOW}⚠️  Found RAG indexer. Indexing knowledge base...${NC}"
+    
+    # Активуємо venv для запуску скрипту
+    source venv/bin/activate
+    
+    # Запускаємо індексацію
+    python3 rag/index_rag.py 2>&1 || true
+    
+    echo -e "${GREEN}✅ RAG database indexed${NC}"
+else
+    echo -e "${YELLOW}⚠️  rag/index_rag.py not found${NC}"
+fi
+
+# Перевіряємо результат
+if [ -d "rag/chroma_mac" ] && [ "$(ls -A rag/chroma_mac 2>/dev/null)" ]; then
+    echo -e "${GREEN}✅ RAG database populated at rag/chroma_mac${NC}"
+else
+    echo -e "${YELLOW}⚠️  RAG database empty or not created${NC}"
+fi
+
+# =============================================================================
+# 11. Setup Accessibility Permissions
+# =============================================================================
+echo ""
+echo -e "${BLUE}🔐 Setting up Accessibility Permissions...${NC}"
+echo -e "${YELLOW}⚠️  IMPORTANT: You need to manually grant Accessibility permissions:${NC}"
+echo ""
+echo "1. Open System Settings → Privacy & Security → Accessibility"
+echo "2. Click the lock icon to unlock"
+echo "3. Add these applications:"
+echo "   - Terminal (or your terminal app)"
+echo "   - Google Chrome"
+echo "   - Any other apps you want to automate"
+echo ""
+echo "4. For Electron app (if running):"
+echo "   - Add the built app from /Applications or ./out/"
+echo ""
+echo -e "${YELLOW}Press ENTER when you've completed the permissions setup...${NC}"
+read -r
+
+# =============================================================================
+# 12. Create .env file if it doesn't exist
 # =============================================================================
 echo ""
 echo -e "${BLUE}📝 Checking .env configuration...${NC}"
@@ -145,18 +230,36 @@ NODE_ENV=development
 AG=true
 
 # AI Providers
-GEMINI_API_KEY=your_gemini_key_here
-OPENAI_API_KEY=your_openai_key_here
-COPILOT_API_KEY=your_copilot_key_here
+BRAIN_PROVIDER=gemini
+BRAIN_MODEL=gemini-2.5-flash
+BRAIN_API_KEY=your_gemini_key_here
+
+VISION_PROVIDER=copilot
+VISION_MODEL=gpt-4o
+VISION_API_KEY=your_copilot_key_here
+
+REASONING_PROVIDER=copilot
+REASONING_MODEL=gpt-4o
+REASONING_API_KEY=your_copilot_key_here
 
 # Redis
 REDIS_URL=redis://localhost:6379/0
 
 # RAG
+RAG_ENABLED=true
 RAG_PATH=./rag/chroma_mac
+RAG_EMBEDDING_MODEL=BAAI/bge-m3
 
 # Execution
 EXECUTION_ENGINE=python-bridge
+
+# Vision
+VISION_DISABLE=0
+VISION_MODE=live
+
+# TTS & STT
+TTS_PROVIDER=openai
+STT_PROVIDER=gemini
 EOF
         echo -e "${YELLOW}⚠️  Please edit .env with your API keys${NC}"
     fi
@@ -165,7 +268,100 @@ else
 fi
 
 # =============================================================================
-# 9. Start Redis (optional - for development)
+# 13. Verify and fix python/mac_master_agent.py wrapper
+# =============================================================================
+echo ""
+echo -e "${BLUE}🔧 Verifying python/mac_master_agent.py wrapper...${NC}"
+if [ -f "python/mac_master_agent.py" ]; then
+    # Перевіряємо, чи файл не порожній
+    if [ ! -s "python/mac_master_agent.py" ] || [ $(wc -l < "python/mac_master_agent.py") -lt 5 ]; then
+        echo -e "${YELLOW}⚠️  python/mac_master_agent.py is empty or incomplete. Recreating...${NC}"
+        cat > python/mac_master_agent.py << 'WRAPPER_EOF'
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+# Wrapper для mac_master_agent
+# Перенаправляє на основний агент у src/kontur/organs/
+
+import sys
+import os
+from pathlib import Path
+
+# Додати src до path
+project_root = Path(__file__).parent.parent
+sys.path.insert(0, str(project_root / "src"))
+
+# Імпортуємо основний агент
+from kontur.organs.tetyana_agent import main
+
+if __name__ == "__main__":
+    main()
+WRAPPER_EOF
+        chmod +x python/mac_master_agent.py
+        echo -e "${GREEN}✅ python/mac_master_agent.py recreated${NC}"
+    else
+        echo -e "${GREEN}✅ python/mac_master_agent.py is valid${NC}"
+    fi
+else
+    echo -e "${YELLOW}⚠️  python/mac_master_agent.py not found${NC}"
+fi
+
+# =============================================================================
+# 14. Update tetyana binary to use unified venv
+# =============================================================================
+echo ""
+echo -e "${BLUE}🔧 Updating tetyana binary for unified venv...${NC}"
+if [ -f "bin/tetyana" ]; then
+    sed -i '' 's|PYTHON_VENV="$PROJECT_ROOT/python/venv/bin/python3"|PYTHON_VENV="$PROJECT_ROOT/venv/bin/python3"|g' bin/tetyana
+    echo -e "${GREEN}✅ tetyana binary updated${NC}"
+else
+    echo -e "${YELLOW}⚠️  bin/tetyana not found${NC}"
+fi
+
+# =============================================================================
+# 15. Clean up old symlinks and create backward compatibility
+# =============================================================================
+echo ""
+echo -e "${BLUE}🔗 Cleaning up old symlinks...${NC}"
+
+# Видаляємо старі symlink якщо існують
+if [ -L "python/venv" ]; then
+    rm -f python/venv
+    echo -e "${GREEN}✅ Old symlink removed${NC}"
+fi
+
+# Створюємо новий symlink для зворотної сумісності
+if [ ! -d "python/venv" ] && [ -d "venv" ]; then
+    mkdir -p python
+    ln -sf ../venv python/venv 2>/dev/null || true
+    echo -e "${GREEN}✅ Symlink created: python/venv -> ../venv${NC}"
+fi
+
+# =============================================================================
+# 16. Verify RAG structure and knowledge sources
+# =============================================================================
+echo ""
+echo -e "${BLUE}📂 Verifying RAG structure...${NC}"
+
+# Перевіряємо наявність knowledge sources
+APPLESCRIPT_COUNT=$(find rag/knowledge_sources -type f -name "*.applescript" 2>/dev/null | wc -l)
+echo -e "${BLUE}   AppleScript files: ${APPLESCRIPT_COUNT}${NC}"
+
+# Перевіряємо наявність basics.md
+if [ -f "rag/macOS-automation-knowledge-base/basics.md" ]; then
+    echo -e "${GREEN}✅ Knowledge base found${NC}"
+else
+    echo -e "${YELLOW}⚠️  Knowledge base incomplete${NC}"
+fi
+
+# Перевіряємо наявність index_rag.py
+if [ -f "rag/index_rag.py" ]; then
+    echo -e "${GREEN}✅ RAG indexer found${NC}"
+else
+    echo -e "${RED}❌ RAG indexer not found${NC}"
+fi
+
+# =============================================================================
+# 17. Start Redis (optional - for development)
 # =============================================================================
 echo ""
 echo -e "${BLUE}🚀 Redis Setup${NC}"
@@ -178,7 +374,7 @@ if command -v redis-server &> /dev/null; then
 fi
 
 # =============================================================================
-# 10. Build project
+# 18. Build project
 # =============================================================================
 echo ""
 echo -e "${BLUE}🔨 Building project...${NC}"
@@ -186,15 +382,17 @@ npm run build
 echo -e "${GREEN}✅ Project built${NC}"
 
 # =============================================================================
-# 11. Final checks
+# 19. Final System Check
 # =============================================================================
 echo ""
+echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${BLUE}✅ Final System Check${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════${NC}"
 echo ""
 
 echo -n "Chrome: "
 if command -v google-chrome &> /dev/null; then
-    echo -e "${GREEN}✅$(NC)"
+    echo -e "${GREEN}✅${NC}"
 else
     echo -e "${RED}❌${NC}"
 fi
@@ -220,6 +418,41 @@ else
     echo -e "${RED}❌${NC}"
 fi
 
+echo -n "Python venv: "
+if [ -d "venv" ]; then
+    echo -e "${GREEN}✅${NC}"
+else
+    echo -e "${RED}❌${NC}"
+fi
+
+echo -n "Vision (pyautogui): "
+if python3 -c "import pyautogui" 2>/dev/null; then
+    echo -e "${GREEN}✅${NC}"
+else
+    echo -e "${RED}❌${NC}"
+fi
+
+echo -n "Vision (PIL): "
+if python3 -c "from PIL import Image" 2>/dev/null; then
+    echo -e "${GREEN}✅${NC}"
+else
+    echo -e "${RED}❌${NC}"
+fi
+
+echo -n "RAG (chromadb): "
+if python3 -c "import chromadb" 2>/dev/null; then
+    echo -e "${GREEN}✅${NC}"
+else
+    echo -e "${RED}❌${NC}"
+fi
+
+echo -n "LangGraph: "
+if python3 -c "import langgraph" 2>/dev/null; then
+    echo -e "${GREEN}✅${NC}"
+else
+    echo -e "${RED}❌${NC}"
+fi
+
 echo -n ".env: "
 if [ -f ".env" ]; then
     echo -e "${GREEN}✅${NC}"
@@ -228,7 +461,7 @@ else
 fi
 
 # =============================================================================
-# 12. Summary
+# 18. Summary & Next Steps
 # =============================================================================
 echo ""
 echo "╔════════════════════════════════════════════════════════════════╗"
@@ -240,22 +473,31 @@ echo ""
 echo "1. Edit .env with your API keys:"
 echo "   vim .env"
 echo ""
-echo "2. Start Redis (if using state management):"
+echo "2. Verify Vision is working:"
+echo "   python3 -c \"from PIL import Image; import pyautogui; print('Vision OK')\""
+echo ""
+echo "3. Verify RAG database:"
+echo "   ls -la rag/chroma_mac/"
+echo ""
+echo "4. Start Redis (if using state management):"
 echo "   brew services start redis"
 echo ""
-echo "3. Start development server:"
-echo "   npm run dev"
+echo "5. Run the agent directly:"
+echo "   ./bin/tetyana \"Відкрий Калькулятор\""
 echo ""
-echo "4. Or run the agent directly:"
-echo "   ./bin/tetyana \"твоє завдання\""
-echo ""
-echo "5. Or use CLI menu:"
+echo "6. Or use CLI menu:"
 echo "   npm run cli"
 echo ""
-echo -e "${GREEN}📖 Documentation:${NC}"
-echo "   - README.md"
-echo "   - ARCHITECTURE_ATLAS_V12.md"
-echo "   - docs/TETYANA_EXECUTION_WORKFLOW.md"
+echo "7. Or start development server:"
+echo "   npm run dev"
 echo ""
+echo -e "${GREEN}📖 Documentation:${NC}"
+echo "   - README.md - Main documentation"
+echo "   - ARCHITECTURE_ATLAS_V12.md - System architecture"
+echo "   - docs/UNIFIED_ENVIRONMENT_SETUP.md - Python environment"
+echo "   - docs/ - Full documentation"
+echo ""
+echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════${NC}"
 echo -e "${GREEN}🚀 You're ready to go!${NC}"
+echo -e "${MAGENTA}═══════════════════════════════════════════════════════════════${NC}"
 echo ""

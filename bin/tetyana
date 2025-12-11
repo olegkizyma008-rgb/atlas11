@@ -12,11 +12,16 @@ set -e
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
-# Шляхи
-PYTHON_VENV="$PROJECT_ROOT/python/venv/bin/python3"
+# Шляхи (unified venv in project root)
+PYTHON_VENV="$PROJECT_ROOT/venv/bin/python3"
 KONTUR_BRIDGE="$PROJECT_ROOT/src/kontur/organs/tetyana_bridge.py"
 PYTHON_AGENT="$PROJECT_ROOT/src/kontur/organs/tetyana_agent.py"
 ENV_FILE="$PROJECT_ROOT/.env"
+
+# Fallback to old location for backward compatibility
+if [ ! -f "$PYTHON_VENV" ] && [ -f "$PROJECT_ROOT/python/venv/bin/python3" ]; then
+    PYTHON_VENV="$PROJECT_ROOT/python/venv/bin/python3"
+fi
 
 # Перевірити наявність Python
 if [ ! -f "$PYTHON_VENV" ]; then
