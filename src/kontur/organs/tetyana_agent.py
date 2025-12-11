@@ -209,23 +209,20 @@ def search_rag(query: str, k: int = 10) -> str:
 
 
 def add_to_rag(task: str, code: str, status: str = "success"):
-    """Додати успішне рішення в RAG"""
-    if not RAG_AVAILABLE or db is None:
-        return
-    
+    """Додати успішне рішення в RAG (self-healing з MLX GPU acceleration)"""
     try:
-        doc = Document(
-            page_content=f"ЗАВДАННЯ: {task}\n\nРІШЕННЯ:\n{code}\n\nСТАТУС: {status}",
-            metadata={
-                "source": "self-healing",
-                "date": datetime.datetime.now().isoformat(),
-                "task": task,
-                "status": status
-            }
-        )
-        db.add_documents([doc])
-    except Exception:
-        pass
+        # Import RAG Control Agent for self-healing with MLX
+        from rag_control_agent import RAGControlAgent
+        
+        agent = RAGControlAgent(use_mlx=True)
+        result = agent.add_to_rag(task, code, status)
+        
+        if result.get("status") == "success":
+            console.print(f"[green]✅ Self-healing: {result.get('message')}[/green]")
+        else:
+            console.print(f"[yellow]⚠️ Self-healing failed: {result.get('message')}[/yellow]")
+    except Exception as e:
+        console.print(f"[yellow]⚠️ Self-healing error: {e}[/yellow]")
 
 
 # ============================================================================
