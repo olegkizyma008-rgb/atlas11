@@ -1401,9 +1401,9 @@ async function runPythonAgent(): Promise<void> {
     const task = await input('Enter task', 'Open Calculator');
     
     // Add local SIGINT handler for prompts
-    let promptSigintHandler: NodeJS.SignalListener | null = null;
+    let promptSigintHandler: (() => void) | null = null;
     const setupPromptSigint = () => {
-        if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
+        if (promptSigintHandler) process.off('SIGINT', promptSigintHandler);
         promptSigintHandler = () => {
             console.log(chalk.yellow('\n(SIGINT) Use menu Exit to quit. Returning to main menu...\n'));
             process.exit(0);
@@ -1426,7 +1426,7 @@ async function runPythonAgent(): Promise<void> {
     } else {
         setupPromptSigint();
         useVision = await confirm('Use vision (screenshots & verification)?', false);
-        if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
+        if (promptSigintHandler) process.off('SIGINT', promptSigintHandler);
     }
     
     if (hasLiveLogDefault) {
@@ -1435,11 +1435,11 @@ async function runPythonAgent(): Promise<void> {
     } else {
         setupPromptSigint();
         liveLog = await confirm('Stream live log?', true);
-        if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
+        if (promptSigintHandler) process.off('SIGINT', promptSigintHandler);
     }
     
     // Restore global SIGINT handler
-    if (promptSigintHandler) process.removeListener('SIGINT', promptSigintHandler);
+    if (promptSigintHandler) process.off('SIGINT', promptSigintHandler);
 
     console.log(chalk.gray(`\n  Executing: "${task}"\n`));
     const env = { ...process.env, VISION_DISABLE: useVision ? '0' : '1' };
