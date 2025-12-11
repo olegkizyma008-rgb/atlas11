@@ -1048,8 +1048,8 @@ async function configureAppSettings(): Promise<void> {
         const useMlx = useMlxRaw === '1' || useMlxRaw === 'true' || useMlxRaw === 'on';
         const ragTopK = config['RAG_TOP_K'] || '5';
 
-        const defaultUseVision = config['DEFAULT_USE_VISION'] === '1' || config['DEFAULT_USE_VISION'] === true || config['DEFAULT_USE_VISION'] === 'true';
-        const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === true || config['DEFAULT_LIVE_LOG'] === 'true';
+        const defaultUseVision = config['DEFAULT_USE_VISION'] === '1' || config['DEFAULT_USE_VISION'] === 'true';
+        const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
 
         const choices = [
             { name: `${chalk.green('●')} Language         ${language === 'uk' ? chalk.cyan('Українська') : chalk.gray('English')}`, value: 'APP_LANGUAGE' },
@@ -1390,8 +1390,8 @@ async function runPythonAgent(): Promise<void> {
 
     const config = configManager.getAll();
     const task = await input('Enter task', 'Open Calculator');
-    const defaultUseVision = config['DEFAULT_USE_VISION'] === '1' || config['DEFAULT_USE_VISION'] === true || config['DEFAULT_USE_VISION'] === 'true';
-    const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === true || config['DEFAULT_LIVE_LOG'] === 'true';
+    const defaultUseVision = config['DEFAULT_USE_VISION'] === '1' || config['DEFAULT_USE_VISION'] === 'true';
+    const defaultLiveLog = config['DEFAULT_LIVE_LOG'] === '1' || config['DEFAULT_LIVE_LOG'] === 'true';
     const useVision = await confirm('Use vision (screenshots & verification)? (best in Electron UI)', defaultUseVision);
     const liveLog = await confirm('Stream live log?', defaultLiveLog);
 
